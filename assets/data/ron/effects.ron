@@ -69,6 +69,7 @@
         53: (success_only: true), // TF_DETOXIFY
         138: (success_only: true), // AS_ENCHANTPOISON
         150: (success_only: true, motion: None), // TF_BACKSLIDING
+        211: (success_only: true), // RG_STEALCOIN
         275: (motion: None), // SA_CASTCANCEL: cancel feedback, no replacement swing/artwork.
         276: (success_only: true), // SA_MAGICROD
         277: (success_only: true), // SA_SPELLBREAKER
@@ -1082,6 +1083,70 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Rogue (RG_*) ---------------------------------------------------
+        211: ( // RG_STEALCOIN -- native Mug effect and filename-backed sound.
+            visuals: [Str("steal_coin.str")],
+            sound: Some("effect/rog_steal coin.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        212: ( // RG_BACKSTAP -- approximate the hardcoded hit with a short slash.
+            visuals: [Str("rogue_backstab.strfx.ron")],
+            sound: Some("effect/rog_back stap.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        214: ( // RG_RAID -- approximate per-victim impact; caster burst needs a cast event.
+            visuals: [Str("rogue_raid.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        215: ( // RG_STRIPWEAPON -- Aesir reports both success and failure.
+            visuals: [Str("strip_weapon.str")],
+            sound: Some("effect/t_벽튕김.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        216: ( // RG_STRIPSHIELD
+            visuals: [Str("strip_shield.str")],
+            sound: Some("effect/t_벽튕김.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        217: ( // RG_STRIPARMOR
+            visuals: [Str("strip_armor.str")],
+            sound: Some("effect/t_벽튕김.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        218: ( // RG_STRIPHELM
+            visuals: [Str("strip_helm.str")],
+            sound: Some("effect/t_벽튕김.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        219: ( // RG_INTIMIDATE -- approximate hit; relocation remains server-owned.
+            visuals: [Str("rogue_backstab.strfx.ron")],
+            sound: Some("effect/rog_intimidate.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        222: ( // RG_CLEANER -- server removes ground units; no reference cast artwork.
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Crusader (CR_*) ------------------------------------------------
         // 248 CR_FAITH is a passive with no cast event and is intentionally
         // absent. Reflect Shield (252) doubles as the reactive map effect
@@ -1512,6 +1577,13 @@
         ),
         1004: ( // AS_VENOMKNIFE -- one thrown knife; the server owns poison application.
             visuals: [Shader("venom_knife")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1005: ( // RG_CLOSECONFINE -- approximate the initial seize, not a status aura.
+            visuals: [Str("blade_stop.strfx.ron")],
             sound: None,
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),

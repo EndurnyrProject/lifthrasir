@@ -1,0 +1,24 @@
+// Sightless Mind: approximate the per-victim hit; the server owns its status effects.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/e9_counter_slash.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 240.0), quad: (35.0, 15.0), color: (215, 190, 255, 0), angle: 128.0),
+                (at: 3, offset: (319.0, 240.0), quad: (185.0, 85.0), color: (215, 190, 255, 220), angle: 128.0),
+                (at: 11, offset: (319.0, 240.0), quad: (235.0, 110.0), color: (150, 125, 210, 0), angle: 128.0),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 285.0), quad: (30.0, 20.0), color: (170, 155, 190, 0)),
+                (at: 4, offset: (319.0, 272.0), quad: (120.0, 80.0), color: (170, 155, 190, 150)),
+                (at: 16, offset: (319.0, 250.0), quad: (175.0, 120.0), color: (140, 130, 170, 0)),
+            ],
+        ),
+    ],
+)
