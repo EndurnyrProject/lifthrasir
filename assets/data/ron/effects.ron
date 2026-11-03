@@ -79,6 +79,8 @@
         283: (success_only: true), // SA_SEISMICWEAPON
         289: (success_only: true), // SA_DISPELL
         358: (motion: None), // LK_TENSIONRELAX: the server seats the caster.
+        361: (success_only: true), // HP_ASSUMPTIO
+        362: (motion: None), // HP_BASILICA: placement owns cast motion.
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1586,6 +1588,22 @@
             color: (1.0, 0.65, 0.65, 1.0),
             repeating: false,
         ),
+        // --- High Priest (HP_*) ---------------------------------------------
+        361: ( // HP_ASSUMPTIO -- EF_ASSUMPTIO on the recipient.
+            visuals: [Str("asum.str")],
+            sound: Some("effect/아숨프티오.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        362: ( // HP_BASILICA -- field is owned by skill_units, not the cast.
+            // NOTE: no cast sound: both no-damage and ground feedback arrive on placement.
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         397: ( // LK_SPIRALPIERCE -- one authored five-pulse target impact.
             visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
             sound: Some("attack_spear.wav"),
@@ -1834,6 +1852,14 @@
         ),
     },
     skill_units: {
+        362: ( // HP_BASILICA -- approximate holy field; server owns group lifetime.
+            ground_anchor: Group,
+            visuals: [Str("magnus.str")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 0.7),
+            repeating: true,
+        ),
         // Sage field cells are gameplay-only (no visible flag). Footprint keeps
         // the reference EF_BOTTOM_* geometry on every surviving server cell.
         285: ( // SA_VOLCANO / EF_BOTTOM_VO
