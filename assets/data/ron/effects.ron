@@ -82,6 +82,7 @@
         361: (success_only: true), // HP_ASSUMPTIO
         362: (motion: None), // HP_BASILICA: placement owns cast motion.
         366: (success_only: true), // HW_MAGICPOWER
+        378: (success_only: true), // ASC_EDP
         380: (success_only: true), // SN_SIGHT
         383: (success_only: true), // SN_WINDWALK
     },
@@ -1622,6 +1623,21 @@
             color: (0.7, 0.65, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Assassin Cross (ASC_*) ------------------------------------------
+        378: ( // ASC_EDP -- approximate cast burst, not a persistent weapon aura.
+            visuals: [Str("enchant_poison.strfx.ron")],
+            sound: Some("effect/assasin_enchantpoison.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        379: ( // ASC_BREAKER -- approximate magical impact and sound.
+            visuals: [Shader("soul_strike")],
+            sound: Some("effect/ef_napalmbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Sniper (SN_*) --------------------------------------------------
         380: ( // SN_SIGHT -- approximate self-buff flash and sound.
             visuals: [Str("ac_concentration.str")],
@@ -1690,6 +1706,13 @@
         400: ( // HW_NAPALMVULCAN -- approximate ghost hit for each victim.
             visuals: [Shader("soul_strike")],
             sound: Some("effect/ef_napalmbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        406: ( // ASC_METEORASSAULT -- approximate per-victim strike, not a caster burst.
+            visuals: [Str("sonicblow.str")],
+            sound: Some("effect/메테오 어썰트.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
