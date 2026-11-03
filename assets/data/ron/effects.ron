@@ -82,6 +82,8 @@
         361: (success_only: true), // HP_ASSUMPTIO
         362: (motion: None), // HP_BASILICA: placement owns cast motion.
         366: (success_only: true), // HW_MAGICPOWER
+        380: (success_only: true), // SN_SIGHT
+        383: (success_only: true), // SN_WINDWALK
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1618,6 +1620,35 @@
             sound: Some("effect/마법력 증폭.wav"),
             placement: Caster,
             color: (0.7, 0.65, 1.0, 1.0),
+            repeating: false,
+        ),
+        // --- Sniper (SN_*) --------------------------------------------------
+        380: ( // SN_SIGHT -- approximate self-buff flash and sound.
+            visuals: [Str("ac_concentration.str")],
+            sound: Some("effect/ac_concentration.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        381: ( // SN_FALCONASSAULT -- approximate falcon strike and sound.
+            visuals: [Str("blitz_beat.strfx.ron")],
+            sound: Some("effect/hunter_blitzbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        382: ( // SN_SHARPSHOOTING -- approximate impact per victim.
+            visuals: [Str("double_strafe.strfx.ron")],
+            sound: Some("effect/샤프슈팅.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        383: ( // SN_WINDWALK -- approximate caster burst, not a party aura.
+            visuals: [Str("enc_wind.str")],
+            sound: Some("effect/윈드워크.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         // --- Whitesmith (WS_*) ----------------------------------------------
