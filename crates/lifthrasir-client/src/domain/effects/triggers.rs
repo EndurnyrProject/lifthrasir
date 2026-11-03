@@ -469,7 +469,7 @@ pub fn on_ground_skill(
     }
 }
 
-/// `SpecialEffectShown` — a fire-and-forget visual effect keyed by an rAthena
+/// `SpecialEffectShown` — a fire-and-forget visual effect and sound keyed by an rAthena
 /// `EF_*` id, spawned at the source unit's position from the same `special`
 /// table map effects use. Non-critical (design D6): `debug!` + skip on an unresolved
 /// source, missing transform, or unmapped effect id.
@@ -480,6 +480,7 @@ pub fn on_special_effect(
     asset_server: Res<AssetServer>,
     registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
+    mut sfx: MessageWriter<PlaySkillSfx>,
 ) {
     for event in events.read() {
         let Some(source) = resolve_gid(&registry, event.source_id) else {
@@ -515,7 +516,7 @@ pub fn on_special_effect(
             .then(|| Timer::from_seconds(SPECIAL_EFFECT_LIFETIME_SECS, TimerMode::Once));
 
         let position = transform.translation + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0);
-        spawn_effect(
+        let emitter = spawn_effect(
             &mut commands,
             effect,
             EffectAnchor::Position(position),
@@ -523,6 +524,7 @@ pub fn on_special_effect(
             descriptor_tint(descriptor),
             lifetime,
         );
+        play_sound(&mut sfx, descriptor, emitter);
     }
 }
 

@@ -67,6 +67,7 @@
     skill_presentation: {
         50: (success_only: true), // TF_STEAL
         53: (success_only: true), // TF_DETOXIFY
+        138: (success_only: true), // AS_ENCHANTPOISON
         150: (success_only: true, motion: None), // TF_BACKSLIDING
     },
     efsts: {
@@ -966,6 +967,53 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Assassin -------------------------------------------------------
+        136: ( // AS_SONICBLOW -- one native impact; div already staggers damage numbers.
+               // NOTE: target feedback only; caster spin/ring needs cast-start presentation.
+            visuals: [Str("sonicblow.str")],
+            sound: Some("effect/assasin_sonicblow.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        137: ( // AS_GRIMTOOTH -- authored approximation of EF_GRIMTOOTHATK's stone teeth.
+               // The presentation GrimtoothVfxPlugin owns the independent ground release trail.
+            visuals: [Str("grimtooth.strfx.ron")],
+            sound: Some("effect/ef_frostdiver.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        138: ( // AS_ENCHANTPOISON -- recipient poison motes, not a repeating status aura.
+            visuals: [Str("enchant_poison.strfx.ron")],
+            sound: Some("effect/assasin_enchantpoison.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        139: ( // AS_POISONREACT -- EF_POISONREACT cast, not the smaller reactive STR.
+               // Aesir's Envenom counters already arrive as TF_POISON (52).
+            visuals: [Str("poisonreact_1st.str")],
+            sound: Some("effect/assasin_poisonreact.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        140: ( // AS_VENOMDUST -- one placement burst; the five-cell field is separate.
+            visuals: [Str("venomdust.str")],
+            sound: Some("effect/assasin_venomdust.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        141: ( // AS_SPLASHER -- arming and per-victim damage deliberately spawn nothing.
+               // Only Aesir's delayed EF_SPLASHER (special 129) owns the explosion/SFX.
+            visuals: [],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         149: ( // TF_SPRINKLESAND: impact only, not a Blind status aura.
             visuals: [Str("sand_attack.strfx.ron")],
             // No dedicated reference sound established; do not borrow Sandman's.
@@ -1454,6 +1502,13 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        1004: ( // AS_VENOMKNIFE -- one thrown knife; the server owns poison application.
+            visuals: [Shader("venom_knife")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         1006: ( // WZ_SIGHTBLASTER -- arms a reactive status on the caster
                 // (aesir wz_sightblaster.ex: damage_type: no_damage, applies
                 // sc_sightblaster); no STR in the official client (only its
@@ -1530,6 +1585,14 @@
         ),
     },
     skill_units: {
+        140: ( // AS_VENOMDUST -- EF_VENOMDUST2's particle3, one per visible cross cell.
+            ground_anchor: Cell,
+            visuals: [Sprite("이팩트/particle3")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         // Pre-renewal performance motifs from roBrowserLegacy's Songs.js:
         // https://github.com/MrAntares/roBrowserLegacy/blob/master/src/Renderer/Effects/Songs.js
         // Keep retail texture colors rather than multiplying by cast-note tints.
@@ -1706,6 +1769,13 @@
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
+        ),
+        129: ( // EF_SPLASHER -- Aesir emits this on the armed target after countdown expiry.
+            visuals: [Str("venomsplasher.str")],
+            sound: Some("effect/assasin_venomsplasher.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
         ),
         252: ( // EF_REFLECTSHIELD -- Reflect Shield's reactive proc flash on
                // the reflecting unit (aesir Unit.SpecialEffect); reuses the
@@ -1967,6 +2037,21 @@
             )),
             garnish: Some((
                 tint: (1.2, 1.8, 3.6, 1.0),
+            )),
+        ),
+        "venom_knife": ( // EF_THROWITEM6 -- retail Venom Knife icon in flight, no poison explosion.
+            // NOTE: shared projectile is camera-facing; spinning/directional art needs a projectile renderer upgrade.
+            kind: 100,
+            primary: (1.0, 1.0, 1.0, 1.0),
+            secondary: (0.0, 0.0, 0.0, 0.0),
+            shape: (0.0, 0.0, 0.0, 0.0),
+            duration: 0.08,
+            scale: 3.0,
+            texture: Some("data/texture/유저인터페이스/item/베넘나이프.bmp"),
+            travel: Some((
+                speed: 150.0,
+                scale: 3.0,
+                texture: Some("data/texture/유저인터페이스/item/베넘나이프.bmp"),
             )),
         ),
         "stone_fling": (

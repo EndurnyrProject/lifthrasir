@@ -1,5 +1,6 @@
 pub mod aoe_preview;
 pub mod cast_circle;
+mod grimtooth;
 pub mod navigation_path;
 pub mod portal;
 
@@ -25,6 +26,7 @@ impl Plugin for VfxPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, portal::attach_warp_portal_vfx.before(VfxSystems))
             .add_plugins(CastCircleVfxPlugin)
+            .add_plugins(grimtooth::GrimtoothVfxPlugin)
             .add_plugins(AoePreviewPlugin)
             .add_plugins(NavigationPathPlugin);
     }

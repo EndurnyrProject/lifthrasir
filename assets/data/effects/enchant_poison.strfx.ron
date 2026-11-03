@@ -1,0 +1,43 @@
+// Enchant Poison: rising purple motes on the recipient, not a persistent aura.
+// Authored approximation of EF_PATTACK (20), using roBrowserLegacy's pok1.tga.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (301.0, 286.0), quad: (12.0, 12.0), color: (255, 178, 255, 0)),
+                (at: 5, offset: (295.0, 272.0), quad: (24.0, 24.0), color: (255, 178, 255, 210)),
+                (at: 25, offset: (287.0, 223.0), quad: (18.0, 18.0), color: (255, 178, 255, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                (at: 2, offset: (337.0, 285.0), quad: (10.0, 10.0), color: (255, 178, 255, 0)),
+                (at: 7, offset: (343.0, 268.0), quad: (22.0, 22.0), color: (255, 178, 255, 220)),
+                (at: 27, offset: (351.0, 216.0), quad: (16.0, 16.0), color: (255, 178, 255, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                (at: 4, offset: (319.0, 275.0), quad: (12.0, 12.0), color: (255, 178, 255, 0)),
+                (at: 9, offset: (319.0, 257.0), quad: (26.0, 26.0), color: (255, 178, 255, 230)),
+                (at: 30, offset: (319.0, 200.0), quad: (18.0, 18.0), color: (255, 178, 255, 0)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                (at: 7, offset: (309.0, 290.0), quad: (10.0, 10.0), color: (255, 178, 255, 0)),
+                (at: 12, offset: (315.0, 271.0), quad: (20.0, 20.0), color: (255, 178, 255, 200)),
+                (at: 33, offset: (327.0, 220.0), quad: (14.0, 14.0), color: (255, 178, 255, 0)),
+            ],
+        ),
+    ],
+)

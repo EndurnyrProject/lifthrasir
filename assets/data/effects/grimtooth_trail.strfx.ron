@@ -1,0 +1,18 @@
+// Grimtooth release: a small stone tooth rises, holds briefly, then sinks/fades.
+// EF_GRIMTOOTH (123) reference: stone.bmp horns emitted along the ground path.
+// GrimtoothVfxPlugin supplies world placement and stagger, not screen offsets.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/stone.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 291.0), xy: (-1.0, 1.0, 8.0, -8.0, -1.0, -1.0, 1.0, 1.0), color: (220, 205, 185, 0)),
+                (at: 5, offset: (319.0, 291.0), xy: (-5.0, -3.0, 8.0, -8.0, -28.0, -28.0, 1.0, 1.0), color: (220, 205, 185, 255)),
+                (at: 12, offset: (319.0, 291.0), xy: (-5.0, -3.0, 8.0, -8.0, -28.0, -28.0, 1.0, 1.0), color: (220, 205, 185, 255)),
+                (at: 20, offset: (319.0, 291.0), xy: (-1.0, 1.0, 8.0, -8.0, -1.0, -1.0, 1.0, 1.0), color: (220, 205, 185, 0)),
+            ],
+        ),
+    ],
+)
