@@ -1620,6 +1620,21 @@
             color: (0.7, 0.65, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Whitesmith (WS_*) ----------------------------------------------
+        384: ( // WS_MELTDOWN -- native EF_MELTDOWN, with approximate sound.
+            visuals: [Str("melt.str")],
+            sound: Some("effect/black_overthrust.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        387: ( // WS_CARTBOOST -- native EF_CARTBOOST, with approximate sound.
+            visuals: [Str("cart.str")],
+            sound: Some("effect/g카트부스트.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         397: ( // LK_SPIRALPIERCE -- one authored five-pulse target impact.
             visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
             sound: Some("attack_spear.wav"),
@@ -1659,6 +1674,20 @@
             visuals: [],
             sound: Some("effect/hyper_novice/hn_ground_gravitation.wav"), // Approximation.
             placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        485: ( // WS_CARTTERMINATION -- approximate cart impact on the victim.
+            visuals: [Str("cartrevolution.str")],
+            sound: Some("effect/black_hammerfall.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        486: ( // WS_OVERTHRUSTMAX -- reuse the approximate Overthrust cast.
+            visuals: [Str("overthrust.strfx.ron")],
+            sound: Some("effect/black_overthrust.wav"),
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
