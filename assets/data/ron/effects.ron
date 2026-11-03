@@ -82,6 +82,8 @@
         361: (success_only: true), // HP_ASSUMPTIO
         362: (motion: None), // HP_BASILICA: placement owns cast motion.
         366: (success_only: true), // HW_MAGICPOWER
+        368: (success_only: true), // PA_SACRIFICE
+        369: (motion: None), // PA_GOSPEL: placement owns cast motion.
         378: (success_only: true), // ASC_EDP
         380: (success_only: true), // SN_SIGHT
         383: (success_only: true), // SN_WINDWALK
@@ -1623,6 +1625,29 @@
             color: (0.7, 0.65, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Paladin (PA_*) --------------------------------------------------
+        367: ( // PA_PRESSURE -- approximate holy impact with dedicated sound.
+            visuals: [Str("holy_cross.str")],
+            sound: Some("effect/프레셔.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        368: ( // PA_SACRIFICE -- approximate cast burst, not a persistent aura.
+            visuals: [Str("explosion_spirits.strfx.ron")],
+            sound: Some("effect/세크리파이스.wav"),
+            placement: Caster,
+            color: (1.0, 0.65, 0.65, 1.0),
+            repeating: false,
+        ),
+        369: ( // PA_GOSPEL -- field is owned by skill_units, not the cast.
+            // NOTE: no cast sound: ground and no-damage feedback can both arrive.
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Assassin Cross (ASC_*) ------------------------------------------
         378: ( // ASC_EDP -- approximate cast burst, not a persistent weapon aura.
             visuals: [Str("enchant_poison.strfx.ron")],
@@ -1713,6 +1738,13 @@
         406: ( // ASC_METEORASSAULT -- approximate per-victim strike, not a caster burst.
             visuals: [Str("sonicblow.str")],
             sound: Some("effect/메테오 어썰트.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        480: ( // PA_SHIELDCHAIN -- approximate five-hit strike with borrowed sound.
+            visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
+            sound: Some("effect/cru_shield boomerang.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1972,6 +2004,14 @@
         ),
     },
     skill_units: {
+        369: ( // PA_GOSPEL -- approximate chant notes per surviving field cell.
+            ground_anchor: Footprint,
+            visuals: [Str("performance_whistle.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         484: ( // HW_GRAVITATION -- approximate vortex per surviving field cell.
             ground_anchor: Footprint,
             visuals: [Str("high_wizard_gravitation.strfx.ron")],
