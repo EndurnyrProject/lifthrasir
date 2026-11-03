@@ -1,0 +1,15 @@
+// Approximate mist per server-owned Fog Wall cell.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/fire_smoke.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 275.0), quad: (90.0, 65.0), color: (150, 160, 170, 75)),
+                (at: 30, offset: (319.0, 265.0), quad: (115.0, 85.0), color: (180, 190, 200, 110)),
+                (at: 60, offset: (319.0, 275.0), quad: (90.0, 65.0), color: (150, 160, 170, 75)),
+            ],
+        ),
+    ],
+)

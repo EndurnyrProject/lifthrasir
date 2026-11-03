@@ -84,10 +84,15 @@
         366: (success_only: true), // HW_MAGICPOWER
         368: (success_only: true), // PA_SACRIFICE
         369: (motion: None), // PA_GOSPEL: placement owns cast motion.
+        373: (success_only: true), // PF_HPCONVERSION
+        374: (success_only: true), // PF_SOULCHANGE
         378: (success_only: true), // ASC_EDP
         380: (success_only: true), // SN_SIGHT
         383: (success_only: true), // SN_WINDWALK
         401: (success_only: true), // CH_SOULCOLLECT
+        403: (success_only: true), // PF_MEMORIZE
+        405: (success_only: true), // PF_SPIDERWEB
+        482: (success_only: true), // PF_DOUBLECASTING
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1671,6 +1676,28 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Professor (PF_*) ------------------------------------------------
+        373: ( // PF_HPCONVERSION -- approximate conversion flash.
+            visuals: [Str("heal.strfx.ron")],
+            sound: Some("effect/ef_soulstrike.wav"),
+            placement: Caster,
+            color: (0.65, 0.75, 1.0, 1.0),
+            repeating: false,
+        ),
+        374: ( // PF_SOULCHANGE -- approximate recipient flash.
+            visuals: [Str("call_spirits.strfx.ron")],
+            sound: Some("effect/소울 체인지.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        375: ( // PF_SOULBURN -- native artwork on the reported damage hit.
+            visuals: [Str("소울번.str")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Assassin Cross (ASC_*) ------------------------------------------
         378: ( // ASC_EDP -- approximate cast burst, not a persistent weapon aura.
             visuals: [Str("enchant_poison.strfx.ron")],
@@ -1765,6 +1792,34 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        402: ( // PF_MINDBREAKER -- approximate target impact on the attempt.
+            visuals: [Shader("soul_strike")],
+            sound: Some("effect/ef_napalmbeat.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        403: ( // PF_MEMORIZE -- approximate cast flash, not a status aura.
+            visuals: [Str("adrenaline_rush.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (0.7, 0.75, 1.0, 1.0),
+            repeating: false,
+        ),
+        404: ( // PF_FOGWALL -- the server-owned cells carry the fog.
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        405: ( // PF_SPIDERWEB -- the server-owned unit carries the web.
+            visuals: [],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         406: ( // ASC_METEORASSAULT -- approximate per-victim strike, not a caster burst.
             visuals: [Str("sonicblow.str")],
             sound: Some("effect/메테오 어썰트.wav"),
@@ -1777,6 +1832,13 @@
             sound: Some("effect/cru_shield boomerang.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        482: ( // PF_DOUBLECASTING -- approximate cast flash, not a status aura.
+            visuals: [Str("twohand.str")],
+            sound: Some("effect/knight_twohandquicken.wav"),
+            placement: Caster,
+            color: (0.7, 0.75, 1.0, 1.0),
             repeating: false,
         ),
         483: ( // HW_GANBANTEIN -- approximate the one-shot area-clearing attempt.
@@ -2034,6 +2096,22 @@
         ),
     },
     skill_units: {
+        404: ( // PF_FOGWALL -- approximate mist per surviving server cell.
+            ground_anchor: Footprint,
+            visuals: [Str("professor_fog.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        405: ( // PF_SPIDERWEB -- approximate web on the server-owned cell.
+            ground_anchor: Footprint,
+            visuals: [Str("professor_web.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         369: ( // PA_GOSPEL -- approximate chant notes per surviving field cell.
             ground_anchor: Footprint,
             visuals: [Str("performance_whistle.strfx.ron")],
