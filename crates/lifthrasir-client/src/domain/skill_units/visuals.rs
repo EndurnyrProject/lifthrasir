@@ -46,7 +46,8 @@ const CRYSTAL_SHARD_TILT: f32 = 0.28;
 ///   2. a looping SPR/ACT sprite for a `Sprite` layer — Fire Wall and Fire
 ///      Pillar are sprite effects in the classic client, not STR ones;
 ///   3. an STR effect for a `Str` layer;
-///   4. otherwise, for a `Bespoke`-only descriptor (e.g. Ice Wall, which the
+///   4. Sage's `Bespoke` fields use reference per-cell geometry;
+///   5. for the `Bespoke("ice_wall")` descriptor (which the
 ///      classic client hardcodes and no STR exists for), a persistent
 ///      ice-crystal cluster tinted by the descriptor — `PlayProceduralVfx` is
 ///      fire-and-forget and cannot back a persistent wall cell, so the wall
@@ -110,7 +111,11 @@ pub(super) fn spawn_effect_child(
         return;
     }
 
-    if descriptor.bespoke_key().is_some() {
+    if super::sage_fields::spawn(commands, descriptor, parent) {
+        return;
+    }
+
+    if descriptor.bespoke_key() == Some("ice_wall") {
         spawn_vfx_crystal(
             commands,
             asset_server,

@@ -10,6 +10,7 @@
 pub mod components;
 mod detonation;
 mod lifecycle;
+mod sage_fields;
 mod spawn;
 mod visuals;
 
@@ -29,16 +30,19 @@ impl Plugin for SkillUnitsPlugin {
         // Despawn must run first: the chain's sync points make later systems see
         // deferred commands, so spawn-first would create the replacement root and
         // then despawn it by group id, permanently deleting the trap.
-        app.add_systems(
-            Update,
-            (
-                lifecycle::despawn_skill_units,
-                spawn::spawn_skill_units,
-                lifecycle::update_skill_units,
-                lifecycle::move_skill_units,
-                detonation::spawn_trap_detonation,
-            )
-                .chain(),
-        );
+        app.add_plugins(MaterialPlugin::<sage_fields::SageFieldMaterial>::default())
+            .add_systems(
+                Update,
+                (
+                    lifecycle::despawn_skill_units,
+                    spawn::spawn_skill_units,
+                    lifecycle::update_skill_units,
+                    lifecycle::move_skill_units,
+                    detonation::spawn_trap_detonation,
+                    sage_fields::initialize,
+                    sage_fields::animate,
+                )
+                    .chain(),
+            );
     }
 }

@@ -69,6 +69,14 @@
         53: (success_only: true), // TF_DETOXIFY
         138: (success_only: true), // AS_ENCHANTPOISON
         150: (success_only: true, motion: None), // TF_BACKSLIDING
+        275: (motion: None), // SA_CASTCANCEL: cancel feedback, no replacement swing/artwork.
+        276: (success_only: true), // SA_MAGICROD
+        277: (success_only: true), // SA_SPELLBREAKER
+        280: (success_only: true), // SA_FLAMELAUNCHER
+        281: (success_only: true), // SA_FROSTWEAPON
+        282: (success_only: true), // SA_LIGHTNINGLOADER
+        283: (success_only: true), // SA_SEISMICWEAPON
+        289: (success_only: true), // SA_DISPELL
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1583,8 +1591,153 @@
             color: (1.0, 0.6, 0.3, 1.0),
             repeating: false,
         ),
+        // Sage reference: roBrowserLegacy src/DB/Skills/SkillEffect.js and
+        // src/DB/Effects/EffectTable.js (EF 234/235/244/255-258).
+        // Cast Cancel (275) and Hindsight (279) intentionally have no artwork;
+        // cancellation, the skill menu and the chosen spell's hits own feedback.
+        276: ( // SA_MAGICROD
+            visuals: [Str("매직로드.str")],
+            sound: Some("effect/sage_magic rod.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        277: ( // SA_SPELLBREAKER
+            visuals: [Str("spell.str")],
+            sound: Some("effect/sage_spell breake.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        280: ( // SA_FLAMELAUNCHER
+            visuals: [Str("enc_fire.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        281: ( // SA_FROSTWEAPON
+            visuals: [Str("enc_ice.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        282: ( // SA_LIGHTNINGLOADER
+            visuals: [Str("enc_wind.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        283: ( // SA_SEISMICWEAPON
+            visuals: [Str("enc_earth.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // No STR/SFX is established for the four EF_* cast auras. The repeating
+        // ground visuals live exclusively in skill_units, not a guessed burst.
+        285: ( // SA_VOLCANO
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        286: ( // SA_DELUGE
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        287: ( // SA_VIOLENTGALE
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        288: ( // SA_LANDPROTECTOR
+            visuals: [],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        289: ( // SA_DISPELL
+            visuals: [Str("디스펠.str")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1008: ( // SA_ELEMENTWATER
+            visuals: [Str("enc_ice.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1017: ( // SA_ELEMENTGROUND
+            visuals: [Str("enc_earth.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1018: ( // SA_ELEMENTFIRE
+            visuals: [Str("enc_fire.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        1019: ( // SA_ELEMENTWIND
+            visuals: [Str("enc_wind.str")],
+            sound: Some("_enemy_hit_wind1.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
     },
     skill_units: {
+        // Sage field cells are gameplay-only (no visible flag). Footprint keeps
+        // the reference EF_BOTTOM_* geometry on every surviving server cell.
+        285: ( // SA_VOLCANO / EF_BOTTOM_VO
+            ground_anchor: Footprint,
+            visuals: [Bespoke("sage_volcano")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        286: ( // SA_DELUGE / EF_BOTTOM_DE
+            ground_anchor: Footprint,
+            visuals: [Bespoke("sage_deluge")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        287: ( // SA_VIOLENTGALE / EF_BOTTOM_VI
+            ground_anchor: Footprint,
+            visuals: [Bespoke("sage_violent_gale")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
+        288: ( // SA_LANDPROTECTOR / EF_BOTTOM_LA
+            ground_anchor: Footprint,
+            visuals: [Bespoke("sage_land_protector")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         140: ( // AS_VENOMDUST -- EF_VENOMDUST2's particle3, one per visible cross cell.
             ground_anchor: Cell,
             visuals: [Sprite("이팩트/particle3")],
