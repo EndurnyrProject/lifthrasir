@@ -5294,6 +5294,7 @@ name = "lifthrasir-pak"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "memmap2",
  "serde",
  "tempfile",
  "thiserror 2.0.21",

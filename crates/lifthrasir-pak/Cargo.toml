@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+memmap2 = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 toml = { workspace = true }
