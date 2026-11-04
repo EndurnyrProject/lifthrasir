@@ -779,7 +779,8 @@ mod tests {
             let reader = ktx2::Reader::new(&ktx2).unwrap();
             assert_eq!(
                 (reader.header().pixel_width, reader.header().pixel_height),
-                (2, 2)
+                (4, 4),
+                "the 2x2 fallback is padded to a BC7 block"
             );
             assert_eq!(reader.header().format, Some(ktx2::Format::BC7_SRGB_BLOCK));
             assert_eq!(ktx2, fallback_texture_ktx2().expect("placeholder"));

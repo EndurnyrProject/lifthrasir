@@ -13,11 +13,34 @@ use ctt::{
 };
 use image::RgbaImage;
 
+/// BC7 compresses 4x4 blocks and wgpu rejects a compressed texture whose
+/// extent is not a multiple of the block size, so the extent is rounded up with
+/// the edge texels replicated. A transparent border would instead bleed into
+/// the mip chain of an alpha-masked material.
+fn pad_to_bc7_blocks(src: &RgbaImage) -> RgbaImage {
+    let (width, height) = (src.width(), src.height());
+    let (padded_width, padded_height) = (width.next_multiple_of(4), height.next_multiple_of(4));
+    if (padded_width, padded_height) == (width, height) {
+        return src.clone();
+    }
+    let mut padded = RgbaImage::new(padded_width, padded_height);
+    for y in 0..padded_height {
+        for x in 0..padded_width {
+            let pixel = *src.get_pixel(x.min(width - 1), y.min(height - 1));
+            padded.put_pixel(x, y, pixel);
+        }
+    }
+    padded
+}
+
 pub fn encode_ktx2(rgba: &RgbaImage, srgb: bool) -> anyhow::Result<Vec<u8>> {
     ensure!(
         rgba.width() > 0 && rgba.height() > 0,
         "KTX2 images must have non-zero dimensions"
     );
+
+    let padded = pad_to_bc7_blocks(rgba);
+    let rgba = &padded;
 
     let surface = Surface {
         data: rgba.as_raw().clone(),
@@ -118,6 +141,20 @@ mod tests {
         assert_eq!(
             encode_ktx2(&image, true).unwrap(),
             encode_ktx2(&image, true).unwrap()
+        );
+    }
+
+    #[test]
+    fn pads_extents_to_bc7_blocks() {
+        let bytes = encode_ktx2(&RgbaImage::from_pixel(9, 5, Rgba([1, 2, 3, 4])), true).unwrap();
+        let reader = ktx2::Reader::new(&bytes).unwrap();
+        let header = reader.header();
+
+        assert_eq!((header.pixel_width, header.pixel_height), (12, 8));
+        assert_eq!(
+            reader.levels().next().unwrap().uncompressed_byte_length,
+            3 * 2 * 16,
+            "12x8 is a 3x2 grid of BC7 blocks"
         );
     }
 
