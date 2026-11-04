@@ -67,6 +67,18 @@
     // These skills receive both effect and damage events for the same cast.
     skill_effect_only: [375], // PF_SOULBURN
     skill_presentation: {
+        // Utility casts open a menu, dialog or inventory change; the reference
+        // plays no motion on their skill-use packet, so no swing at the target.
+        40: (motion: None), // MC_IDENTIFY
+        93: (motion: None), // WZ_ESTIMATION
+        108: (motion: None), // BS_REPAIRWEAPON
+        147: (motion: None), // AC_MAKINGARROW
+        151: (motion: None), // TF_PICKSTONE
+        228: (motion: None), // AM_PHARMACY
+        279: (motion: None), // SA_AUTOSPELL
+        407: (motion: None), // ASC_CDP
+        477: (motion: None), // WS_WEAPONREFINE
+        1007: (motion: None), // SA_CREATECON
         50: (success_only: true), // TF_STEAL
         53: (success_only: true), // TF_DETOXIFY
         138: (success_only: true), // AS_ENCHANTPOISON
@@ -2626,6 +2638,22 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // Refine outcome (ZC_NOTIFY_EFFECT 3/2). Aesir plays these on the
+        // caster from Upgrade Weapon's result; native STR and retail sound.
+        154: ( // EF_REFINEOK
+            visuals: [Str("bs_refinesuccess.str")],
+            sound: Some("effect/bs_refinesuccess.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        155: ( // EF_REFINEFAIL
+            visuals: [Str("bs_refinefailed.str")],
+            sound: Some("effect/bs_refinefailed.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         252: ( // EF_REFLECTSHIELD -- Reflect Shield's reactive proc flash on
                // the reflecting unit (aesir Unit.SpecialEffect); reuses the
                // authored skill-252 asset.
@@ -2640,6 +2668,23 @@
             visuals: [Str("kyrie.str")],
             sound: None,
             placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // Pharmacy outcome (ZC_NOTIFY_EFFECT 5/6). Aesir's Forge plays these on
+        // the caster for Pharmacy, Twilight batches and Create Deadly Poison;
+        // the sounds are filename-backed, not listed in the reference table.
+        305: ( // EF_PHARMACY_OK
+            visuals: [Str("p_success.str")],
+            sound: Some("effect/p_success.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        306: ( // EF_PHARMACY_FAIL
+            visuals: [Str("p_failed.str")],
+            sound: Some("effect/p_failed.wav"),
+            placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
