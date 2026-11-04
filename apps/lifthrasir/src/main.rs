@@ -46,8 +46,7 @@ fn main() {
             .set(bevy::log::LogPlugin {
                 filter: format!("{},bevy_hanabi::render=off", bevy::log::DEFAULT_FILTER),
                 ..default()
-            })
-            .disable::<bevy::audio::AudioPlugin>(),
+            }),
     );
     app.add_plugins(bevy::settings::SettingsPlugin::new(
         "com.github.endurnyrproject.lifthrasir",
