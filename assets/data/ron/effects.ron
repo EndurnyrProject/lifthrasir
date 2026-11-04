@@ -104,6 +104,11 @@
         475: (success_only: true), // ST_PRESERVE
         476: (success_only: true), // ST_FULLSTRIP
         482: (success_only: true), // PF_DOUBLECASTING
+        // Twilight Alchemy brews on the spot: no attack swing, and the shown
+        // effect still precedes a reported batch failure.
+        496: (motion: None), // AM_TWILIGHT1
+        497: (motion: None), // AM_TWILIGHT2
+        498: (motion: None), // AM_TWILIGHT3
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
@@ -1173,6 +1178,86 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Alchemist (AM_*) -----------------------------------------------
+        // The official client draws every pre-renewal Alchemist skill with a
+        // hardcoded emitter and roBrowserLegacy's `SkillEffect.js` has no entry
+        // for any of them, so the artwork below is authored approximation, not
+        // reference-certified. Homunculus skills (243 Call Homunculus, 244
+        // Vaporize, 247 Homunculus Resurrection) are a separate backlog and are
+        // absent, as are the passives (226 Axe Mastery, 227 Learning Potion,
+        // 238 Bioethics). 446 AM_BERSERKPITCHER has no aesir module yet.
+        229: ( // AM_DEMONSTRATION -- the Fire Bottle lands on the targeted cell;
+               // the burning field itself is `skill_units[229]`.
+            visuals: [Str("demonstration_throw.strfx.ron")],
+            sound: Some("effect/ef_fireball.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        230: ( // AM_ACIDTERROR -- acid splash on the victim; aesir reports one
+               // weapon hit per victim and the skill never misses.
+            visuals: [Str("acid_terror.strfx.ron")],
+            sound: Some("effect/em_elemetal_buster_poison.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        231: ( // AM_POTIONPITCHER -- the potion breaks on the recipient; the
+               // no-damage cast reports the healed unit as its target.
+            visuals: [Str("potion_pitcher.strfx.ron")],
+            sound: Some("se_drink_potion.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        232: ( // AM_CANNIBALIZE -- soil bursts on the targeted cell; the plant
+               // is a summoned mob and draws itself.
+            visuals: [Str("cannibalize_sprout.strfx.ron")],
+            sound: Some("monster_plant.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        233: ( // AM_SPHEREMINE -- the Marine Sphere Bottle shatters on the
+               // targeted cell; the sphere is a summoned mob and draws itself.
+            visuals: [Str("sphere_mine.strfx.ron")],
+            sound: Some("effect/wizard_waterball_chulung.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // Chemical Protection: one shared coating on the recipient. The
+        // descriptor cannot tell the four pieces apart, and a refused cast (the
+        // target does not wear that piece) sends no effect packet at all. No
+        // reference SFX exists in the pak, so these are silent.
+        234: ( // AM_CP_WEAPON
+            visuals: [Str("chemical_coating.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        235: ( // AM_CP_SHIELD
+            visuals: [Str("chemical_coating.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        236: ( // AM_CP_ARMOR
+            visuals: [Str("chemical_coating.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        237: ( // AM_CP_HELM
+            visuals: [Str("chemical_coating.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         // --- Crusader (CR_*) ------------------------------------------------
         // 248 CR_FAITH is a passive with no cast event and is intentionally
         // absent. Reflect Shield (252) doubles as the reactive map effect
@@ -1959,6 +2044,32 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // Twilight Alchemy: one shared brewing flourish, tinted per batch. The
+        // skill shows itself before the batch is brewed, and a batch that cannot
+        // be made still broadcasts this effect before its failure is reported, so
+        // the artwork is outcome-neutral (no retail p_success/p_failed here). No
+        // reference SFX exists in the pak, so these are silent.
+        496: ( // AM_TWILIGHT1 -- 200 White Potions
+            visuals: [Str("twilight_alchemy.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        497: ( // AM_TWILIGHT2 -- 200 Condensed White Potions
+            visuals: [Str("twilight_alchemy.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 0.95, 0.82, 1.0),
+            repeating: false,
+        ),
+        498: ( // AM_TWILIGHT3 -- Alcohol, Acid Bottles and Fire Bottles
+            visuals: [Str("twilight_alchemy.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (0.95, 1.0, 0.85, 1.0),
+            repeating: false,
+        ),
         1001: ( // KN_CHARGEATK (Charge Attack) -- hardcoded in the official
                 // client, no native STR; authored rush impact on the target.
                 // No dedicated wav in the GRF; generic effect hit sound.
@@ -2178,6 +2289,14 @@
         ),
     },
     skill_units: {
+        229: ( // AM_DEMONSTRATION -- burning patch on the server-owned field cell.
+            ground_anchor: Footprint,
+            visuals: [Str("demonstration_field.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: true,
+        ),
         395: ( // CG_MOONLIT -- authored moonlit swirl on surviving field cells.
             ground_anchor: Footprint,
             visuals: [Str("moonlit_water_mill.strfx.ron")],

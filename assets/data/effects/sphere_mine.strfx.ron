@@ -1,0 +1,85 @@
+// Sphere Mine (AM_SPHEREMINE) -- authored effect, approximation.
+//
+// No reference artwork: roBrowserLegacy's `SkillEffect.js` has no
+// AM_SPHEREMINE entry. Aesir's `am_spheremine.ex` spawns the Marine Sphere mob
+// on the targeted cell for 30 s (`Coordinator.summon_mob`, cap of three); the
+// sphere's own mob sprite is the persistent visual, so this descriptor is only
+// the cast burst on the ground cell, played once from the `GroundSkill`
+// placement packet.
+//
+// Convention: (319, 291) is the anchor (the targeted ground cell), a smaller
+// offset.y renders higher. fps 30, keys lerp and texture_index is held. All
+// layers are additive (retail bitmaps use a transparency colour, not alpha).
+//
+// Shape: the Marine Sphere Bottle shatters into water -- a cold blue flash, a
+// droplet burst, bubbles rising out of the splash and a spreading water ring on
+// the ground. The mine's explosion is not drawn here; it is a mob skill event.
+(
+    fps: 30,
+    layers: [
+        // The bottle breaking: cold blue flash on the cell.
+        (
+            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 284.0), quad: (24.0, 24.0),   color: (170, 220, 255, 0) ),
+                ( at: 3,  offset: (319.0, 284.0), quad: (120.0, 120.0), color: (200, 235, 255, 230) ),
+                ( at: 10, offset: (319.0, 284.0), quad: (160.0, 160.0), color: (160, 215, 255, 115) ),
+                ( at: 18, offset: (319.0, 284.0), quad: (200.0, 200.0), color: (120, 180, 245, 0) ),
+            ],
+        ),
+        // Droplet burst out of the shattered bottle.
+        (
+            textures: [
+                "ro://data/texture/effect/water_splash/water_slplash_00.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_01.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_02.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_03.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_04.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_05.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_06.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_07.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_08.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_09.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 1,  offset: (319.0, 282.0), quad: (50.0, 50.0),   color: (185, 225, 255, 0),   texture_index: 0 ),
+                ( at: 4,  offset: (319.0, 280.0), quad: (110.0, 110.0), color: (200, 235, 255, 215), texture_index: 2 ),
+                ( at: 9,  offset: (319.0, 278.0), quad: (150.0, 150.0), color: (175, 220, 255, 160), texture_index: 5 ),
+                ( at: 15, offset: (319.0, 276.0), quad: (185.0, 185.0), color: (150, 205, 250, 85),  texture_index: 8 ),
+                ( at: 22, offset: (319.0, 274.0), quad: (210.0, 210.0), color: (120, 185, 240, 0),   texture_index: 9 ),
+            ],
+        ),
+        // Bubbles rising out of the splash.
+        (
+            textures: ["ro://data/texture/effect/bubble_a.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4,  offset: (303.0, 280.0), quad: (14.0, 14.0), color: (190, 230, 255, 0) ),
+                ( at: 9,  offset: (296.0, 258.0), quad: (28.0, 28.0), color: (205, 240, 255, 220) ),
+                ( at: 20, offset: (288.0, 224.0), quad: (20.0, 20.0), color: (175, 220, 250, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/bubble_c.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (337.0, 278.0), quad: (14.0, 14.0), color: (190, 230, 255, 0) ),
+                ( at: 11, offset: (346.0, 254.0), quad: (28.0, 28.0), color: (205, 240, 255, 220) ),
+                ( at: 22, offset: (354.0, 220.0), quad: (20.0, 20.0), color: (175, 220, 250, 0) ),
+            ],
+        ),
+        // Water ring spreading across the cell.
+        (
+            textures: ["ro://data/texture/effect/ring_blue.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 291.0), quad: (60.0, 30.0),  color: (170, 215, 255, 0) ),
+                ( at: 7,  offset: (319.0, 291.0), quad: (150.0, 75.0), color: (190, 230, 255, 190) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (210.0, 105.0), color: (165, 210, 250, 110) ),
+                ( at: 26, offset: (319.0, 291.0), quad: (250.0, 125.0), color: (135, 190, 240, 0) ),
+            ],
+        ),
+    ],
+)

@@ -1,0 +1,78 @@
+// Twilight Alchemy 1 / 2 / 3 (AM_TWILIGHT1..3) -- authored effect,
+// approximation, shared by the three batches with a per-skill tint.
+//
+// No reference artwork: roBrowserLegacy's `SkillEffect.js` has no AM_TWILIGHT*
+// entry. Aesir's `TwilightAlchemy.cast_batch/3` shows the skill first and then
+// brews the batch (200 White Potions, 200 Condensed White Potions, or 100
+// Alcohol + 50 Acid Bottles + 50 Fire Bottles), and a batch that cannot be made
+// still reaches `commit_shown_failure/6`, which broadcasts this same effect
+// before reporting the failure. The artwork is therefore outcome-neutral: a
+// conjuration of the brewing itself, not a pharmacy success or failure stamp.
+// That is also why the retail `p_success`/`p_failed` Pharmacy assets are not
+// used here.
+//
+// Convention: (319, 291) is the anchor (the caster's feet), a smaller offset.y
+// renders higher. fps 30, keys lerp. All layers are additive.
+//
+// Shape: medicine bowls boil up around the caster -- a warm alembic glow at the
+// hands, a ring opening on the ground, and steam motes rising off it. The
+// descriptor `color` tint separates the tiers (cream, then gold, then the mixed
+// green-amber of the Alcohol/Acid/Fire batch); the exact tier artwork is not
+// established.
+(
+    fps: 30,
+    layers: [
+        // Flash of a freshly opened medicine bowl.
+        (
+            textures: ["ro://data/texture/effect/lens_y.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 252.0), quad: (24.0, 24.0),   color: (255, 235, 170, 0) ),
+                ( at: 4,  offset: (319.0, 252.0), quad: (110.0, 110.0), color: (255, 245, 195, 225) ),
+                ( at: 12, offset: (319.0, 252.0), quad: (140.0, 140.0), color: (250, 230, 165, 120) ),
+                ( at: 22, offset: (319.0, 252.0), quad: (165.0, 165.0), color: (240, 215, 145, 0) ),
+            ],
+        ),
+        // Ring opening on the ground under the bowls.
+        (
+            textures: ["ro://data/texture/effect/ring_yellow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2,  offset: (319.0, 291.0), quad: (70.0, 35.0),  color: (255, 225, 140, 0) ),
+                ( at: 7,  offset: (319.0, 291.0), quad: (150.0, 75.0), color: (255, 235, 165, 200) ),
+                ( at: 16, offset: (319.0, 291.0), quad: (210.0, 105.0), color: (250, 220, 140, 110) ),
+                ( at: 28, offset: (319.0, 291.0), quad: (250.0, 125.0), color: (235, 200, 120, 0) ),
+            ],
+        ),
+        // Steam rising off the brew, centre.
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 5,  offset: (319.0, 262.0), quad: (14.0, 14.0), color: (255, 245, 205, 0) ),
+                ( at: 11, offset: (317.0, 234.0), quad: (28.0, 28.0), color: (255, 250, 220, 215) ),
+                ( at: 24, offset: (321.0, 194.0), quad: (20.0, 20.0), color: (250, 235, 185, 0) ),
+            ],
+        ),
+        // Steam off the left bowl.
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 3,  offset: (297.0, 274.0), quad: (12.0, 12.0), color: (255, 240, 195, 0) ),
+                ( at: 9,  offset: (289.0, 250.0), quad: (24.0, 24.0), color: (255, 245, 210, 200) ),
+                ( at: 21, offset: (283.0, 214.0), quad: (18.0, 18.0), color: (250, 230, 175, 0) ),
+            ],
+        ),
+        // Steam off the right bowl.
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (341.0, 272.0), quad: (12.0, 12.0), color: (255, 240, 195, 0) ),
+                ( at: 12, offset: (350.0, 248.0), quad: (24.0, 24.0), color: (255, 245, 210, 200) ),
+                ( at: 24, offset: (356.0, 212.0), quad: (18.0, 18.0), color: (250, 230, 175, 0) ),
+            ],
+        ),
+    ],
+)
