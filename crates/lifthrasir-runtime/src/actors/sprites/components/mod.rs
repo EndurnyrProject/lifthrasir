@@ -41,6 +41,10 @@ pub struct PlayerAppearance {
     /// Equipment animation assets by slot
     pub equipment: HashMap<EquipmentSlot, Handle<RoAnimationAsset>>,
 
+    /// Weapon type id of the equipped right-hand weapon, used to pick the
+    /// retail swing sound (`_attack_*.wav`) for normal attacks.
+    pub weapon_view_id: Option<u16>,
+
     /// Shadow texture (single image, not animated)
     pub shadow: Handle<Image>,
 }

@@ -127,6 +127,9 @@ pub fn handle_equipment_changes(
         }
 
         appearance.remove_equipment(event.slot);
+        if event.slot == EquipmentSlot::Weapon {
+            appearance.weapon_view_id = event.view_id;
+        }
         if matches!(
             event.slot,
             EquipmentSlot::HeadTop

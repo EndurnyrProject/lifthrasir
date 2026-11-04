@@ -23,20 +23,13 @@ type SpriteActionQuery<'w, 's, T> = Query<
     ),
 >;
 
-fn is_attack(action_type: ActionType) -> bool {
-    matches!(
-        action_type,
-        ActionType::Attack | ActionType::Attack1 | ActionType::Attack2
-    )
-}
-
 /// Remap an armed attack to the equipped weapon's real swing motion (ATTACK1/2/3
 /// vary by weapon). Idle/walk/etc. are left untouched, so an armed character out
 /// of combat stands in normal idle — the weapon simply isn't drawn there (its ACT
 /// has no idle frames), matching the reference client.
 fn resolve_action_type(base: ActionType, motion: Option<CombatMotion>) -> ActionType {
     match motion {
-        Some(motion) if is_attack(base) => motion.attack,
+        Some(motion) if base.is_attack() => motion.attack,
         _ => base,
     }
 }
@@ -193,11 +186,11 @@ mod tests {
 
     #[test]
     fn is_attack_covers_all_attack_variants() {
-        assert!(is_attack(ActionType::Attack));
-        assert!(is_attack(ActionType::Attack1));
-        assert!(is_attack(ActionType::Attack2));
-        assert!(!is_attack(ActionType::Idle));
-        assert!(!is_attack(ActionType::ReadyFight));
+        assert!(ActionType::Attack.is_attack());
+        assert!(ActionType::Attack1.is_attack());
+        assert!(ActionType::Attack2.is_attack());
+        assert!(!ActionType::Idle.is_attack());
+        assert!(!ActionType::ReadyFight.is_attack());
     }
 
     // Camera forwards for the RO-style camera (looks down at the player). Only

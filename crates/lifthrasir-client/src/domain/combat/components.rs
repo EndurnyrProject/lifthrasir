@@ -42,6 +42,18 @@ pub struct HitStun {
     pub timer: Timer,
 }
 
+/// Weapon impact sound scheduled with an incoming hit, spawned as its own
+/// entity. Fires with the swing so the attacker's `_hit_*.wav` lands on the
+/// impact rather than the instant the server reports the damage.
+#[derive(Component, Debug, Clone)]
+pub struct PendingHitSound {
+    /// Entity the blow lands on; carries the spatial audio emitter.
+    pub emitter: Entity,
+    /// Sound filename relative to `data/wav`.
+    pub sound: String,
+    pub timer: Timer,
+}
+
 impl HitStun {
     pub fn new(duration_secs: f32) -> Self {
         Self {

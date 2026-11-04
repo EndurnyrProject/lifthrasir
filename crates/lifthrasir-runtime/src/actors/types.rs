@@ -99,6 +99,13 @@ pub enum ActionType {
     Attack2 = 10,
 }
 
+impl ActionType {
+    /// Swing motions: a normal attack plus the weapon-specific ATTACK1/2 variants.
+    pub fn is_attack(self) -> bool {
+        matches!(self, Self::Attack | Self::Attack1 | Self::Attack2)
+    }
+}
+
 /// Records the resolved attack motion of a character's equipped weapon so an
 /// armed attack plays the weapon's real swing (ATTACK1/2/3 vary by weapon).
 #[derive(Component, Clone, Copy)]

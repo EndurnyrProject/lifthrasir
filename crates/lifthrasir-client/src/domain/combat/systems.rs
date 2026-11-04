@@ -1,11 +1,17 @@
 use std::time::Duration;
 
 use crate::domain::combat::{
-    components::{AttackTimer, DeadEntity, DeathGrace, HasEndure, HitStun, PendingHitReaction},
+    components::{
+        AttackTimer, DeadEntity, DeathGrace, HasEndure, HitStun, PendingHitReaction,
+        PendingHitSound,
+    },
     events::{CombatActionType, DamageDisplayType, DisplayDamageNumber},
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
+use lifthrasir_assets::catalogs::WeaponDb;
+use lifthrasir_runtime::actors::PlayerAppearance;
+use lifthrasir_runtime::audio::events::PlayMobSfx;
 use lifthrasir_runtime::rendering::coordinates::Direction;
 use moonshine_behavior::prelude::*;
 use net_contract::events::{DamageReceived, UnitLeft};
@@ -25,6 +31,7 @@ use {
     schedule = Update,
     config(in_set = CombatSystems::ProcessActions)
 )]
+#[allow(clippy::too_many_arguments)]
 pub fn process_combat_actions(
     mut commands: Commands,
     mut combat_events: MessageReader<DamageReceived>,
@@ -32,7 +39,9 @@ pub fn process_combat_actions(
     mut behaviors: Query<BehaviorMut<AnimationState>>,
     registry: Res<EntityRegistry>,
     transforms: Query<&Transform>,
+    appearances: Query<&PlayerAppearance>,
     dying: Query<(), With<DeathGrace>>,
+    weapon_db: Option<Res<WeaponDb>>,
 ) {
     for event in combat_events.read() {
         let action_type = CombatActionType::from(event.type_ as u8);
@@ -42,7 +51,9 @@ pub fn process_combat_actions(
                 &mut behaviors,
                 &registry,
                 &transforms,
+                &appearances,
                 &dying,
+                weapon_db.as_deref(),
                 event,
                 action,
             ),
@@ -57,19 +68,23 @@ pub fn process_combat_actions(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn process_damage_action(
     commands: &mut Commands,
     behaviors: &mut Query<BehaviorMut<AnimationState>>,
     registry: &EntityRegistry,
     transforms: &Query<&Transform>,
+    appearances: &Query<&PlayerAppearance>,
     dying: &Query<(), With<DeathGrace>>,
+    weapon_db: Option<&WeaponDb>,
     event: &DamageReceived,
     action_type: CombatActionType,
 ) {
     let src_speed = event.src_speed as i32;
     let target_entity = registry.get_entity(event.target_id);
+    let attacker = registry.get_entity(event.src_id);
 
-    if let Some(src) = registry.get_entity(event.src_id) {
+    if let Some(src) = attacker {
         start_attack_animation(
             commands,
             behaviors,
@@ -109,6 +124,28 @@ fn process_damage_action(
         kills_target,
         timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
     });
+
+    let hit_sound = attacker_hit_sound(
+        attacker.and_then(|attacker| appearances.get(attacker).ok()),
+        weapon_db,
+    );
+    if let Some(sound) = hit_sound.filter(|_| event.damage > 0) {
+        commands.spawn(PendingHitSound {
+            emitter: target,
+            sound: sound.to_string(),
+            timer: Timer::new(Duration::from_millis(delay_ms), TimerMode::Once),
+        });
+    }
+}
+
+/// Retail impact sound for the attacker's equipped weapon (`_hit_*.wav`).
+/// `None` for mobs, unarmed attackers and weapon classes that ship no hit wav.
+fn attacker_hit_sound<'a>(
+    attacker: Option<&PlayerAppearance>,
+    weapon_db: Option<&'a WeaponDb>,
+) -> Option<&'a str> {
+    let weapon_view_id = attacker?.weapon_view_id?;
+    weapon_db?.hit_sound(weapon_view_id)
 }
 
 fn display_lucky_dodge(
@@ -258,6 +295,35 @@ pub fn apply_pending_hit_reactions(
                 .entity(reaction.target)
                 .insert(HitStun::new(reaction.stun_secs));
         }
+    }
+}
+
+/// Play the attacker's weapon impact sound when the swing connects, anchored on
+/// the target. Retail keys this off the attacker's weapon class, so the sound is
+/// emitted with the hit rather than the instant the server reports damage.
+#[auto_add_system(
+    plugin = crate::domain::combat::plugin::CombatDomainPlugin,
+    schedule = Update,
+    config(in_set = CombatSystems::HandleReactions)
+)]
+pub fn play_pending_hit_sounds(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut pending: Query<(Entity, &mut PendingHitSound)>,
+    mut sfx: MessageWriter<PlayMobSfx>,
+) {
+    for (entity, mut hit) in pending.iter_mut() {
+        hit.timer.tick(time.delta());
+
+        if !hit.timer.just_finished() {
+            continue;
+        }
+
+        commands.entity(entity).despawn();
+        sfx.write(PlayMobSfx {
+            emitter: hit.emitter,
+            sound: hit.sound.clone(),
+        });
     }
 }
 
@@ -958,5 +1024,89 @@ mod tests {
         app.update();
 
         assert_eq!(state(&app, player), AnimationState::Idle);
+    }
+
+    fn hit_sound_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .add_message::<PlayMobSfx>()
+            .add_systems(Update, play_pending_hit_sounds);
+        app
+    }
+
+    #[test]
+    fn pending_hit_sound_fires_on_impact_and_despawns() {
+        let mut app = hit_sound_app();
+        let target = app.world_mut().spawn_empty().id();
+        let pending = app
+            .world_mut()
+            .spawn(PendingHitSound {
+                emitter: target,
+                sound: "_hit_sword.wav".to_string(),
+                timer: Timer::from_seconds(0.1, TimerMode::Once),
+            })
+            .id();
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs(1));
+
+        app.update();
+
+        assert!(app.world().get_entity(pending).is_err());
+        let sounds: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<PlayMobSfx>>()
+            .drain()
+            .collect();
+        assert_eq!(sounds.len(), 1);
+        assert_eq!(sounds[0].emitter, target);
+        assert_eq!(sounds[0].sound, "_hit_sword.wav");
+    }
+
+    #[test]
+    fn pending_hit_sound_waits_for_the_swing_to_connect() {
+        let mut app = hit_sound_app();
+        let target = app.world_mut().spawn_empty().id();
+        app.world_mut().spawn(PendingHitSound {
+            emitter: target,
+            sound: "_hit_sword.wav".to_string(),
+            timer: Timer::from_seconds(0.1, TimerMode::Once),
+        });
+
+        app.update();
+
+        let sounds: Vec<_> = app
+            .world_mut()
+            .resource_mut::<Messages<PlayMobSfx>>()
+            .drain()
+            .collect();
+        assert!(sounds.is_empty());
+    }
+
+    #[test]
+    fn attacker_hit_sound_uses_the_equipped_weapon_hit_wav() {
+        let db = WeaponDb::from_weapon_data(lifthrasir_data::WeaponData {
+            hit_sounds: [(2, "_hit_sword.wav".to_string())].into(),
+            ..Default::default()
+        });
+        let appearance = PlayerAppearance {
+            weapon_view_id: Some(2),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            attacker_hit_sound(Some(&appearance), Some(&db)),
+            Some("_hit_sword.wav")
+        );
+    }
+
+    #[test]
+    fn attacker_hit_sound_is_none_without_a_player_weapon() {
+        let db = WeaponDb::from_weapon_data(lifthrasir_data::WeaponData::default());
+        let unarmed = PlayerAppearance::default();
+
+        assert_eq!(attacker_hit_sound(None, Some(&db)), None);
+        assert_eq!(attacker_hit_sound(Some(&unarmed), Some(&db)), None);
+        assert_eq!(attacker_hit_sound(Some(&unarmed), None), None);
     }
 }
