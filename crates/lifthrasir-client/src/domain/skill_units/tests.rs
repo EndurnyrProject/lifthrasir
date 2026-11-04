@@ -183,6 +183,7 @@ fn group(group_id: u64, skill_id: u32, cells: Vec<SkillUnitCellState>) -> SkillU
         phase: SkillUnitPhase::Active,
         created_tick: 1_000,
         expires_tick: 9_000,
+        message: vec![],
         cells,
     }
 }

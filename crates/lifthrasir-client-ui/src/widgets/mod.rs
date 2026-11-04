@@ -30,6 +30,7 @@ pub mod settings_window;
 pub mod shop_window;
 pub mod skill_menu;
 pub mod skill_target_toast;
+pub mod skill_text_input;
 pub mod status_icons;
 pub mod storage_window;
 pub mod system_dialog;
@@ -62,6 +63,7 @@ impl Plugin for InGameHudPlugin {
         app.add_plugins(vending_window::VendingWindowPlugin);
         app.add_plugins(card_compounding::CardCompoundingPlugin);
         app.add_plugins(skill_menu::SkillMenuPlugin);
+        app.add_plugins(skill_text_input::SkillTextInputPlugin);
         app.add_plugins(navigation::NavigationUiPlugin);
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);
         app.add_plugins(cutin::CutinPlugin);

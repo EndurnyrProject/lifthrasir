@@ -14,7 +14,11 @@ pub fn name_response(n: net::NameResponse) -> EntityNamed {
 pub fn chat_message(c: net::ChatMessage) -> ChatHeard {
     ChatHeard {
         gid: c.gid,
-        message: c.message,
+        message: if c.raw_message.is_empty() {
+            c.message
+        } else {
+            net_contract::dto::display_skill_text(&c.raw_message)
+        },
     }
 }
 
@@ -51,10 +55,21 @@ mod tests {
         let heard = chat_message(net::ChatMessage {
             gid: 150001,
             message: "hello world".into(),
+            raw_message: vec![],
         });
 
         assert_eq!(heard.gid, 150001);
         assert_eq!(heard.message, "hello world");
+    }
+
+    #[test]
+    fn talkie_chat_uses_raw_bytes_and_sanitizes_them() {
+        let heard = chat_message(net::ChatMessage {
+            gid: 1,
+            message: "fallback".into(),
+            raw_message: vec![b'A', 0xff, b'\n', b'B'],
+        });
+        assert_eq!(heard.message, "A\u{fffd}B");
     }
 
     #[test]

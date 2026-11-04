@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
-use net_contract::commands::AnswerSkillMenu;
+use net_contract::commands::{AnswerSkillMenu, SkillTextInputAnswered};
 
 use crate::channels::GAMEPLAY;
 use crate::envelope::Body;
@@ -42,9 +42,61 @@ pub fn send_skill_menu_answers(
     }
 }
 
+fn skill_text_reply_body(event: &SkillTextInputAnswered) -> Body {
+    use crate::proto::aesir::net::{SkillTextInputReply, skill_text_input_reply::Outcome};
+    let outcome = match &event.raw_text {
+        Some(bytes) => Outcome::RawText(bytes.clone()),
+        None => Outcome::Cancel(true),
+    };
+    Body::SkillTextInputReply(SkillTextInputReply {
+        request_id: event.request_id,
+        outcome: Some(outcome),
+    })
+}
+
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn send_skill_text_input_answers(
+    mut events: MessageReader<SkillTextInputAnswered>,
+    mut client: ResMut<QuinnetClient>,
+    mut zone: ResMut<QuicZoneState>,
+) {
+    if zone.phase != ZonePhase::Playing {
+        events.clear();
+        return;
+    }
+    for event in events.read() {
+        if let Err(error) = zone.send(&mut client, GAMEPLAY, skill_text_reply_body(event)) {
+            error!("failed to send SkillTextInputReply: {error}");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_reply_preserves_bytes_and_cancellation() {
+        use crate::proto::aesir::net::skill_text_input_reply::Outcome;
+        for (raw_text, expected) in [
+            (Some(vec![b'A', 0xff]), Outcome::RawText(vec![b'A', 0xff])),
+            (Some(vec![]), Outcome::RawText(vec![])),
+            (None, Outcome::Cancel(true)),
+        ] {
+            let Body::SkillTextInputReply(reply) = skill_text_reply_body(&SkillTextInputAnswered {
+                request_id: 42,
+                raw_text,
+            }) else {
+                panic!("expected text input reply")
+            };
+            assert_eq!(reply.request_id, 42);
+            assert_eq!(reply.outcome, Some(expected));
+        }
+    }
 
     fn body_of(answer: AnswerSkillMenu) -> SkillMenuReply {
         match skill_menu_reply_body(&answer) {

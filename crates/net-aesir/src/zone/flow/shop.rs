@@ -104,6 +104,7 @@ mod tests {
             Body::ChatMessage(net::ChatMessage {
                 gid: 150001,
                 message: "hello".into(),
+                raw_message: vec![],
             }),
         )]);
 

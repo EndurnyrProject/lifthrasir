@@ -40,6 +40,7 @@ fn skill_unit_group(g: net::SkillUnitGroupState) -> SkillUnitGroupState {
         phase: skill_unit_phase(g.phase),
         created_tick: g.created_tick,
         expires_tick: g.expires_tick,
+        message: g.message,
         cells: g.cells.into_iter().map(skill_unit_cell).collect(),
     }
 }
@@ -203,8 +204,21 @@ mod tests {
             created_tick: 1000,
             expires_tick: 9000,
             phase: net::SkillUnitPhase::Active as i32,
+            message: vec![],
             cells,
         }
+    }
+
+    #[test]
+    fn snapshot_preserves_scribble_bytes() {
+        let mut group = sample_group(1, vec![]);
+        group.skill_id = 220;
+        group.message = vec![b'A', 0xff, 0];
+        let snapshot = skill_unit_snapshot(net::SkillUnitSnapshot {
+            server_tick: 1,
+            groups: vec![group],
+        });
+        assert_eq!(snapshot.groups[0].message, vec![b'A', 0xff, 0]);
     }
 
     #[test]

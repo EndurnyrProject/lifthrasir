@@ -46,7 +46,17 @@ pub struct SkillUnitGroupState {
     pub phase: SkillUnitPhase,
     pub created_tick: u64,
     pub expires_tick: u64,
+    /// Raw Scribble text as sent by the server.
+    pub message: Vec<u8>,
     pub cells: Vec<SkillUnitCellState>,
+}
+
+/// Decode server-provided skill text for display without interpreting controls.
+pub fn display_skill_text(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes)
+        .chars()
+        .filter(|c| !c.is_control())
+        .collect()
 }
 
 /// Mirrors aesir's `SkillUnitDespawnReason` proto enum, neutrally.
@@ -107,6 +117,13 @@ mod tests {
     }
 
     #[test]
+    fn skill_text_display_handles_split_utf8_and_controls() {
+        assert_eq!(display_skill_text(b"hi\x00\n\xe2\x82"), "hi\u{fffd}");
+        assert_eq!(display_skill_text("Olá".as_bytes()), "Olá");
+        assert_eq!(display_skill_text(b""), "");
+    }
+
+    #[test]
     fn group_state_round_trips_through_clone_and_equality() {
         let group = SkillUnitGroupState {
             group_id: 1,
@@ -118,6 +135,7 @@ mod tests {
             phase: SkillUnitPhase::Active,
             created_tick: 1_000,
             expires_tick: 9_000,
+            message: vec![],
             cells: vec![SkillUnitCellState {
                 cell_id: 100,
                 x: 150,
@@ -148,6 +166,7 @@ mod tests {
             phase: SkillUnitPhase::Active,
             created_tick: 1_000,
             expires_tick: 9_000,
+            message: vec![],
             cells: vec![],
         };
 

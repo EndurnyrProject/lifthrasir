@@ -5,7 +5,7 @@ use bevy_quinnet::client::client_connected;
 use super::super::mapping::skill_menu::skill_menu;
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
-use net_contract::events::SkillMenuOffered;
+use net_contract::events::{SkillMenuOffered, SkillTextInputRequested};
 
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
@@ -23,12 +23,57 @@ pub fn zone_drain_skill_menu(
     }
 }
 
+#[auto_add_system(
+    plugin = crate::AesirNetPlugin,
+    schedule = Update,
+    config(run_if = client_connected)
+)]
+pub fn zone_drain_skill_text_input(
+    mut incoming: MessageReader<IncomingMessage>,
+    mut requests: MessageWriter<SkillTextInputRequested>,
+) {
+    for msg in incoming.read() {
+        if let Body::SkillTextInputRequest(request) = &msg.body {
+            requests.write(SkillTextInputRequested {
+                request_id: request.request_id,
+                skill_id: request.skill_id,
+                max_utf8_bytes: request.max_utf8_bytes,
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::channels::WORLD;
     use crate::proto::aesir::net;
     use net_contract::events::SkillMenuKind;
+
+    #[test]
+    fn text_input_request_drains_with_request_identity() {
+        let mut app = App::new();
+        app.add_message::<IncomingMessage>()
+            .add_message::<SkillTextInputRequested>()
+            .add_systems(Update, zone_drain_skill_text_input);
+        app.world_mut()
+            .resource_mut::<Messages<IncomingMessage>>()
+            .write(IncomingMessage {
+                channel: WORLD,
+                body: Body::SkillTextInputRequest(net::SkillTextInputRequest {
+                    request_id: 42,
+                    skill_id: 220,
+                    max_utf8_bytes: 79,
+                }),
+            });
+        app.update();
+        let requests = app.world().resource::<Messages<SkillTextInputRequested>>();
+        let request = requests.iter_current_update_messages().next().unwrap();
+        assert_eq!(
+            (request.request_id, request.skill_id, request.max_utf8_bytes),
+            (42, 220, 79)
+        );
+    }
 
     fn drained(body: Body) -> Vec<SkillMenuOffered> {
         let mut app = App::new();

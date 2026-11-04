@@ -101,7 +101,9 @@ pub fn skill_cast_failed(f: net::SkillCastFailed) -> SkillCastFailed {
         net::SkillCastFailureReason::Spirits => SkillCastFailureReason::Spirits,
         net::SkillCastFailureReason::Cart => SkillCastFailureReason::Cart,
         net::SkillCastFailureReason::NeedEquipment => SkillCastFailureReason::NeedEquipment,
-        net::SkillCastFailureReason::Failed => SkillCastFailureReason::Failed,
+        net::SkillCastFailureReason::Failed
+        | net::SkillCastFailureReason::FullstripCoated
+        | net::SkillCastFailureReason::StuffInsufficient => SkillCastFailureReason::Failed,
     };
 
     SkillCastFailed {

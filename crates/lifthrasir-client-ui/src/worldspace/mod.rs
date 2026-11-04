@@ -17,6 +17,7 @@ pub mod floor_item_labels;
 pub mod mob_health_bars;
 pub mod nameplates;
 pub mod progress_bar;
+pub mod scribble_labels;
 pub mod skill_cast_labels;
 pub mod vending_boards;
 
@@ -56,6 +57,7 @@ impl Plugin for WorldspaceUiPlugin {
             skill_cast_labels::SkillCastLabelPlugin,
             progress_bar::NpcProgressBarPlugin,
             vending_boards::VendingBoardPlugin,
+            scribble_labels::ScribbleLabelPlugin,
         ));
     }
 }

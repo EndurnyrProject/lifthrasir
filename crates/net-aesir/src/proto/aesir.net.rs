@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -759,7 +759,106 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "227")]
         VendingCloseResult(super::VendingCloseResult),
+        /// 228: refused return to character select
+        ///
+        /// s2c zone gameplay
+        #[prost(message, tag = "228")]
+        RespawnResult(super::RespawnResult),
+        /// 229-231: production rankings and maker-private fame awards
+        ///
+        /// c2s zone
+        #[prost(message, tag = "229")]
+        RankingRequest(super::RankingRequest),
+        /// s2c zone gameplay
+        #[prost(message, tag = "230")]
+        RankingResponse(super::RankingResponse),
+        /// s2c zone gameplay
+        #[prost(message, tag = "231")]
+        FameUpdate(super::FameUpdate),
     }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RankingRequest {
+    #[prost(enumeration = "RankingCategory", tag = "1")]
+    pub category: i32,
+}
+/// Repeated entry order defines rank, from first to tenth.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RankingEntry {
+    #[prost(uint32, tag = "1")]
+    pub character_id: u32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub fame: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RankingResponse {
+    #[prost(enumeration = "RankingCategory", tag = "1")]
+    pub category: i32,
+    /// Empty on error; at most ten positive scores on success.
+    #[prost(message, repeated, tag = "2")]
+    pub entries: ::prost::alloc::vec::Vec<RankingEntry>,
+    /// Requester's own production fame, independent of the requested board.
+    /// Meaningful only on success; zero for ineligible professions.
+    #[prost(uint32, tag = "3")]
+    pub own_fame: u32,
+    #[prost(enumeration = "ranking_response::Result", tag = "4")]
+    pub result: i32,
+}
+/// Nested message and enum types in `RankingResponse`.
+pub mod ranking_response {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Result {
+        Ok = 0,
+        InvalidCategory = 1,
+        Unavailable = 2,
+    }
+    impl Result {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Ok => "OK",
+                Self::InvalidCategory => "INVALID_CATEGORY",
+                Self::Unavailable => "UNAVAILABLE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "OK" => Some(Self::Ok),
+                "INVALID_CATEGORY" => Some(Self::InvalidCategory),
+                "UNAVAILABLE" => Some(Self::Unavailable),
+                _ => None,
+            }
+        }
+    }
+}
+/// Private notification to the maker, emitted after fame persistence succeeds.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FameUpdate {
+    #[prost(enumeration = "RankingCategory", tag = "1")]
+    pub category: i32,
+    /// Requested positive award, even when the total is already capped.
+    #[prost(uint32, tag = "2")]
+    pub awarded_points: u32,
+    /// Resulting fame after applying the 1,000,000,000 cap.
+    #[prost(uint32, tag = "3")]
+    pub total_fame: u32,
 }
 /// Client -> server, first message on the Control channel after connect.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -787,7 +886,7 @@ pub struct SkillTextInputRequest {
     pub request_id: u64,
     #[prost(uint32, tag = "2")]
     pub skill_id: u32,
-    /// Maximum UTF-8 byte length accepted for text.
+    /// Maximum bytes retained; excess and bytes after NUL are discarded.
     #[prost(uint32, tag = "3")]
     pub max_utf8_bytes: u32,
 }
@@ -796,17 +895,21 @@ pub struct SkillTextInputRequest {
 pub struct SkillTextInputReply {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(oneof = "skill_text_input_reply::Outcome", tags = "2, 3")]
+    #[prost(oneof = "skill_text_input_reply::Outcome", tags = "2, 3, 4")]
     pub outcome: ::core::option::Option<skill_text_input_reply::Outcome>,
 }
 /// Nested message and enum types in `SkillTextInputReply`.
 pub mod skill_text_input_reply {
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Outcome {
+        /// UTF-8 input; retained for existing clients.
         #[prost(string, tag = "2")]
         Text(::prost::alloc::string::String),
         #[prost(bool, tag = "3")]
         Cancel(bool),
+        /// Byte input, including non-UTF-8 legacy text.
+        #[prost(bytes, tag = "4")]
+        RawText(::prost::alloc::vec::Vec<u8>),
     }
 }
 /// Client -> server, account login request (replaces RO CA_LOGIN).
@@ -1536,6 +1639,9 @@ pub struct ChatMessage {
     pub gid: u32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
+    /// Talkie Box bytes, when present; otherwise use message.
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_message: ::prost::alloc::vec::Vec<u8>,
 }
 /// Client -> server, emote/emoticon request (replaces RO CZ_REQ_EMOTION 0x00bf).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2620,6 +2726,17 @@ pub struct Respawn {
     #[prost(uint32, tag = "1")]
     pub r#type: u32,
 }
+/// Server -> client, the answer to a Respawn the server refused (replaces RO ZC_ACK_REQ_DISCONNECT
+/// 0x018B with result 1). `type` echoes the request (1 = return to character select); `ok` is
+/// false while the player is hidden, cloaked or chase walking, or within 10 s of their last
+/// attack, skill use or damage taken. An allowed request is not answered: the session ends.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RespawnResult {
+    #[prost(uint32, tag = "1")]
+    pub r#type: u32,
+    #[prost(bool, tag = "2")]
+    pub ok: bool,
+}
 /// Client -> server, use a consumable item by inventory slot index (replaces RO CZ_USE_ITEM 0x00A7).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UseItem {
@@ -3523,6 +3640,9 @@ pub struct SkillUnitGroupState {
     pub cells: ::prost::alloc::vec::Vec<SkillUnitCellState>,
     #[prost(enumeration = "SkillUnitPhase", tag = "11")]
     pub phase: i32,
+    /// Scribble bytes; empty for other skill units.
+    #[prost(bytes = "vec", tag = "12")]
+    pub message: ::prost::alloc::vec::Vec<u8>,
 }
 /// Server -> client, an authoritative replacement for the observer's complete
 /// active visible skill-unit set.
@@ -4190,6 +4310,36 @@ pub struct WaitingRoomChat {
     pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub message: ::prost::alloc::string::String,
+}
+/// Production rankings available to any authenticated player.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum RankingCategory {
+    RankingUnspecified = 0,
+    RankingBlacksmith = 1,
+    RankingAlchemist = 2,
+}
+impl RankingCategory {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::RankingUnspecified => "RANKING_UNSPECIFIED",
+            Self::RankingBlacksmith => "RANKING_BLACKSMITH",
+            Self::RankingAlchemist => "RANKING_ALCHEMIST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "RANKING_UNSPECIFIED" => Some(Self::RankingUnspecified),
+            "RANKING_BLACKSMITH" => Some(Self::RankingBlacksmith),
+            "RANKING_ALCHEMIST" => Some(Self::RankingAlchemist),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -5500,6 +5650,12 @@ pub enum SkillCastFailureReason {
     NeedEquipment = 18,
     /// A plain failure the skill reports instead of UNSPECIFIED's generic one.
     Failed = 19,
+    /// Divest All: the target holds all four Chemical Protections, so nothing
+    /// can be stripped (the SP is still spent).
+    FullstripCoated = 20,
+    /// A production skill lacks its materials, cannot fit the product, or the
+    /// attempt failed (Create Deadly Poison).
+    StuffInsufficient = 21,
 }
 impl SkillCastFailureReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5528,6 +5684,8 @@ impl SkillCastFailureReason {
             Self::Cart => "SKILL_CAST_FAILURE_REASON_CART",
             Self::NeedEquipment => "SKILL_CAST_FAILURE_REASON_NEED_EQUIPMENT",
             Self::Failed => "SKILL_CAST_FAILURE_REASON_FAILED",
+            Self::FullstripCoated => "SKILL_CAST_FAILURE_REASON_FULLSTRIP_COATED",
+            Self::StuffInsufficient => "SKILL_CAST_FAILURE_REASON_STUFF_INSUFFICIENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5553,6 +5711,10 @@ impl SkillCastFailureReason {
             "SKILL_CAST_FAILURE_REASON_CART" => Some(Self::Cart),
             "SKILL_CAST_FAILURE_REASON_NEED_EQUIPMENT" => Some(Self::NeedEquipment),
             "SKILL_CAST_FAILURE_REASON_FAILED" => Some(Self::Failed),
+            "SKILL_CAST_FAILURE_REASON_FULLSTRIP_COATED" => Some(Self::FullstripCoated),
+            "SKILL_CAST_FAILURE_REASON_STUFF_INSUFFICIENT" => {
+                Some(Self::StuffInsufficient)
+            }
             _ => None,
         }
     }

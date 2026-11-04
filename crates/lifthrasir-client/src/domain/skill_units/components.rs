@@ -18,6 +18,10 @@ pub struct SkillUnitGroup {
     pub expires_tick: u64,
 }
 
+/// Sanitized Scribble text owned by a ground-skill cell, never its caster.
+#[derive(Component, Debug)]
+pub struct ScribbleMessage(pub String);
+
 /// One cell of a group (one occupied tile). A child of the group root, positioned
 /// relative to the root so its world transform lands on the cell. HP is kept
 /// server-authoritative for future use (no HP bar in scope).

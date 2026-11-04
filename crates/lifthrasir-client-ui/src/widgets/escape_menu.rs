@@ -19,6 +19,7 @@ use crate::widgets::npc_dialog::ActiveNpcDialog;
 use crate::widgets::settings_window::{SettingsUi, SettingsWindowRoot};
 use crate::widgets::shop_window::ShopSession;
 use crate::widgets::skill_menu::ActiveSkillMenu;
+use crate::widgets::skill_text_input::ActiveSkillTextInput;
 use crate::widgets::system_dialog::SystemDialogRoot;
 use lifthrasir_ui::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
 
@@ -54,6 +55,7 @@ struct EscapeBlockers<'w, 's> {
     shop: Option<Res<'w, ShopSession>>,
     skill_menu: Option<Res<'w, ActiveSkillMenu>>,
     card_picker: Option<Res<'w, ActiveCardPicker>>,
+    skill_text_input: Option<Res<'w, ActiveSkillTextInput>>,
     modal: Query<'w, 's, (), ModalBlocker>,
     dead: Query<'w, 's, (), DeadLocalPlayer>,
 }
@@ -65,6 +67,7 @@ impl EscapeBlockers<'_, '_> {
             || self.shop.is_some()
             || self.skill_menu.is_some()
             || self.card_picker.is_some()
+            || self.skill_text_input.is_some()
             || !self.modal.is_empty()
             || !self.dead.is_empty()
     }

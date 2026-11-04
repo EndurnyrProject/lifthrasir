@@ -1,6 +1,15 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
+/// A server request for text used by a skill.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillTextInputRequested {
+    pub request_id: u64,
+    pub skill_id: u32,
+    pub max_utf8_bytes: u32,
+}
+
 /// What the ids in a [`SkillMenuOffered`] name, and therefore how the client
 /// resolves them to labels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

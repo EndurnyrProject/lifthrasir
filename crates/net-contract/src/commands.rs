@@ -7,6 +7,14 @@ use crate::dto::{
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
+/// Answer a skill text request. `None` cancels the request.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct SkillTextInputAnswered {
+    pub request_id: u64,
+    pub raw_text: Option<Vec<u8>>,
+}
+
 /// Request to move the local player to a destination cell.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
