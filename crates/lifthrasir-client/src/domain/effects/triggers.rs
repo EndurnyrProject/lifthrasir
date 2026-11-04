@@ -20,6 +20,7 @@ use lifthrasir_runtime::effects::{descriptor_tint, load_effect, load_str_effect}
 use moonshine_behavior::prelude::BehaviorMut;
 
 use crate::domain::camera::CameraShakeRequest;
+use crate::domain::combat::casting::play_cast_pose;
 use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
@@ -252,17 +253,25 @@ pub fn on_skill_effect(
         let src = resolve_gid(&ctx.registry, event.src_id);
         let target = resolve_gid(&ctx.registry, event.target_id);
 
-        if presentation.motion == SkillMotion::Attack
-            && let Some(src) = src
-        {
-            start_attack_animation(
-                &mut ctx.commands,
-                &mut ctx.behaviors,
-                &ctx.transforms,
-                src,
-                target,
-                0,
-            );
+        if let Some(src) = src {
+            match presentation.motion {
+                SkillMotion::Cast => play_cast_pose(
+                    &mut ctx.commands,
+                    &mut ctx.behaviors,
+                    &ctx.transforms,
+                    src,
+                    target,
+                ),
+                SkillMotion::Attack => start_attack_animation(
+                    &mut ctx.commands,
+                    &mut ctx.behaviors,
+                    &ctx.transforms,
+                    src,
+                    target,
+                    0,
+                ),
+                SkillMotion::None => {}
+            }
         }
 
         let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
@@ -445,13 +454,12 @@ pub fn on_ground_skill(
     for event in events.read() {
         let src = resolve_gid(&ctx.registry, event.src_id);
         if let Some(src) = src {
-            start_attack_animation(
+            play_cast_pose(
                 &mut ctx.commands,
                 &mut ctx.behaviors,
                 &ctx.transforms,
                 src,
                 None,
-                0,
             );
         }
 

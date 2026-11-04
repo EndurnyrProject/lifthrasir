@@ -25,5 +25,5 @@ fn older_catalogs_default_to_ordinary_skill_feedback() {
     let catalog = resolve_effect_catalog(&data).unwrap();
     let policy = catalog.skill_presentation(150);
     assert!(!policy.success_only);
-    assert_eq!(policy.motion, SkillMotion::Attack);
+    assert_eq!(policy.motion, SkillMotion::Cast);
 }

@@ -20,9 +20,13 @@ pub enum EffectPlacement {
 }
 
 /// Caster motion for a no-damage skill response, independent of its artwork.
+/// The reference client answers every completed player skill with a one-shot
+/// skill pose (ACTION.SKILL via EFST_POSTDELAY), never an attack swing, so
+/// `Cast` is the default.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SkillMotion {
     #[default]
+    Cast,
     Attack,
     None,
 }
@@ -35,8 +39,8 @@ pub struct CameraShake {
     pub duration_secs: f32,
 }
 
-/// No-damage skill feedback policy. Omitted fields preserve ordinary attack motion
-/// and feedback on any result, even when the skill has no visual descriptor.
+/// No-damage skill feedback policy. Omitted fields preserve the one-shot cast
+/// pose and feedback on any result, even when the skill has no visual descriptor.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SkillPresentation {

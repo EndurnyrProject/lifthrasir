@@ -37,8 +37,9 @@ impl Behavior for AnimationState {
             (Walking, Idle | Attacking | Hit | Sitting | Dead | PickingUp | Casting) => true,
             // Attacking can go back to idle/combat-ready, or be interrupted
             (Attacking, Idle | CombatReady | Hit | Sitting | Dead | Casting) => true,
-            // Hit can recover to idle, swing back (flinch is interruptible by an attack) or die
-            (Hit, Idle | Attacking | Dead) => true,
+            // Hit can recover to idle, swing back or pose (flinch is interruptible
+            // by an attack or a completed skill) or die
+            (Hit, Idle | Attacking | Casting | Dead) => true,
             // Casting holds until the cast resolves, is interruptible, and the
             // executed skill may swing straight into an attack motion
             (Casting, Idle | CombatReady | Walking | Attacking | Hit | Dead) => true,

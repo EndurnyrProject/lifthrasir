@@ -24,7 +24,11 @@
 //                 is ignored -- these always anchor at their own position.
 //   `skill_presentation` -- no-damage success/motion policy keyed by skill id,
 //                 independent of whether the skill has artwork. Defaults:
-//                 success_only: false, motion: Attack.
+//                 success_only: false, motion: Cast (the one-shot skill pose
+//                 the reference plays on EFST_POSTDELAY for every completed
+//                 player skill). `motion: None` is for skills whose state
+//                 change (sit, dead pose, backslide, counter proc) or ground
+//                 placement already owns the caster's motion.
 //   `shader_fx`-- name-keyed procedural burst table the `Shader(key)` layers
 //                 resolve against.
 //
@@ -67,31 +71,12 @@
     // These skills receive both effect and damage events for the same cast.
     skill_effect_only: [375], // PF_SOULBURN
     skill_presentation: {
-        // Utility casts open a menu, dialog or inventory change; the reference
-        // plays no motion on their skill-use packet, so no swing at the target.
-        40: (motion: None), // MC_IDENTIFY
-        93: (motion: None), // WZ_ESTIMATION
-        108: (motion: None), // BS_REPAIRWEAPON
-        147: (motion: None), // AC_MAKINGARROW
-        151: (motion: None), // TF_PICKSTONE
-        228: (motion: None), // AM_PHARMACY
-        279: (motion: None), // SA_AUTOSPELL
-        407: (motion: None), // ASC_CDP
-        477: (motion: None), // WS_WEAPONREFINE
-        1007: (motion: None), // SA_CREATECON
-        // Toggles and state changes whose presentation is the option/EFST/cart
-        // update itself; the reference plays no motion on their skill-use packet.
-        51: (motion: None), // TF_HIDING: OPTION_HIDE owns visibility.
-        135: (motion: None), // AS_CLOAKING: OPTION_CLOAK owns visibility.
-        143: (motion: None), // NV_TRICKDEAD: EFST 29 owns the dead pose; a swing races it.
-        154: (motion: None), // MC_CHANGECART: the cart option bits own the look.
-        304: (motion: None), // BD_ADAPTATION: ends the performance, no cast artwork.
+        143: (motion: None), // NV_TRICKDEAD: EFST 29 owns the dead pose; a pose races it.
         50: (success_only: true), // TF_STEAL
         53: (success_only: true), // TF_DETOXIFY
         138: (success_only: true), // AS_ENCHANTPOISON
         150: (success_only: true, motion: None), // TF_BACKSLIDING
         211: (success_only: true), // RG_STEALCOIN
-        275: (motion: None), // SA_CASTCANCEL: cancel feedback, no replacement swing/artwork.
         276: (success_only: true), // SA_MAGICROD
         277: (success_only: true), // SA_SPELLBREAKER
         280: (success_only: true), // SA_FLAMELAUNCHER
@@ -110,13 +95,12 @@
         378: (success_only: true), // ASC_EDP
         380: (success_only: true), // SN_SIGHT
         383: (success_only: true), // SN_WINDWALK
-        389: (success_only: true, motion: None), // ST_CHASEWALK: toggle, visibility is server-owned.
+        389: (success_only: true), // ST_CHASEWALK
         390: (success_only: true, motion: None), // ST_REJECTSWORD: cast and counter use the same event.
         395: (success_only: true), // CG_MOONLIT
         396: (success_only: true), // CG_MARIONETTE
         487: (success_only: true), // CG_LONGINGFREEDOM
         488: (success_only: true), // CG_HERMODE
-        489: (motion: None), // CG_TAROTCARD: card outcome is a separate special effect.
         401: (success_only: true), // CH_SOULCOLLECT
         403: (success_only: true), // PF_MEMORIZE
         405: (success_only: true), // PF_SPIDERWEB
@@ -125,9 +109,6 @@
         482: (success_only: true), // PF_DOUBLECASTING
         // Twilight Alchemy brews on the spot: no attack swing, and the shown
         // effect still precedes a reported batch failure.
-        496: (motion: None), // AM_TWILIGHT1
-        497: (motion: None), // AM_TWILIGHT2
-        498: (motion: None), // AM_TWILIGHT3
     },
     efsts: {
         // 19 EFST_KYRIE (aesir Efst.id(:kyrie)) -- Kyrie Eleison's persistent
