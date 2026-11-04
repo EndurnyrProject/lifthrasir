@@ -52,8 +52,8 @@
 // visuals are driven independently by `StatusEffectChanged` keyed on the EFST
 // id. One level deep only: an `efsts` recipe may not itself contain `Efst`
 // layers. The catalog build rejects, loudly, a dangling `Efst` ref, a nested
-// one, an unknown `Shader` key, and more than one layer of the same kind in a
-// resolved descriptor.
+// one, an unknown `Shader` key, and duplicate layers of the same kind, except
+// STR layers in non-repeating target skill effects.
 //
 // Caveats (`special` section):
 //   - Only effects backed by an STR asset (or a `Bespoke`/`Shader` layer) can
@@ -64,6 +64,8 @@
 //     logs to discover which ids real maps actually reference, then add them
 //     here.
 (
+    // These skills receive both effect and damage events for the same cast.
+    skill_effect_only: [375], // PF_SOULBURN
     skill_presentation: {
         50: (success_only: true), // TF_STEAL
         53: (success_only: true), // TF_DETOXIFY
@@ -1695,7 +1697,7 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        375: ( // PF_SOULBURN -- native artwork on the reported damage hit.
+        375: ( // PF_SOULBURN -- native artwork on the reported affected unit.
             visuals: [Str("소울번.str")],
             sound: None,
             placement: Target,

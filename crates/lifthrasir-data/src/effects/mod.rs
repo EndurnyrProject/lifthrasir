@@ -8,7 +8,7 @@ pub use authored::{
 pub use catalog::{EffectCatalogError, ResolvedEffectCatalog, resolve_effect_catalog};
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Where a skill effect anchors when played.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,6 +254,9 @@ pub struct EffectData {
     /// No-damage skill feedback policy, keyed by skill id independently of artwork.
     #[serde(default)]
     pub skill_presentation: BTreeMap<u32, SkillPresentation>,
+    /// Skills whose one-shot visual belongs to the no-damage effect event.
+    #[serde(default)]
+    pub skill_effect_only: BTreeSet<u32>,
     /// The rAthena `e_special_effects` (`EF_*`) namespace, serving BOTH the RSW
     /// map `EFFECT` objects and aesir's `SpecialEffect` packets — they key on
     /// the same ids.

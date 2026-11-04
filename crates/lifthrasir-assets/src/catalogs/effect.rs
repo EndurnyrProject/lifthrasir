@@ -31,6 +31,10 @@ impl EffectCatalog {
         self.0.skill_presentation(skill_id)
     }
 
+    pub fn skill_effect_only(&self, skill_id: u32) -> bool {
+        self.0.skill_effect_only(skill_id)
+    }
+
     pub fn skill_unit(&self, skill_id: u32) -> Option<&EffectDescriptor> {
         self.0.skill_unit(skill_id)
     }
@@ -552,15 +556,14 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_layer_kind_is_rejected() {
+    fn duplicate_layer_kind_is_rejected_for_repeating_skills() {
         let mut data = EffectData::default();
-        data.skills.insert(
-            5,
-            descriptor(vec![
-                Visual::Str("bash.strfx.ron".into()),
-                Visual::Str("provoke.str".into()),
-            ]),
-        );
+        let mut effect = descriptor(vec![
+            Visual::Str("bash.strfx.ron".into()),
+            Visual::Str("provoke.str".into()),
+        ]);
+        effect.repeating = true;
+        data.skills.insert(5, effect);
 
         let error = EffectCatalog::build(&data).expect_err("duplicate kind must fail");
         assert!(error.contains("skills[5]"), "{error}");
@@ -572,10 +575,9 @@ mod tests {
         let mut data = EffectData::default();
         data.efsts
             .insert(31, descriptor(vec![Visual::Str("energycoat.str".into())]));
-        data.skills.insert(
-            157,
-            descriptor(vec![Visual::Str("kyrie.str".into()), Visual::Efst(31)]),
-        );
+        let mut effect = descriptor(vec![Visual::Str("kyrie.str".into()), Visual::Efst(31)]);
+        effect.repeating = true;
+        data.skills.insert(157, effect);
 
         let error = EffectCatalog::build(&data).expect_err("post-splice duplicate must fail");
         assert!(error.contains("skills[157]"), "{error}");

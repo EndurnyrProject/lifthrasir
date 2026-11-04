@@ -347,6 +347,14 @@ pub fn on_skill_damage(
             );
         }
 
+        if ctx
+            .catalog
+            .as_ref()
+            .is_some_and(|catalog| catalog.skill_effect_only(event.skill_id))
+        {
+            continue;
+        }
+
         let Some(descriptor) = ctx.catalog.as_ref().and_then(|c| c.skill(event.skill_id)) else {
             warn!("No effect catalog entry for skill {}", event.skill_id);
             continue;
@@ -612,6 +620,106 @@ mod tests {
                 EffectAnchor::Entity(_) => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn soul_siphon_plays_one_effect_on_the_affected_unit() {
+        for level in 1..=5 {
+            for affected_id in [100, 200] {
+                let mut app = App::new();
+                app.add_plugins(MinimalPlugins)
+                    .add_plugins(bevy::asset::AssetPlugin::default())
+                    .init_asset::<LoadedEffectAsset>()
+                    .add_message::<SkillEffectShown>()
+                    .add_message::<SkillDamageReceived>()
+                    .add_message::<DisplayDamageNumber>()
+                    .add_message::<PlaySkillSfx>()
+                    .add_message::<PlayProceduralVfx>()
+                    .init_resource::<EntityRegistry>();
+                let ron = include_str!("../../../../../assets/data/ron/effects.ron");
+                let mut data = ron::from_str::<EffectDataAsset>(ron).unwrap().0;
+                data.skills.retain(|id, _| *id == 375);
+                app.insert_resource(EffectCatalog::build(&data).unwrap());
+                app.add_systems(Update, (on_skill_effect, on_skill_damage));
+                let caster = spawn_unit(&mut app, 100);
+                let target = spawn_unit(&mut app, 200);
+                let affected = if affected_id == 100 { caster } else { target };
+                app.world_mut().write_message(SkillEffectShown {
+                    skill_id: 375,
+                    level,
+                    src_id: 100,
+                    target_id: affected_id,
+                    result: 1,
+                });
+                if level == 5 {
+                    app.world_mut().write_message(SkillDamageReceived {
+                        skill_id: 375,
+                        level,
+                        src_id: 100,
+                        target_id: affected_id,
+                        server_tick: 0,
+                        damage: 123,
+                        div: 1,
+                        type_: 0,
+                        src_delay: 0,
+                        dst_delay: 0,
+                        missed: false,
+                    });
+                }
+                app.update();
+
+                let anchors: Vec<_> = app
+                    .world_mut()
+                    .query::<&EffectAnchor>()
+                    .iter(app.world())
+                    .filter_map(|anchor| match anchor {
+                        EffectAnchor::Entity(entity) => Some(*entity),
+                        EffectAnchor::Position(_) => None,
+                    })
+                    .collect();
+                assert_eq!(
+                    anchors,
+                    vec![affected],
+                    "level {level}, affected {affected_id}"
+                );
+                let messages = app.world().resource::<Messages<DisplayDamageNumber>>();
+                let numbers: Vec<_> = messages.iter_current_update_messages().collect();
+                assert_eq!(numbers.len(), usize::from(level == 5));
+                if let [number] = numbers.as_slice() {
+                    assert_eq!(number.entity, affected);
+                    assert_eq!(number.amount, 123);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn full_strip_spawns_all_layers_on_target_and_plays_one_sound() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_effect);
+        spawn_unit(&mut app, 100);
+        let target = spawn_unit(&mut app, 200);
+        app.world_mut().write_message(SkillEffectShown {
+            skill_id: 476,
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            result: 1,
+        });
+        app.update();
+
+        let anchors: Vec<_> = app
+            .world_mut()
+            .query::<&EffectAnchor>()
+            .iter(app.world())
+            .filter_map(|anchor| match anchor {
+                EffectAnchor::Entity(entity) => Some(*entity),
+                EffectAnchor::Position(_) => None,
+            })
+            .collect();
+        assert_eq!(anchors, vec![target; 4]);
+        let sounds = app.world().resource::<Messages<PlaySkillSfx>>();
+        assert_eq!(sounds.iter_current_update_messages().count(), 1);
     }
 
     #[test]

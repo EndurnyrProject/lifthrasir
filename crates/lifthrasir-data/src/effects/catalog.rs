@@ -1,7 +1,7 @@
 //! Pure effect recipe composition and descriptor validation.
 
 use super::{EffectData, EffectDescriptor, ShaderFxEntry, SkillPresentation, Visual};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use thiserror::Error;
 
 /// Invalid effect catalog, with the original section/id diagnostic.
@@ -30,6 +30,7 @@ pub fn resolve_effect_catalog(
 pub struct ResolvedEffectCatalog {
     skills: HashMap<u32, EffectDescriptor>,
     skill_presentation: HashMap<u32, SkillPresentation>,
+    skill_effect_only: BTreeSet<u32>,
     skill_units: HashMap<u32, EffectDescriptor>,
     special: BTreeMap<u32, EffectDescriptor>,
     efsts: HashMap<u32, EffectDescriptor>,
@@ -78,6 +79,7 @@ impl ResolvedEffectCatalog {
                 .iter()
                 .map(|(&id, &policy)| (id, policy))
                 .collect(),
+            skill_effect_only: data.skill_effect_only.clone(),
             skill_units: skill_units.into_iter().collect(),
             special,
             efsts: data.efsts.clone().into_iter().collect(),
@@ -94,6 +96,11 @@ impl ResolvedEffectCatalog {
             .get(&skill_id)
             .copied()
             .unwrap_or_default()
+    }
+
+    /// Whether the effect event owns the skill's one-shot visual.
+    pub fn skill_effect_only(&self, skill_id: u32) -> bool {
+        self.skill_effect_only.contains(&skill_id)
     }
 
     /// The persistent visual of a skill-unit group: its `skill_units` entry,
@@ -167,13 +174,8 @@ fn kind_name(visual: &Visual) -> &'static str {
     }
 }
 
-/// Every `Shader` layer must name a real `shader_fx` entry, and a resolved
-/// descriptor may carry at most one layer of each kind.
-///
-/// NOTE: the one-layer-per-kind ceiling is deliberate — the dispatch code reads
-/// the first layer of a kind, so a second would render as a silent drop. Lift it
-/// (accessors returning iterators, dispatch looping) when a real effect needs
-/// two layers of one kind.
+/// Every `Shader` layer must name a real `shader_fx` entry. Only targeted,
+/// non-repeating skills support multiple STR layers in their playback path.
 fn validate_descriptor(
     section: &str,
     id: u32,
@@ -218,6 +220,14 @@ fn validate_descriptor(
             return Err(format!(
                 "{section}[{id}] references Shader(\"{key}\"), which has no shader_fx entry"
             ));
+        }
+
+        if matches!(visual, Visual::Str(_))
+            && section == "skills"
+            && !descriptor.repeating
+            && descriptor.placement == super::EffectPlacement::Target
+        {
+            continue;
         }
 
         let kind = kind_name(visual);
