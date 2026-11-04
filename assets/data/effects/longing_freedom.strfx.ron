@@ -1,0 +1,70 @@
+// Longing for Freedom (CG_LONGINGFREEDOM) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: the performer slips free of the ensemble's grip -- a warm bloom opens
+// at the feet, loose notes and light strands break outward and drift up and
+// away from the caster. Reads as release rather than a hit; distinct from
+// Adrenaline Rush's tight gold haste rings. Caster-centered (~30f).
+(
+    fps: 30,
+    layers: [
+        // Warm bloom opening at the feet.
+        (
+            textures: ["ro://data/texture/effect/ring_yellow.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 288.0), quad: (40.0, 20.0),   color: (255, 225, 140, 0) ),
+                ( at: 6,  offset: (319.0, 285.0), quad: (180.0, 90.0),  color: (255, 235, 160, 210) ),
+                ( at: 18, offset: (319.0, 278.0), quad: (300.0, 150.0), color: (255, 225, 130, 120) ),
+                ( at: 30, offset: (319.0, 270.0), quad: (380.0, 190.0), color: (255, 215, 110, 0) ),
+            ],
+        ),
+        // Note breaking loose to the left and rising free.
+        (
+            textures: ["ro://data/texture/effect/melody_a.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 2,  offset: (312.0, 240.0), quad: (18.0, 18.0), color: (255, 245, 200, 0),   angle: 0.0 ),
+                ( at: 8,  offset: (288.0, 218.0), quad: (26.0, 26.0), color: (255, 248, 210, 240), angle: 90.0 ),
+                ( at: 20, offset: (262.0, 190.0), quad: (26.0, 26.0), color: (255, 240, 190, 170), angle: 260.0 ),
+                ( at: 30, offset: (244.0, 168.0), quad: (22.0, 22.0), color: (255, 230, 170, 0),   angle: 420.0 ),
+            ],
+        ),
+        // Note breaking loose to the right, a beat later.
+        (
+            textures: ["ro://data/texture/effect/melody_b.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 5,  offset: (326.0, 240.0), quad: (18.0, 18.0), color: (255, 245, 200, 0),   angle: 0.0 ),
+                ( at: 11, offset: (350.0, 216.0), quad: (26.0, 26.0), color: (255, 248, 210, 240), angle: -90.0 ),
+                ( at: 23, offset: (376.0, 188.0), quad: (26.0, 26.0), color: (255, 240, 190, 170), angle: -260.0 ),
+                ( at: 33, offset: (394.0, 166.0), quad: (22.0, 22.0), color: (255, 230, 170, 0),   angle: -420.0 ),
+            ],
+        ),
+        // Center note rising straight up.
+        (
+            textures: ["ro://data/texture/effect/melody_a.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 4,  offset: (319.0, 236.0), quad: (20.0, 20.0), color: (255, 248, 205, 0),   angle: 0.0 ),
+                ( at: 10, offset: (321.0, 210.0), quad: (28.0, 28.0), color: (255, 250, 215, 235), angle: 60.0 ),
+                ( at: 22, offset: (317.0, 176.0), quad: (28.0, 28.0), color: (255, 242, 195, 160), angle: -60.0 ),
+                ( at: 32, offset: (321.0, 150.0), quad: (24.0, 24.0), color: (255, 232, 175, 0),   angle: 60.0 ),
+            ],
+        ),
+        // Warm flare on the torso as the spell frees the caster.
+        (
+            textures: ["ro://data/texture/effect/lens_y.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 244.0), quad: (20.0, 20.0),   color: (255, 235, 160, 0) ),
+                ( at: 5,  offset: (319.0, 244.0), quad: (100.0, 100.0), color: (255, 245, 185, 220) ),
+                ( at: 16, offset: (319.0, 244.0), quad: (130.0, 130.0), color: (255, 230, 150, 100) ),
+                ( at: 26, offset: (319.0, 244.0), quad: (150.0, 150.0), color: (255, 220, 130, 0) ),
+            ],
+        ),
+    ],
+)

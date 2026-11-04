@@ -1,0 +1,17 @@
+// Hermode's Rod field: one anti-magic ward glyph per footprint cell. A pale
+// blue rune sigil marks the area where magic is blocked, distinct from a plain
+// song note. Endpoints match (at 0 == at 120) for seamless looping.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/spell_04.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 275.0), quad: (34.0, 34.0), color: (185, 205, 255, 200)),
+                (at: 60, offset: (319.0, 269.0), quad: (38.0, 38.0), color: (205, 220, 255, 220)),
+                (at: 120, offset: (319.0, 275.0), quad: (34.0, 34.0), color: (185, 205, 255, 200)),
+            ],
+        ),
+    ],
+)

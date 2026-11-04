@@ -1,0 +1,16 @@
+// Approximate Tarot reveal using the retail card texture.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/tarot05.tga"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 250.0), quad: (60.0, 90.0), color: (255, 255, 255, 0)),
+                (at: 6, offset: (319.0, 225.0), quad: (60.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 40, offset: (319.0, 225.0), quad: (60.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 50, offset: (319.0, 215.0), quad: (60.0, 90.0), color: (255, 255, 255, 0)),
+            ],
+        ),
+    ],
+)

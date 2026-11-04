@@ -93,6 +93,11 @@
         383: (success_only: true), // SN_WINDWALK
         389: (success_only: true, motion: None), // ST_CHASEWALK: toggle, visibility is server-owned.
         390: (success_only: true, motion: None), // ST_REJECTSWORD: cast and counter use the same event.
+        395: (success_only: true), // CG_MOONLIT
+        396: (success_only: true), // CG_MARIONETTE
+        487: (success_only: true), // CG_LONGINGFREEDOM
+        488: (success_only: true), // CG_HERMODE
+        489: (motion: None), // CG_TAROTCARD: card outcome is a separate special effect.
         401: (success_only: true), // CH_SOULCOLLECT
         403: (success_only: true), // PF_MEMORIZE
         405: (success_only: true), // PF_SPIDERWEB
@@ -1777,6 +1782,28 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // --- Clown / Gypsy (CG_*) -------------------------------------------
+        394: ( // CG_ARROWVULCAN -- authored six-arrow volley impact.
+            visuals: [Str("arrow_vulcan.strfx.ron")],
+            sound: Some("effect/애로우 발칸.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        395: ( // CG_MOONLIT -- authored moon-bloom shelter cast; field is server-owned.
+            visuals: [Str("moonlit_bliss.strfx.ron")],
+            sound: Some("effect/달빛.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        396: ( // CG_MARIONETTE -- authored puppet-string link cast, not a persistent tether.
+            visuals: [Str("marionette_control.strfx.ron")],
+            sound: None,
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         397: ( // LK_SPIRALPIERCE -- one authored five-pulse target impact.
             visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
             sound: Some("attack_spear.wav"),
@@ -1900,6 +1927,27 @@
             visuals: [Str("overthrust.strfx.ron")],
             sound: Some("effect/black_overthrust.wav"),
             placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        487: ( // CG_LONGINGFREEDOM -- authored caster liberation burst.
+            visuals: [Str("longing_freedom.strfx.ron")],
+            sound: None,
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        488: ( // CG_HERMODE -- authored anti-magic ward cast; pre-renewal field is server-owned.
+            visuals: [Str("hermode_ward.strfx.ron")],
+            sound: Some("effect/헤르모드의 지팡이.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        489: ( // CG_TAROTCARD -- successful cards arrive in the special namespace.
+            visuals: [],
+            sound: None,
+            placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
@@ -2130,6 +2178,22 @@
         ),
     },
     skill_units: {
+        395: ( // CG_MOONLIT -- authored moonlit swirl on surviving field cells.
+            ground_anchor: Footprint,
+            visuals: [Str("moonlit_water_mill.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (0.7, 0.8, 1.0, 1.0),
+            repeating: true,
+        ),
+        488: ( // CG_HERMODE -- authored anti-magic ward on surviving field cells.
+            ground_anchor: Footprint,
+            visuals: [Str("hermode_rod.strfx.ron")],
+            sound: None,
+            placement: Ground,
+            color: (0.8, 0.8, 1.0, 1.0),
+            repeating: true,
+        ),
         404: ( // PF_FOGWALL -- approximate mist per surviving server cell.
             ground_anchor: Footprint,
             visuals: [Str("professor_fog.strfx.ron")],
@@ -2413,6 +2477,22 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // Tarot outcomes are emitted only after a successful draw, at the
+        // server-selected unit (the caster for Lovers, the target otherwise).
+        523: (visuals: [Str("tarot_01.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        524: (visuals: [Str("tarot_02.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        525: (visuals: [Str("tarot_03.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        526: (visuals: [Str("tarot_04.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        527: (visuals: [Str("tarot_05.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        528: (visuals: [Str("tarot_06.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        529: (visuals: [Str("tarot_07.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        530: (visuals: [Str("tarot_08.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        531: (visuals: [Str("tarot_09.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        532: (visuals: [Str("tarot_10.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        533: (visuals: [Str("tarot_11.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        534: (visuals: [Str("tarot_12.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        535: (visuals: [Str("tarot_13.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        536: (visuals: [Str("tarot_14.strfx.ron")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
         974: ( // EF_EMITTER — non-STR, procedural (params-driven generic emitter).
             visuals: [Bespoke("emitter")],
             sound: None,
