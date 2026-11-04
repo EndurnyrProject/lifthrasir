@@ -19,6 +19,7 @@ use lifthrasir_data::{EffectDescriptor, EffectPlacement, SkillMotion, Visual};
 use lifthrasir_runtime::effects::{descriptor_tint, load_effect, load_str_effect};
 use moonshine_behavior::prelude::BehaviorMut;
 
+use crate::domain::camera::CameraShakeRequest;
 use crate::domain::combat::events::{DamageDisplayType, DisplayDamageNumber};
 use crate::domain::combat::systems::start_attack_animation;
 use crate::domain::entities::character::states::AnimationState;
@@ -203,10 +204,21 @@ fn play_sound(
     }
 }
 
-/// The resources and queries the three skill-event triggers share to spawn an
-/// effect: the STR/shader catalog, the asset loader, the gid→entity registry,
-/// the caster-animation behaviors, unit transforms, a command buffer, and the
-/// sound writer. Grouped so each trigger takes one parameter instead of seven.
+/// Fire the descriptor's camera shake, if it declares one.
+fn play_shake(shake: &mut MessageWriter<CameraShakeRequest>, descriptor: &EffectDescriptor) {
+    if let Some(request) = descriptor.shake {
+        shake.write(CameraShakeRequest {
+            amplitude: request.amplitude,
+            duration_secs: request.duration_secs,
+        });
+    }
+}
+
+/// The resources and queries the four descriptor-playing triggers share to spawn
+/// an effect: the STR/shader catalog, the asset loader, the gid→entity registry,
+/// the caster-animation behaviors, unit transforms, a command buffer, the sound
+/// writer and the camera-shake writer. Grouped so each trigger takes one
+/// parameter instead of eight.
 #[derive(SystemParam)]
 pub struct EffectSpawnCtx<'w, 's> {
     commands: Commands<'w, 's>,
@@ -216,6 +228,7 @@ pub struct EffectSpawnCtx<'w, 's> {
     behaviors: Query<'w, 's, BehaviorMut<AnimationState>>,
     transforms: Query<'w, 's, &'static Transform>,
     sfx: MessageWriter<'w, PlaySkillSfx>,
+    shake: MessageWriter<'w, CameraShakeRequest>,
 }
 
 /// `SkillEffectShown` — a no-damage skill effect: spawn anchored per placement,
@@ -284,6 +297,7 @@ pub fn on_skill_effect(
         if !is_performance(ctx.catalog.as_deref(), event.skill_id) {
             play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
         }
+        play_shake(&mut ctx.shake, descriptor);
         emit_procedural_vfx(
             &mut proc_vfx,
             &ctx.transforms,
@@ -385,6 +399,7 @@ pub fn on_skill_damage(
         );
 
         play_procedural_sound(&mut ctx.sfx, shader_fx, descriptor, emitter);
+        play_shake(&mut ctx.shake, descriptor);
         emit_procedural_vfx(
             &mut proc_vfx,
             &ctx.transforms,
@@ -479,6 +494,7 @@ pub fn on_ground_skill(
         if let Some(emitter) = src.or(ground_effect) {
             play_sound(&mut ctx.sfx, descriptor, emitter);
         }
+        play_shake(&mut ctx.shake, descriptor);
     }
 }
 
@@ -486,27 +502,23 @@ pub fn on_ground_skill(
 /// `EF_*` id, spawned at the source unit's position from the same `special`
 /// table map effects use. Non-critical (design D6): `debug!` + skip on an unresolved
 /// source, missing transform, or unmapped effect id.
-pub fn on_special_effect(
-    mut events: MessageReader<SpecialEffectShown>,
-    mut commands: Commands,
-    catalog: Option<Res<EffectCatalog>>,
-    asset_server: Res<AssetServer>,
-    registry: Res<EntityRegistry>,
-    transforms: Query<&Transform>,
-    mut sfx: MessageWriter<PlaySkillSfx>,
-) {
+pub fn on_special_effect(mut events: MessageReader<SpecialEffectShown>, mut ctx: EffectSpawnCtx) {
     for event in events.read() {
-        let Some(source) = resolve_gid(&registry, event.source_id) else {
+        let Some(source) = resolve_gid(&ctx.registry, event.source_id) else {
             debug!("No entity for special effect source {}", event.source_id);
             continue;
         };
 
-        let Ok(transform) = transforms.get(source) else {
+        let Ok(transform) = ctx.transforms.get(source) else {
             debug!("No transform for special effect source {source}");
             continue;
         };
 
-        let Some(descriptor) = catalog.as_ref().and_then(|c| c.special(event.effect_id)) else {
+        let Some(descriptor) = ctx
+            .catalog
+            .as_ref()
+            .and_then(|c| c.special(event.effect_id))
+        else {
             debug!(
                 "No special effect catalog entry for effect {}",
                 event.effect_id
@@ -519,7 +531,7 @@ pub fn on_special_effect(
         // ambient vfx doesn't fit a fire-and-forget SpecialEffect, and the
         // MapAmbientVfx bridge `spawn_map_effects` uses is out of scope for this
         // event. Add if such an EF_* id needs to render from SpecialEffect.
-        let Some(effect) = load_effect(&asset_server, descriptor) else {
+        let Some(effect) = load_effect(&ctx.asset_server, descriptor) else {
             debug!("Special effect {} has no STR; skipping", event.effect_id);
             continue;
         };
@@ -530,14 +542,15 @@ pub fn on_special_effect(
 
         let position = transform.translation + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0);
         let emitter = spawn_effect(
-            &mut commands,
+            &mut ctx.commands,
             effect,
             EffectAnchor::Position(position),
             descriptor.repeating,
             descriptor_tint(descriptor),
             lifetime,
         );
-        play_sound(&mut sfx, descriptor, emitter);
+        play_sound(&mut ctx.sfx, descriptor, emitter);
+        play_shake(&mut ctx.shake, descriptor);
     }
 }
 
@@ -581,6 +594,7 @@ mod tests {
             .add_message::<ControlSkillSfx>()
             .add_message::<PlayProceduralVfx>()
             .add_message::<SpecialEffectShown>()
+            .add_message::<CameraShakeRequest>()
             .init_resource::<EntityRegistry>()
             .insert_resource(seeded_catalog());
         app
@@ -635,6 +649,7 @@ mod tests {
                     .add_message::<DisplayDamageNumber>()
                     .add_message::<PlaySkillSfx>()
                     .add_message::<PlayProceduralVfx>()
+                    .add_message::<CameraShakeRequest>()
                     .init_resource::<EntityRegistry>();
                 let ron = include_str!("../../../../../assets/data/ron/effects.ron");
                 let mut data = ron::from_str::<EffectDataAsset>(ron).unwrap().0;
@@ -878,6 +893,44 @@ mod tests {
         assert_eq!(emitted[0].entity, target);
         assert_eq!(emitted[0].amount, 123);
         assert_eq!(emitted[0].delay_secs, 0.0, "div: 1 has no stagger");
+    }
+
+    #[test]
+    fn acid_demonstration_damage_requests_the_camera_shake() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+
+        let _target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 490, // CR_ACIDDEMONSTRATION -- EF_ACIDDEMON's 650 ms quake
+            missed: false,
+            level: 10,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 900,
+            div: 10,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+
+        app.update();
+
+        let messages = app
+            .world_mut()
+            .resource_mut::<Messages<CameraShakeRequest>>();
+        let mut cursor = messages.get_cursor();
+        let emitted: Vec<_> = cursor.read(&messages).copied().collect();
+        assert_eq!(
+            emitted,
+            vec![CameraShakeRequest {
+                amplitude: 6.0,
+                duration_secs: 0.65,
+            }]
+        );
     }
 
     #[test]

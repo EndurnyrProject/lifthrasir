@@ -6,7 +6,8 @@ use moonshine_kind::Instance;
 
 use crate::domain::camera::components::{CameraFollowSettings, CameraFollowTarget};
 use crate::domain::camera::resources::{
-    ActiveCameraProfile, CameraRotationDelta, CurrentMapCameraProfile,
+    ActiveCameraProfile, ActiveCameraShake, CameraRotationDelta, CameraShakeRequest,
+    CurrentMapCameraProfile,
 };
 use crate::domain::entities::markers::LocalPlayer;
 use crate::domain::input::UiFocus;
@@ -169,6 +170,54 @@ pub fn spawn_camera_on_player_ready(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+    use bevy::time::TimeUpdateStrategy;
+    use std::time::Duration;
+
+    #[test]
+    fn camera_shake_offsets_then_restores_the_follow_camera() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO))
+            .init_resource::<ActiveCameraShake>()
+            .add_message::<CameraShakeRequest>()
+            .add_systems(Update, apply_camera_shake);
+
+        let base = Vec3::new(10.0, 20.0, 30.0);
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, Transform::default()))
+            .id();
+        let player = Instance::from_entity(app.world().entity(player)).unwrap();
+        let camera = app
+            .world_mut()
+            .spawn((
+                Camera3d::default(),
+                Transform::from_translation(base),
+                CameraFollowTarget::new(player, Vec3::ZERO),
+            ))
+            .id();
+
+        app.world_mut().write_message(CameraShakeRequest {
+            amplitude: 4.0,
+            duration_secs: 0.1,
+        });
+        app.update();
+
+        let shaken = app.world().get::<Transform>(camera).unwrap().translation;
+        assert!((shaken - base).length() > 0.1, "shake offsets the camera");
+
+        // Past the duration the envelope is zero, so the transform returns to base.
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            100,
+        )));
+        app.update();
+
+        assert_eq!(
+            app.world().get::<Transform>(camera).unwrap().translation,
+            base
+        );
+        assert!(!app.world().resource::<ActiveCameraShake>().is_active());
+    }
 
     #[test]
     fn rebinds_existing_camera_to_reconnected_player() {
@@ -406,6 +455,42 @@ pub fn camera_follow_system(
         follow_target.smoothed_look_at = smoothed_look_at;
 
         camera_transform.look_at(smoothed_look_at, Vec3::Y);
+    }
+}
+
+/// Apply the pending camera shake to the follow camera. Runs after
+/// `camera_follow_system` so the shake is the last thing written to the
+/// transform, and removes last frame's offset before adding the new one so the
+/// follow smoothing never integrates a shaken position.
+#[auto_add_system(
+    plugin = crate::LifthrasirPlugin,
+    schedule = Update,
+    config(in_set = CameraSystems::Follow, after = camera_follow_system)
+)]
+pub fn apply_camera_shake(
+    time: Res<Time>,
+    mut requests: MessageReader<CameraShakeRequest>,
+    mut shake: ResMut<ActiveCameraShake>,
+    mut cameras: Query<&mut Transform, (With<Camera3d>, With<CameraFollowTarget>)>,
+) {
+    for request in requests.read() {
+        shake.request(*request);
+    }
+
+    if !shake.is_active() {
+        return;
+    }
+
+    let next = shake.advance(time.delta_secs(), time.elapsed_secs());
+    let step = next - shake.applied;
+    for mut transform in cameras.iter_mut() {
+        transform.translation += step;
+    }
+    shake.applied = next;
+
+    if shake.remaining <= 0.0 {
+        shake.amplitude = 0.0;
+        shake.duration = 0.0;
     }
 }
 

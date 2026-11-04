@@ -1228,33 +1228,80 @@
         ),
         // Chemical Protection: one shared coating on the recipient. The
         // descriptor cannot tell the four pieces apart, and a refused cast (the
-        // target does not wear that piece) sends no effect packet at all. No
-        // reference SFX exists in the pak, so these are silent.
+        // target does not wear that piece) sends no effect packet at all.
+        // Reference EF_CHEMICALPROTECTION (300) is an audio-only entry in
+        // roBrowserLegacy's `EffectTable.js` and its `apocalips_attack` wav is in
+        // the pak, so the coating borrows that sample instead of staying silent.
         234: ( // AM_CP_WEAPON
             visuals: [Str("chemical_coating.strfx.ron")],
-            sound: None,
+            sound: Some("apocalips_attack.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         235: ( // AM_CP_SHIELD
             visuals: [Str("chemical_coating.strfx.ron")],
-            sound: None,
+            sound: Some("apocalips_attack.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         236: ( // AM_CP_ARMOR
             visuals: [Str("chemical_coating.strfx.ron")],
-            sound: None,
+            sound: Some("apocalips_attack.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         237: ( // AM_CP_HELM
             visuals: [Str("chemical_coating.strfx.ron")],
-            sound: None,
+            sound: Some("apocalips_attack.wav"),
             placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        // --- Creator (CR_*) -------------------------------------------------
+        // The transcendent Alchemist, and the only CR_* skill group that is not
+        // Crusader. roBrowserLegacy's `SkillEffect.js` maps no usable artwork to
+        // any of the four: 478 and 491 have empty entries, 490 EF_ACIDDEMON is a
+        // camera quake alone and 479 EF_CHEMICALPROTECTION is the audio-only
+        // `apocalips_attack` layer plus EF_CHEMICALBODY, an unimplemented blue
+        // body tint. They therefore reuse the Alchemist artwork, which is authored
+        // approximation anyway.
+        478: ( // CR_SLIMPITCHER -- the condensed potion breaks on the targeted
+               // cell and heals the caster's side in the 7x7 around it; aesir
+               // sends one ground placement and no per-recipient effect.
+            visuals: [Str("potion_pitcher.strfx.ron")],
+            sound: Some("se_drink_potion.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        479: ( // CR_FULLPROTECTION -- the Coating Bottle is poured over the ally,
+               // whose every worn piece takes the coating status. A target
+               // wearing none of them fails the cast without an effect packet.
+            visuals: [Str("chemical_coating.strfx.ron")],
+            sound: Some("apocalips_attack.wav"),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        490: ( // CR_ACIDDEMONSTRATION -- the Acid Bottle bursts on the victim;
+               // aesir splits one never-missing hit by skill level. Reference
+               // EF_ACIDDEMON (537) is a 650 ms camera quake and nothing else.
+            visuals: [Str("acid_terror.strfx.ron")],
+            sound: Some("effect/em_elemetal_buster_poison.wav"),
+            shake: Some((amplitude: 6.0, duration_secs: 0.65)),
+            placement: Target,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
+        491: ( // CR_CULTIVATION -- the seed is planted on the targeted cell; the
+               // grown plant is a summoned mob and draws itself. Half of the
+               // casts grow nothing and still announce this placement.
+            visuals: [Str("cannibalize_sprout.strfx.ron")],
+            sound: Some("monster_plant.wav"),
+            placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),

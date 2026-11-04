@@ -301,6 +301,7 @@ fn model_and_trigger_assets_are_checked() {
                 visual: Visual::Str("missing-trigger.str".to_string()),
                 sound: Some("effect/missing-trigger.wav".to_string()),
             }),
+            shake: None,
             placement: lifthrasir_data::EffectPlacement::Ground,
             color: [1.0; 4],
             repeating: true,

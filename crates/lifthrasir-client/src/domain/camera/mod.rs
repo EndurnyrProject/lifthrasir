@@ -4,7 +4,9 @@ pub mod systems;
 
 use bevy::prelude::*;
 
-pub use crate::domain::camera::resources::CameraRotationDelta;
+pub use crate::domain::camera::resources::{
+    ActiveCameraShake, CameraRotationDelta, CameraShakeRequest,
+};
 pub use crate::domain::camera::systems::CameraSpawned;
 
 use crate::core::state::GameState;
@@ -18,6 +20,8 @@ impl Plugin for CameraPlugin {
         app.init_resource::<CameraSpawned>();
         app.init_resource::<CameraRotationDelta>();
         app.init_resource::<ActiveCameraProfile>();
+        app.init_resource::<ActiveCameraShake>();
+        app.add_message::<CameraShakeRequest>();
         app.add_systems(
             PostUpdate,
             spawn_camera_on_player_ready.run_if(in_state(GameState::InGame)),

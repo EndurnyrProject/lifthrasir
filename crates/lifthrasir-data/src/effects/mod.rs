@@ -27,6 +27,14 @@ pub enum SkillMotion {
     None,
 }
 
+/// Camera shake an effect triggers when it plays: peak positional amplitude in
+/// world units, decaying to zero over `duration_secs`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct CameraShake {
+    pub amplitude: f32,
+    pub duration_secs: f32,
+}
+
 /// No-damage skill feedback policy. Omitted fields preserve ordinary attack motion
 /// and feedback on any result, even when the skill has no visual descriptor.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,6 +107,9 @@ pub struct EffectDescriptor {
     pub sound: Option<String>,
     #[serde(default)]
     pub on_trigger: Option<TriggerFx>,
+    /// Camera shake fired with this effect; `None` for the vast majority.
+    #[serde(default)]
+    pub shake: Option<CameraShake>,
     pub placement: EffectPlacement,
     /// RGBA tint multiplied onto the STR's per-frame color.
     pub color: [f32; 4],
