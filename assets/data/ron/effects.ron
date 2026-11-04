@@ -79,6 +79,13 @@
         407: (motion: None), // ASC_CDP
         477: (motion: None), // WS_WEAPONREFINE
         1007: (motion: None), // SA_CREATECON
+        // Toggles and state changes whose presentation is the option/EFST/cart
+        // update itself; the reference plays no motion on their skill-use packet.
+        51: (motion: None), // TF_HIDING: OPTION_HIDE owns visibility.
+        135: (motion: None), // AS_CLOAKING: OPTION_CLOAK owns visibility.
+        143: (motion: None), // NV_TRICKDEAD: EFST 29 owns the dead pose; a swing races it.
+        154: (motion: None), // MC_CHANGECART: the cart option bits own the look.
+        304: (motion: None), // BD_ADAPTATION: ends the performance, no cast artwork.
         50: (success_only: true), // TF_STEAL
         53: (success_only: true), // TF_DETOXIFY
         138: (success_only: true), // AS_ENCHANTPOISON
