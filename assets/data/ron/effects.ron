@@ -466,7 +466,7 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        46: ( // AC_DOUBLE — two authored cool steel-white arrow impacts.
+        46: ( // AC_DOUBLE — two authored retail-arrow (allow_b) impacts.
             visuals: [Str("double_strafe.strfx.ron")],
             sound: Some("_hit_arrow.wav"),
             placement: Target,
@@ -479,8 +479,9 @@
              // (`Combat.execute_splash_attack`), so it reaches the client as
              // SkillDamageReceived per victim rather than SkillEffectShown;
              // on_skill_damage skips only Ground placement, so Target spawns
-             // the volley anchored on each victim hit.
-            visuals: [Str("arrow_shower.strfx.ron")],
+             // the volley anchored on each victim hit. Native EF_ARROWSTORM
+             // (allow_b arrows and a ground ring), matching arrowstorm.wav.
+            visuals: [Str("arrowstorm.str")],
             sound: Some("arrowstorm.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),

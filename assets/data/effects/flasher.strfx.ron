@@ -1,27 +1,41 @@
 // Flasher (HT_FLASHER) - authored effect.
 //
-// Shape: one brief white ground flash blooms at the trap, then clears before it
-// reads as an explosion.
-//
-// The bloom is drawn SQUARE, not with the 2:1 ground squash the trap rings use.
-// `lens_w.bmp` is natively 32x128 -- a portrait strip of vertical streaks -- and
-// every one of the ten effects that already uses it (bash, blade_stop,
-// charge_attack, double_strafe, endure, ki_impact, ki_strike, lightning_bolt,
-// steel_body, call_spirits) draws it 1:1, where it reads as a radial glare.
-// The 2:1 squash is for RINGS seen in perspective (grand_cross); applied to this
-// texture it smears the vertical streaks into horizontal bands and stops reading
-// as a flash at all.
+// Shape: one brief blinding white bloom at the trap, then it clears before it
+// reads as an explosion. Retail EF_FLASHER is a hardcoded client flash with no
+// STR. Soft round glow11 only: the lens_* strips are cylinder bands and draw as
+// hard boxes on a billboard. The bloom sits above the feet so the ground plane
+// does not cut it in half; a flat glow lights the ground under it.
 (
     fps: 30,
     layers: [
-        // A short, bright blinding bloom at the ground anchor.
+        // Blinding white bloom.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (24.0, 24.0),   color: (255, 255, 255, 0) ),
-                ( at: 2,  offset: (319.0, 291.0), quad: (190.0, 190.0), color: (255, 255, 255, 255) ),
-                ( at: 8,  offset: (319.0, 291.0), quad: (280.0, 280.0), color: (255, 255, 255, 0) ),
+                ( at: 0, offset: (319.0, 250.0), quad: (30.0, 30.0),   color: (255, 255, 255, 0) ),
+                ( at: 2, offset: (319.0, 250.0), quad: (230.0, 230.0), color: (255, 255, 255, 255) ),
+                ( at: 9, offset: (319.0, 250.0), quad: (300.0, 300.0), color: (235, 245, 255, 0) ),
+            ],
+        ),
+        // Hot core, gone before the bloom.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 262.0), quad: (20.0, 20.0),   color: (255, 255, 255, 0) ),
+                ( at: 1, offset: (319.0, 262.0), quad: (110.0, 110.0), color: (255, 255, 255, 255) ),
+                ( at: 5, offset: (319.0, 262.0), quad: (130.0, 130.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        // Flat flash on the ground around the trap.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 287.0), quad: (40.0, 12.0),  color: (255, 255, 255, 0) ),
+                ( at: 2, offset: (319.0, 287.0), quad: (260.0, 78.0), color: (255, 255, 255, 220) ),
+                ( at: 9, offset: (319.0, 287.0), quad: (320.0, 96.0), color: (235, 245, 255, 0) ),
             ],
         ),
     ],

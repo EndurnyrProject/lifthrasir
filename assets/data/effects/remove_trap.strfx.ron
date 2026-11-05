@@ -1,6 +1,7 @@
 // Remove Trap (HT_REMOVETRAP) - authored effect.
 //
-// Shape: a small, quiet beige dust puff at the reclaimed trap cell.
+// Shape: a small, quiet beige dust puff lifts off the reclaimed trap cell. The
+// puff is centered above the feet so the ground plane does not cut it in half.
 (
     fps: 30,
     layers: [
@@ -8,9 +9,19 @@
             textures: ["ro://data/texture/effect/dust01.bmp"],
             blend: Add,
             keys: [
-                ( at: 0, offset: (319.0, 291.0), quad: (30.0, 15.0),  color: (185, 175, 150, 0) ),
-                ( at: 3, offset: (319.0, 291.0), quad: (76.0, 38.0),  color: (185, 175, 150, 110) ),
-                ( at: 9, offset: (319.0, 291.0), quad: (116.0, 58.0), color: (175, 165, 145, 0) ),
+                ( at: 0,  offset: (319.0, 282.0), quad: (36.0, 22.0),  color: (200, 188, 160, 0) ),
+                ( at: 3,  offset: (319.0, 276.0), quad: (90.0, 54.0),  color: (205, 192, 165, 190) ),
+                ( at: 12, offset: (319.0, 266.0), quad: (130.0, 78.0), color: (185, 175, 150, 0) ),
+            ],
+        ),
+        // Flat settle on the ground.
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 1,  offset: (319.0, 287.0), quad: (40.0, 12.0),  color: (190, 178, 150, 0) ),
+                ( at: 4,  offset: (319.0, 287.0), quad: (120.0, 36.0), color: (190, 178, 150, 150) ),
+                ( at: 12, offset: (319.0, 287.0), quad: (160.0, 48.0), color: (175, 165, 145, 0) ),
             ],
         ),
     ],
