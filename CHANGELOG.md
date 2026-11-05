@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.1...v0.14.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* God damn DLSS compilation ([30a3bb9](https://github.com/EndurnyrProject/lifthrasir/commit/30a3bb9aad6877b7446498375347831a191fa6e9))
+
 ## [0.14.1](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.0...v0.14.1) (2026-11-05)
 
 
