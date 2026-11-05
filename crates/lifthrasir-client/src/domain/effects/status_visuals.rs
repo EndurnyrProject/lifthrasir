@@ -271,89 +271,117 @@ fn apply_virtue(commands: &mut Commands, entity: Entity, virtue: u32) {
 /// applies `SC_SIGHT` with this bit). Matches rAthena `OPTION_SIGHT`.
 const OPTION_SIGHT: u32 = 1;
 
-use lifthrasir_runtime::effects::overlays::SightOrbit;
+/// aesir `e_option` bit for Ruwach (`:ruwach => 8192`; AL_RUWACH applies
+/// `SC_RUWACH` with this bit). Matches rAthena `OPTION_RUWACH`.
+const OPTION_RUWACH: u32 = 0x2000;
+
+use bevy::ecs::system::SystemParam;
+use lifthrasir_runtime::effects::overlays::{RuwachOrbit, SightOrbit};
 
 /// Latest `effect_state` for units whose entity has not registered yet, keyed
 /// by unit_id. Same shape and rationale as [`PendingBodyStates`].
 #[derive(Resource, Default)]
 pub struct PendingEffectStates(HashMap<u32, u32>);
 
-/// Reconciles a unit's Sight orbit visual with its current `effect_state`:
-/// spawns the orbit child when the option bit is set and none exists yet,
-/// despawns it when the bit clears. Consumes both channels that carry
-/// `effect_state` — live `UnitStateChanged` toggles and the spawn-time
-/// `UnitEntered` for units that enter view already sighted — mirroring
-/// [`body_state_visuals`].
+/// The orbit anchors driven by option bits, plus unit transforms to start them.
+#[derive(SystemParam)]
+pub struct OptionOrbits<'w, 's> {
+    transforms: Query<'w, 's, &'static Transform>,
+    sight: Query<'w, 's, (Entity, &'static SightOrbit)>,
+    ruwach: Query<'w, 's, (Entity, &'static RuwachOrbit)>,
+}
+
+/// Reconciles a unit's Sight and Ruwach orbit visuals with its current
+/// `effect_state`: spawns an orbit anchor when its option bit is set and none
+/// exists yet, despawns it when the bit clears. Consumes both channels that
+/// carry `effect_state` — live `UnitStateChanged` toggles and the spawn-time
+/// `UnitEntered` for units that enter view with the bit already set —
+/// mirroring [`body_state_visuals`].
 pub fn option_visuals(
     mut state_changes: MessageReader<UnitStateChanged>,
     mut entered: MessageReader<UnitEntered>,
     registry: Res<EntityRegistry>,
     mut pending: ResMut<PendingEffectStates>,
     mut commands: Commands,
-    transforms: Query<&Transform>,
-    orbits: Query<(Entity, &SightOrbit)>,
+    orbits: OptionOrbits,
 ) {
     for event in state_changes.read() {
         let Some(entity) = registry.get_entity(event.unit_id) else {
             pending.0.insert(event.unit_id, event.effect_state);
             continue;
         };
-        apply_sight_state(
-            &mut commands,
-            entity,
-            event.effect_state,
-            &transforms,
-            &orbits,
-        );
+        apply_option_state(&mut commands, entity, event.effect_state, &orbits);
     }
 
     for event in entered.read() {
         let Some(entity) = registry.get_entity(event.gid) else {
             continue;
         };
-        apply_sight_state(
-            &mut commands,
-            entity,
-            event.effect_state,
-            &transforms,
-            &orbits,
-        );
+        apply_option_state(&mut commands, entity, event.effect_state, &orbits);
     }
 
     pending.0.retain(|&unit_id, &mut effect_state| {
         let Some(entity) = registry.get_entity(unit_id) else {
             return true;
         };
-        apply_sight_state(&mut commands, entity, effect_state, &transforms, &orbits);
+        apply_option_state(&mut commands, entity, effect_state, &orbits);
         false
     });
 }
 
-fn apply_sight_state(
+fn apply_option_state(
     commands: &mut Commands,
     entity: Entity,
     effect_state: u32,
-    transforms: &Query<&Transform>,
-    orbits: &Query<(Entity, &SightOrbit)>,
+    orbits: &OptionOrbits,
 ) {
-    let sight_on = effect_state & OPTION_SIGHT != 0;
-    let existing = orbits
+    // Start at the unit so the first frame never flashes at the origin.
+    let start = orbits
+        .transforms
+        .get(entity)
+        .map(|t| t.translation)
+        .unwrap_or_default();
+    let sight = orbits
+        .sight
+        .iter()
+        .find(|(_, orbit)| orbit.unit == entity)
+        .map(|(orbit_entity, _)| orbit_entity);
+    let ruwach = orbits
+        .ruwach
         .iter()
         .find(|(_, orbit)| orbit.unit == entity)
         .map(|(orbit_entity, _)| orbit_entity);
 
-    match (sight_on, existing) {
+    reconcile_orbit(
+        commands,
+        effect_state & OPTION_SIGHT != 0,
+        sight,
+        (
+            SightOrbit { unit: entity },
+            Transform::from_translation(start),
+        ),
+    );
+    reconcile_orbit(
+        commands,
+        effect_state & OPTION_RUWACH != 0,
+        ruwach,
+        (
+            RuwachOrbit { unit: entity },
+            Transform::from_translation(start),
+        ),
+    );
+}
+
+/// Spawns `orbit` when `on` and no anchor exists; despawns `existing` when off.
+fn reconcile_orbit(
+    commands: &mut Commands,
+    on: bool,
+    existing: Option<Entity>,
+    orbit: impl Bundle,
+) {
+    match (on, existing) {
         (true, None) => {
-            // Start at the unit so the first frame never flashes at the origin.
-            let start = transforms
-                .get(entity)
-                .map(|t| t.translation)
-                .unwrap_or_default();
-            commands.spawn((
-                SightOrbit { unit: entity },
-                Transform::from_translation(start),
-                Visibility::default(),
-            ));
+            commands.spawn((orbit, Visibility::default()));
         }
         (false, Some(orbit_entity)) => {
             commands.entity(orbit_entity).despawn();
@@ -998,6 +1026,33 @@ mod tests {
             .filter(|(_, orbit)| orbit.unit == unit)
             .map(|(entity, _)| entity)
             .collect()
+    }
+
+    fn ruwach_orbits_for(app: &mut App, unit: Entity) -> usize {
+        app.world_mut()
+            .query::<&RuwachOrbit>()
+            .iter(app.world())
+            .filter(|orbit| orbit.unit == unit)
+            .count()
+    }
+
+    #[test]
+    fn ruwach_bit_toggles_its_own_orbit() {
+        let mut app = sight_app();
+        let unit = app.world_mut().spawn_empty().id();
+        register(&mut app, 7, unit);
+
+        emit_effect_state(&mut app, 7, OPTION_RUWACH);
+        assert_eq!(ruwach_orbits_for(&mut app, unit), 1);
+        assert!(orbits_for(&mut app, unit).is_empty(), "no sight orbit");
+
+        emit_effect_state(&mut app, 7, OPTION_RUWACH | OPTION_SIGHT);
+        assert_eq!(ruwach_orbits_for(&mut app, unit), 1, "no stacking");
+        assert_eq!(orbits_for(&mut app, unit).len(), 1);
+
+        emit_effect_state(&mut app, 7, OPTION_SIGHT);
+        assert_eq!(ruwach_orbits_for(&mut app, unit), 0);
+        assert_eq!(orbits_for(&mut app, unit).len(), 1, "sight survives");
     }
 
     #[test]

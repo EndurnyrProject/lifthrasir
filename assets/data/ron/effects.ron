@@ -349,9 +349,9 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        24: ( // AL_RUWACH -- authored effect (ruwach.strfx.ron): magenta-pink
-              // pulse shell expanding around the caster.
-            visuals: [Str("ruwach.strfx.ron")],
+        24: ( // AL_RUWACH -- cast sound only; the orbiting holy orb is driven by the
+              // Ruwach option bit (status_visuals + dress_ruwach_orbits).
+            visuals: [],
             sound: Some("effect/ef_ruwach.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -645,9 +645,9 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        77: ( // PR_TURNUNDEAD -- holy exorcism burst on the victim, arrives via
+        77: ( // PR_TURNUNDEAD -- native EF_HOLYHIT on the victim, arrives via
               // the SkillDamage path (instant-kill or damage outcomes).
-            visuals: [Str("turn_undead.strfx.ron")],
+            visuals: [Str("holyhit.str")],
             sound: Some("effect/priest_turn_undead.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),

@@ -1,7 +1,7 @@
 // Aqua Benedicta (PR_AQUABENEDICTA / AL_HOLYWATER) - authored STR-style effect.
 //
 // Coordinate / units convention (see crates/lifthrasir-runtime/src/effects/playback.rs,
-// mirrors heal.strfx.ron / ruwach.strfx.ron):
+// mirrors heal.strfx.ron):
 //   - offset & quad are in STR screen pixels. The runtime maps a point to world
 //     as (offset - EFFECT_ORIGIN) * STR_WORLD_SCALE, EFFECT_ORIGIN = (319, 291),
 //     STR_WORLD_SCALE = 0.2.
@@ -15,8 +15,8 @@
 //     droplet sprites, so their painted shading survives).
 //
 // Textures: GRF-only, no local PNGs.
-//   - `ro://data/texture/effect/lens_b.bmp` -- the same soft radial glow used
-//     in heal.strfx.ron/ruwach.strfx.ron, tinted blue.
+//   - `ro://data/texture/effect/glow11.bmp` -- the same soft radial glow used
+//     in heal.strfx.ron, tinted blue.
 //   - `ro://data/texture/effect/water_splash/water_slplash_NN.bmp` (10 frames)
 //     -- a fine white-blue speckle spray (verified: a scattered droplet burst,
 //     already blue-white toned), cycled via texture_index for the shimmer.
@@ -32,13 +32,13 @@
     layers: [
         // Core glow pop, additive.
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 250.0), quad: (20.0, 20.0),   color: (140, 200, 255, 0) ),
-                ( at: 3,  offset: (319.0, 250.0), quad: (90.0, 90.0),   color: (170, 220, 255, 210) ),
-                ( at: 9,  offset: (319.0, 250.0), quad: (110.0, 110.0), color: (160, 215, 255, 110) ),
-                ( at: 15, offset: (319.0, 250.0), quad: (120.0, 120.0), color: (150, 210, 255, 0) ),
+                ( at: 3,  offset: (319.0, 250.0), quad: (140.0, 140.0), color: (170, 220, 255, 255) ),
+                ( at: 9,  offset: (319.0, 250.0), quad: (155.0, 155.0), color: (160, 215, 255, 160) ),
+                ( at: 15, offset: (319.0, 250.0), quad: (165.0, 165.0), color: (150, 210, 255, 0) ),
             ],
         ),
         // Water-droplet sparkle spray, cycled through all 10 frames.

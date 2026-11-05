@@ -1,8 +1,8 @@
 use super::EffectLayer;
 use super::material::EffectMaterial;
 use super::overlays::{
-    apply_body_state_tint, finalize_frozen_ice_assets, load_frozen_ice_assets, orbit_sight_visuals,
-    orbit_spirit_spheres, sync_frozen_overlays,
+    apply_body_state_tint, finalize_frozen_ice_assets, load_frozen_ice_assets,
+    orbit_ruwach_visuals, orbit_sight_visuals, orbit_spirit_spheres, sync_frozen_overlays,
 };
 use super::playback::*;
 use super::procedural::{
@@ -50,6 +50,7 @@ impl Plugin for EffectsPlaybackPlugin {
                     .after(SpriteProcessingSystems::Dispatch),
                 apply_body_state_tint,
                 orbit_sight_visuals,
+                orbit_ruwach_visuals,
                 orbit_spirit_spheres,
             ),
         )

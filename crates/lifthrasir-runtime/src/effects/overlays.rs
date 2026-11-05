@@ -17,6 +17,12 @@ pub struct SightOrbit {
     pub unit: Entity,
 }
 
+/// A top-level Ruwach orb anchor following a unit; same contract as [`SightOrbit`].
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RuwachOrbit {
+    pub unit: Entity,
+}
+
 /// One top-level sphere anchor; the caller owns the requested ring size.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct SpiritSphereOrbit {
@@ -388,20 +394,56 @@ pub fn orbit_sight_visuals(
     units: Query<&GlobalTransform>,
     mut orbits: Query<(Entity, &SightOrbit, &mut Transform)>,
 ) {
-    let angle = time.elapsed_secs() * (TAU / SIGHT_ORBIT_PERIOD_SECS);
-    let (sin, cos) = angle.sin_cos();
+    let offset = orbit_offset(
+        time.elapsed_secs(),
+        SIGHT_ORBIT_RADIUS,
+        SIGHT_ORBIT_PERIOD_SECS,
+        SIGHT_ORBIT_LIFT,
+    );
     for (orbit_entity, orbit, mut transform) in &mut orbits {
         let Ok(unit) = units.get(orbit.unit) else {
             commands.entity(orbit_entity).despawn();
             continue;
         };
-        transform.translation = unit.translation()
-            + Vec3::new(
-                cos * SIGHT_ORBIT_RADIUS,
-                SIGHT_ORBIT_LIFT,
-                sin * SIGHT_ORBIT_RADIUS,
-            );
+        transform.translation = unit.translation() + offset;
     }
+}
+
+/// Orbit radius, in world units, of the Ruwach orb; the same circle as Sight.
+const RUWACH_ORBIT_RADIUS: f32 = 9.0;
+/// Full revolution period of the Ruwach orb, slower than Sight as in the
+/// reference client (8 turns per aura instead of 10).
+const RUWACH_ORBIT_PERIOD_SECS: f32 = 2.5;
+/// Vertical offset lifting the orb to the unit's waist.
+const RUWACH_ORBIT_LIFT: f32 = 9.0;
+
+/// Moves every [`RuwachOrbit`] anchor around its unit, despawning orbits whose
+/// unit is gone. See [`orbit_sight_visuals`].
+pub fn orbit_ruwach_visuals(
+    time: Res<Time>,
+    mut commands: Commands,
+    units: Query<&GlobalTransform>,
+    mut orbits: Query<(Entity, &RuwachOrbit, &mut Transform)>,
+) {
+    let offset = orbit_offset(
+        time.elapsed_secs(),
+        RUWACH_ORBIT_RADIUS,
+        RUWACH_ORBIT_PERIOD_SECS,
+        RUWACH_ORBIT_LIFT,
+    );
+    for (orbit_entity, orbit, mut transform) in &mut orbits {
+        let Ok(unit) = units.get(orbit.unit) else {
+            commands.entity(orbit_entity).despawn();
+            continue;
+        };
+        transform.translation = unit.translation() + offset;
+    }
+}
+
+/// Offset from a unit to its orbiting anchor at `elapsed` seconds.
+fn orbit_offset(elapsed: f32, radius: f32, period: f32, lift: f32) -> Vec3 {
+    let (sin, cos) = (elapsed * (TAU / period)).sin_cos();
+    Vec3::new(cos * radius, lift, sin * radius)
 }
 
 /// Orbit radius, in world units, of each spirit sphere — wide enough that the

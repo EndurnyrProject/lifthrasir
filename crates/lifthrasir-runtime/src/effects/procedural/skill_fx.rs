@@ -6,7 +6,7 @@ use super::impact::{
 use crate::audio::events::PlaySkillSfx;
 use crate::effects::{
     events::PlayProceduralVfx,
-    overlays::{SightOrbit, SpiritSphereOrbit},
+    overlays::{RuwachOrbit, SightOrbit, SpiritSphereOrbit},
 };
 use bevy::light::NotShadowCaster;
 use bevy::mesh::MeshVertexBufferLayoutRef;
@@ -209,6 +209,53 @@ pub fn dress_sight_orbits(
         if let Some(flipbook) = flipbook {
             quad.insert(flipbook);
         }
+    }
+}
+
+/// Soft round white glow, tinted cyan by the material, for the Ruwach orb.
+const RUWACH_ORB_TEXTURE: &str = "data/texture/effect/glow11.bmp";
+/// Uniform world-space scale of the Ruwach orb billboard: a glowing ball about
+/// the size of the unit's head, with the soft falloff as halo.
+const RUWACH_ORB_SCALE: f32 = 10.0;
+
+/// Dress every freshly spawned [`RuwachOrbit`] anchor (domain spawns it bare,
+/// see `status_visuals.rs`) with the holy orb: a cyan glow billboard on the
+/// projectile fragment plus a cool point light. The anchor's despawn (Ruwach
+/// bit cleared) takes the quad with it.
+pub fn dress_ruwach_orbits(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    assets: Res<ImpactAssets>,
+    mut materials: ResMut<Assets<SkillFxMaterial>>,
+    orbits: Query<Entity, Added<RuwachOrbit>>,
+) {
+    for orbit in &orbits {
+        let material = materials.add(SkillFxMaterial {
+            params: SkillFxParams {
+                kind: PROJECTILE_KIND,
+                primary: Vec4::new(1.3, 2.8, 3.2, 1.0),
+                secondary: Vec4::new(0.4, 1.6, 2.4, 1.0),
+                shape: Vec4::ZERO,
+                factor: 0.0,
+            },
+            texture: Some(asset_server.load(format!("ro://{RUWACH_ORB_TEXTURE}"))),
+        });
+
+        commands.entity(orbit).insert(PointLight {
+            color: Color::srgb(0.45, 0.9, 1.0),
+            intensity: LIGHT_PEAK * 0.35,
+            range: 25.0,
+            shadow_maps_enabled: false,
+            ..default()
+        });
+
+        commands.spawn((
+            Mesh3d(assets.quad.clone()),
+            MeshMaterial3d(material),
+            Transform::from_scale(Vec3::splat(RUWACH_ORB_SCALE)),
+            NotShadowCaster,
+            ChildOf(orbit),
+        ));
     }
 }
 
@@ -518,6 +565,7 @@ impl Plugin for SkillFxPlugin {
                     advance_traveling_vfx,
                     animate_flipbook,
                     dress_sight_orbits,
+                    dress_ruwach_orbits,
                     dress_spirit_sphere_orbits,
                 )
                     .in_set(VfxSystems),

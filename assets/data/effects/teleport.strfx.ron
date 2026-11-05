@@ -21,7 +21,7 @@
 //     shading to preserve here).
 //
 // Textures: GRF-only, no local PNGs.
-//   - `ro://data/texture/effect/lens_b.bmp` -- soft radial glow burst, reused
+//   - `ro://data/texture/effect/glow11.bmp` -- soft radial glow burst, reused
 //     here (as in heal.strfx.ron / inc_agi.strfx.ron) for the flare-and-collapse
 //     disc at the caster's feet.
 //   - `ro://data/texture/effect/new_judex/new_judex_light/arch_light_pillar.bmp`
@@ -40,17 +40,28 @@
 (
     fps: 30,
     layers: [
-        // Ground glow: lens_b flares out around the feet, then collapses back
-        // inward as the caster departs.
+        // Departure beam: soft blue rays rising around the caster.
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/light_y_01.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (20.0, 10.0),  color: (130, 190, 255, 0) ),
-                ( at: 3,  offset: (319.0, 291.0), quad: (150.0, 55.0), color: (160, 210, 255, 220) ),
-                ( at: 8,  offset: (319.0, 291.0), quad: (190.0, 65.0), color: (150, 205, 255, 160) ),
-                ( at: 14, offset: (319.0, 291.0), quad: (120.0, 45.0), color: (140, 195, 255, 80) ),
-                ( at: 20, offset: (319.0, 291.0), quad: (40.0, 15.0),  color: (130, 190, 255, 0) ),
+                ( at: 0,  offset: (319.0, 275.0), quad: (70.0, 40.0),   color: (120, 180, 255, 0) ),
+                ( at: 4,  offset: (319.0, 245.0), quad: (120.0, 115.0), color: (120, 180, 255, 230) ),
+                ( at: 12, offset: (319.0, 228.0), quad: (130.0, 145.0), color: (120, 180, 255, 140) ),
+                ( at: 20, offset: (319.0, 212.0), quad: (135.0, 160.0), color: (120, 180, 255, 0) ),
+            ],
+        ),
+        // Ground glow: glow11 flares out around the feet, then collapses back
+        // inward as the caster departs.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0,  offset: (319.0, 287.0), quad: (20.0, 6.0),  color: (130, 190, 255, 0) ),
+                ( at: 3,  offset: (319.0, 287.0), quad: (150.0, 45.0), color: (160, 210, 255, 220) ),
+                ( at: 8,  offset: (319.0, 287.0), quad: (190.0, 57.0), color: (150, 205, 255, 160) ),
+                ( at: 14, offset: (319.0, 287.0), quad: (120.0, 36.0), color: (140, 195, 255, 80) ),
+                ( at: 20, offset: (319.0, 287.0), quad: (40.0, 12.0),  color: (130, 190, 255, 0) ),
             ],
         ),
         // Swirl streak A: icearrow silhouette spinning one full turn (0 -> 1024
@@ -59,11 +70,11 @@
             textures: ["ro://data/texture/effect/icearrow.tga"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (70.0, 10.0),  color: (150, 200, 255, 0),   angle: 0.0 ),
-                ( at: 4,  offset: (316.0, 270.0), quad: (60.0, 90.0),  color: (180, 220, 255, 220), angle: 256.0 ),
-                ( at: 9,  offset: (313.0, 240.0), quad: (45.0, 110.0), color: (200, 235, 255, 255), angle: 512.0 ),
-                ( at: 14, offset: (310.0, 205.0), quad: (30.0, 120.0), color: (210, 240, 255, 200), angle: 768.0 ),
-                ( at: 19, offset: (308.0, 170.0), quad: (15.0, 130.0), color: (200, 235, 255, 0),   angle: 1024.0 ),
+                ( at: 0,  offset: (319.0, 279.0), quad: (70.0, 10.0),  color: (150, 200, 255, 0),   angle: 0.0 ),
+                ( at: 4,  offset: (316.0, 258.0), quad: (60.0, 90.0),  color: (180, 220, 255, 220), angle: 256.0 ),
+                ( at: 9,  offset: (313.0, 228.0), quad: (45.0, 110.0), color: (200, 235, 255, 255), angle: 512.0 ),
+                ( at: 14, offset: (310.0, 193.0), quad: (30.0, 120.0), color: (210, 240, 255, 200), angle: 768.0 ),
+                ( at: 19, offset: (308.0, 158.0), quad: (15.0, 130.0), color: (200, 235, 255, 0),   angle: 1024.0 ),
             ],
         ),
         // Swirl streak B: same texture, phase-shifted by half a turn and
@@ -73,11 +84,11 @@
             textures: ["ro://data/texture/effect/icearrow.tga"],
             blend: Add,
             keys: [
-                ( at: 3,  offset: (322.0, 288.0), quad: (65.0, 15.0),  color: (150, 200, 255, 0),   angle: 512.0 ),
-                ( at: 7,  offset: (325.0, 265.0), quad: (55.0, 85.0),  color: (180, 220, 255, 210), angle: 768.0 ),
-                ( at: 12, offset: (328.0, 232.0), quad: (40.0, 105.0), color: (200, 235, 255, 245), angle: 1024.0 ),
-                ( at: 17, offset: (330.0, 198.0), quad: (25.0, 115.0), color: (205, 235, 255, 190), angle: 1280.0 ),
-                ( at: 22, offset: (332.0, 165.0), quad: (12.0, 125.0), color: (195, 230, 255, 0),   angle: 1536.0 ),
+                ( at: 3,  offset: (322.0, 276.0), quad: (65.0, 15.0),  color: (150, 200, 255, 0),   angle: 512.0 ),
+                ( at: 7,  offset: (325.0, 253.0), quad: (55.0, 85.0),  color: (180, 220, 255, 210), angle: 768.0 ),
+                ( at: 12, offset: (328.0, 220.0), quad: (40.0, 105.0), color: (200, 235, 255, 245), angle: 1024.0 ),
+                ( at: 17, offset: (330.0, 186.0), quad: (25.0, 115.0), color: (205, 235, 255, 190), angle: 1280.0 ),
+                ( at: 22, offset: (332.0, 153.0), quad: (12.0, 125.0), color: (195, 230, 255, 0),   angle: 1536.0 ),
             ],
         ),
         // Rising column: arch_light_pillar tinted blue, growing tall and narrow
@@ -86,10 +97,10 @@
             textures: ["ro://data/texture/effect/new_judex/new_judex_light/arch_light_pillar.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (90.0, 10.0),  color: (140, 190, 255, 0) ),
-                ( at: 3,  offset: (319.0, 270.0), quad: (70.0, 140.0), color: (170, 215, 255, 230) ),
-                ( at: 8,  offset: (319.0, 240.0), quad: (50.0, 180.0), color: (160, 210, 255, 200) ),
-                ( at: 14, offset: (319.0, 205.0), quad: (30.0, 200.0), color: (150, 200, 255, 120) ),
+                ( at: 0,  offset: (319.0, 290.0), quad: (90.0, 10.0),  color: (140, 190, 255, 0) ),
+                ( at: 3,  offset: (319.0, 225.0), quad: (70.0, 140.0), color: (170, 215, 255, 230) ),
+                ( at: 8,  offset: (319.0, 205.0), quad: (50.0, 180.0), color: (160, 210, 255, 200) ),
+                ( at: 14, offset: (319.0, 195.0), quad: (30.0, 200.0), color: (150, 200, 255, 120) ),
                 ( at: 20, offset: (319.0, 170.0), quad: (10.0, 220.0), color: (140, 195, 255, 0) ),
             ],
         ),
