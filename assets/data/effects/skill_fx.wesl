@@ -89,6 +89,12 @@ fn sample_fx(uv: vec2<f32>) -> f32 {
     return max(max(t.r, t.g), t.b);
 }
 
+// Fades to zero at the quad's inscribed circle, so a burst that grows to the
+// quad edge reads round instead of showing the square billboard.
+fn edge_fade(r: f32) -> f32 {
+    return 1.0 - smoothstep(0.8, 1.0, r);
+}
+
 // kind 0 — Jupitel Thunder detonation. shape: x=emission y=bolt_count z=crackle_hz.
 // Flickering white-hot core, jagged radial bolts re-seeded crackle_hz times per
 // second, and a thin expanding shock ring. The classic thunder_pang starburst is
@@ -378,8 +384,9 @@ fn ring_blast_fragment(uv: vec2<f32>) -> vec4<f32> {
     let in_frame = step(abs(centered.x), grow) * step(abs(centered.y), grow);
     let tex = sample_fx(tex_uv) * in_frame * appear * fade;
 
-    let hot = core + ring * 0.8 + tex * flick;
-    let cool = ring + tex * 0.5 + exp(-r * r * 4.0) * 0.25 * appear * fade;
+    let edge = edge_fade(r);
+    let hot = (core + ring * 0.8 + tex * flick) * edge;
+    let cool = (ring + tex * 0.5 + exp(-r * r * 4.0) * 0.25 * appear * fade) * edge;
     let alpha = clamp(hot + cool, 0.0, 1.0);
     if (alpha < 0.01) {
         discard;
@@ -421,8 +428,9 @@ fn spirit_swirl_fragment(uv: vec2<f32>) -> vec4<f32> {
     let hit = smoothstep(0.55, 0.75, f);
     let flash = exp(-dot(centered, centered) * 14.0) * hit * fade * 1.6;
 
-    body = min(body, 2.0) * fade;
-    haze = min(haze, 1.2) * fade;
+    let edge = edge_fade(length(centered));
+    body = min(body, 2.0) * fade * edge;
+    haze = min(haze, 1.2) * fade * edge;
     let hot = body + flash;
     let cool = haze + flash * 0.5;
     let alpha = clamp(hot + cool, 0.0, 1.0);

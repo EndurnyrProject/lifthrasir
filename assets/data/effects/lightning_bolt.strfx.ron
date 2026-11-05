@@ -16,7 +16,7 @@
 //     fields (quad) are written bare, not wrapped in Some(...).
 //
 // Shape: two jagged jong_* bolts strike fast from above (landing ~30% through);
-// an elec_y crackle and a lens_w flash burst white-blue on the strike; a lens_w
+// an elec_y crackle and a ground flash burst white-blue on the strike; a soft
 // glow flashes and decays. This is the fastest of the three (max_key ~27).
 (
     fps: 30,
@@ -84,27 +84,27 @@
                 ( at: 24, offset: (319.0, 291.0), quad: (110.0, 130.0), color: (190, 215, 255, 0),   texture_index: 0 ),
             ],
         ),
-        // White-blue flash on the strike (lens_w, fast spike).
+        // White-blue flash on the strike (ground glow).
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 9,  offset: (319.0, 291.0), quad: (30.0, 30.0),   color: (230, 240, 255, 0) ),
-                ( at: 11, offset: (319.0, 291.0), quad: (140.0, 140.0), color: (245, 250, 255, 255) ),
-                ( at: 15, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (220, 235, 255, 140) ),
-                ( at: 22, offset: (319.0, 291.0), quad: (260.0, 260.0), color: (200, 220, 255, 0) ),
+                ( at: 9,  offset: (319.0, 287.0), quad: (33.0, 9.9),   color: (230, 240, 255, 0) ),
+                ( at: 11, offset: (319.0, 287.0), quad: (154.0, 46.2), color: (245, 250, 255, 255) ),
+                ( at: 15, offset: (319.0, 287.0), quad: (220.0, 66.0), color: (220, 235, 255, 140) ),
+                ( at: 22, offset: (319.0, 287.0), quad: (286.0, 85.8), color: (200, 220, 255, 0) ),
             ],
         ),
-        // Underlying glow flash (lens_w) that spikes on the strike and decays out.
+        // Underlying glow flash (glow11, on the body) that spikes on the strike and decays out.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (50.0, 50.0),   color: (180, 205, 255, 0) ),
-                ( at: 8,  offset: (319.0, 291.0), quad: (110.0, 110.0), color: (210, 230, 255, 180) ),
-                ( at: 11, offset: (319.0, 291.0), quad: (180.0, 180.0), color: (240, 248, 255, 240) ),
-                ( at: 18, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (200, 222, 255, 110) ),
-                ( at: 26, offset: (319.0, 291.0), quad: (150.0, 150.0), color: (170, 200, 255, 0) ),
+                ( at: 0,  offset: (319.0, 250.0), quad: (30.0, 30.0),   color: (180, 205, 255, 0) ),
+                ( at: 8,  offset: (319.0, 250.0), quad: (66.0, 66.0), color: (210, 230, 255, 180) ),
+                ( at: 11, offset: (319.0, 250.0), quad: (108.0, 108.0), color: (240, 248, 255, 240) ),
+                ( at: 18, offset: (319.0, 250.0), quad: (120.0, 120.0), color: (200, 222, 255, 110) ),
+                ( at: 26, offset: (319.0, 250.0), quad: (90.0, 90.0), color: (170, 200, 255, 0) ),
             ],
         ),
     ],

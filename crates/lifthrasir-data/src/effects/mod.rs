@@ -233,6 +233,10 @@ pub struct ShaderFxEntry {
     pub duration: f32,
     /// Uniform world-space scale of the billboard quad.
     pub scale: f32,
+    /// Anchor at the unit's feet instead of its body center: for effects that
+    /// erupt out of the ground (kind 6), whose art starts at the quad's lower edge.
+    #[serde(default)]
+    pub ground: bool,
     #[serde(default)]
     pub light: Option<ShaderFxLight>,
     #[serde(default)]

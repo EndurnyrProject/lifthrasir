@@ -609,6 +609,7 @@ mod tests {
             shape: (1.0, 0.0, 0.0, 0.0),
             duration: 0.5,
             scale: 18.0,
+            ground: false,
             light: None,
             garnish: None,
             texture: None,

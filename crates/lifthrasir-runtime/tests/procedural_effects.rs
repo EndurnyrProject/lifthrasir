@@ -31,6 +31,7 @@ fn generic_procedural_requests_update_without_gameplay_resources() {
             shape: (0.0, 0.0, 0.0, 0.0),
             duration: 1.0,
             scale: 2.0,
+            ground: false,
             light: None,
             garnish: None,
             texture: None,

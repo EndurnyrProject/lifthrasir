@@ -1,15 +1,18 @@
-// Gravitation Field: approximate one pulsing vortex per server footprint cell.
-// Skill-unit cell parenting owns the lifetime and partial removal.
+// Gravitation Field: one white light hovering over each server footprint cell,
+// as roBrowserLegacy's GravityEffects draw it (a hovering lens_w per tile over
+// a faint white tile tint, which has no equivalent here). The lens band is small
+// enough here that its edges do not read. Skill-unit cell parenting owns the
+// lifetime and partial removal.
 (
     fps: 30,
     layers: [
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/lens_w.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (319.0, 285.0), quad: (28.0, 14.0), color: (155, 110, 220, 110), angle: 0.0),
-                (at: 30, offset: (319.0, 279.0), quad: (45.0, 22.0), color: (180, 135, 255, 170), angle: 512.0),
-                (at: 60, offset: (319.0, 285.0), quad: (28.0, 14.0), color: (155, 110, 220, 110), angle: 1024.0),
+                (at: 0, offset: (319.0, 276.0), quad: (18.0, 36.0), color: (255, 255, 255, 170)),
+                (at: 45, offset: (319.0, 262.0), quad: (18.0, 36.0), color: (255, 255, 255, 210)),
+                (at: 90, offset: (319.0, 276.0), quad: (18.0, 36.0), color: (255, 255, 255, 170)),
             ],
         ),
     ],

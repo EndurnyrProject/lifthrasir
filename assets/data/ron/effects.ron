@@ -2042,9 +2042,11 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        484: ( // HW_GRAVITATION -- persistent field belongs to skill_units.
+        484: ( // HW_GRAVITATION -- persistent field belongs to skill_units; the
+               // reference quakes the camera briefly on placement.
             visuals: [],
             sound: Some("effect/hyper_novice/hn_ground_gravitation.wav"), // Approximation.
+            shake: Some((amplitude: 3.0, duration_secs: 0.2)),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -2385,7 +2387,7 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        484: ( // HW_GRAVITATION -- approximate vortex per surviving field cell.
+        484: ( // HW_GRAVITATION -- hovering white light per surviving field cell.
             ground_anchor: Footprint,
             visuals: [Str("high_wizard_gravitation.strfx.ron")],
             sound: None,
@@ -2960,6 +2962,7 @@
             shape: (3.0, 8.0, 0.15, 0.0),
             duration: 0.28,
             scale: 4.0,
+            ground: true,
             texture: Some("data/texture/effect/stone_part.bmp"),
             travel: Some((
                 speed: 65.0,
@@ -2974,6 +2977,7 @@
             shape: (5.0, 9.0, 0.8, 0.0),
             duration: 0.55,
             scale: 16.0,
+            ground: true,
             texture: Some("data/texture/effect/stone.bmp"),
             light: Some((
                 color: (1.0, 0.75, 0.45),
@@ -2991,6 +2995,7 @@
             shape: (4.0, 10.0, 0.7, 0.0),
             duration: 0.6,
             scale: 16.0,
+            ground: true,
             texture: Some("data/texture/effect/freeze_ice_part.bmp"),
             travel: Some((
                 speed: 150.0,

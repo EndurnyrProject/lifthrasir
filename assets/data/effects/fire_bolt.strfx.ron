@@ -15,7 +15,7 @@
 //
 // Shape: two staggered flame bolts flipbooking fire_0001..0004 fall from above
 // onto the anchor, landing ~60-70% through; a fireorb impact flash and a rising
-// smoke puff fire right after they land; a lens_r glow underlays the whole cast
+// smoke puff fire right after they land; a soft glow underlays the whole cast
 // and decays to zero.
 (
     fps: 30,
@@ -60,10 +60,10 @@
             textures: ["ro://data/texture/effect/fireorb.bmp"],
             blend: Add,
             keys: [
-                ( at: 15, offset: (319.0, 291.0), quad: (16.0, 16.0),   color: (255, 220, 140, 0) ),
-                ( at: 18, offset: (319.0, 291.0), quad: (90.0, 90.0),   color: (255, 210, 120, 255) ),
-                ( at: 22, offset: (319.0, 291.0), quad: (150.0, 150.0), color: (255, 180, 90, 120) ),
-                ( at: 27, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (255, 150, 60, 0) ),
+                ( at: 15, offset: (319.0, 268.0), quad: (16.0, 16.0),   color: (255, 220, 140, 0) ),
+                ( at: 18, offset: (319.0, 268.0), quad: (90.0, 90.0),   color: (255, 210, 120, 255) ),
+                ( at: 22, offset: (319.0, 268.0), quad: (140.0, 140.0), color: (255, 180, 90, 120) ),
+                ( at: 27, offset: (319.0, 268.0), quad: (140.0, 140.0), color: (255, 150, 60, 0) ),
             ],
         ),
         // Smoke puff rising off the impact.
@@ -77,16 +77,16 @@
                 ( at: 30, offset: (319.0, 220.0), quad: (150.0, 150.0), color: (90, 70, 60, 0) ),
             ],
         ),
-        // Underlying glow (lens_r) that ramps with the cast and decays out.
+        // Underlying glow (glow11, on the body) that ramps with the cast and decays out.
         (
-            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (40.0, 40.0),   color: (255, 120, 50, 0) ),
-                ( at: 12, offset: (319.0, 291.0), quad: (90.0, 90.0),   color: (255, 140, 60, 90) ),
-                ( at: 18, offset: (319.0, 291.0), quad: (170.0, 170.0), color: (255, 160, 70, 220) ),
-                ( at: 24, offset: (319.0, 291.0), quad: (200.0, 200.0), color: (255, 130, 55, 110) ),
-                ( at: 30, offset: (319.0, 291.0), quad: (150.0, 150.0), color: (255, 110, 45, 0) ),
+                ( at: 0,  offset: (319.0, 250.0), quad: (24.0, 24.0),   color: (255, 120, 50, 0) ),
+                ( at: 12, offset: (319.0, 250.0), quad: (54.0, 54.0),   color: (255, 140, 60, 90) ),
+                ( at: 18, offset: (319.0, 250.0), quad: (102.0, 102.0), color: (255, 160, 70, 220) ),
+                ( at: 24, offset: (319.0, 250.0), quad: (120.0, 120.0), color: (255, 130, 55, 110) ),
+                ( at: 30, offset: (319.0, 250.0), quad: (90.0, 90.0), color: (255, 110, 45, 0) ),
             ],
         ),
     ],

@@ -16,7 +16,7 @@
 //     fields (quad) are written bare, not wrapped in Some(...).
 //
 // Shape: three staggered icearrow shards fall from above and crash onto the
-// anchor ~50-70% through; a lens_b flash bursts on the crash and a lens_b glow
+// anchor ~50-70% through; a ground flash bursts on the crash and a soft glow
 // underlays the cast, both decaying to zero.
 (
     fps: 30,
@@ -57,27 +57,27 @@
                 ( at: 23, offset: (328.0, 291.0), quad: (24.0, 82.0),  color: (210, 235, 255, 0),   angle: 15.0 ),
             ],
         ),
-        // Impact flash (lens_b expanding on the crash).
+        // Impact flash (ground glow).
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 15, offset: (319.0, 291.0), quad: (20.0, 20.0),   color: (200, 230, 255, 0) ),
-                ( at: 19, offset: (319.0, 291.0), quad: (110.0, 110.0), color: (220, 240, 255, 255) ),
-                ( at: 23, offset: (319.0, 291.0), quad: (170.0, 170.0), color: (190, 220, 255, 120) ),
-                ( at: 28, offset: (319.0, 291.0), quad: (220.0, 220.0), color: (170, 210, 255, 0) ),
+                ( at: 15, offset: (319.0, 287.0), quad: (22.0, 6.6),   color: (130, 190, 255, 0) ),
+                ( at: 19, offset: (319.0, 287.0), quad: (121.0, 36.3), color: (150, 200, 255, 255) ),
+                ( at: 23, offset: (319.0, 287.0), quad: (187.0, 56.1), color: (120, 180, 255, 120) ),
+                ( at: 28, offset: (319.0, 287.0), quad: (242.0, 72.6), color: (170, 210, 255, 0) ),
             ],
         ),
-        // Underlying glow (lens_b) that ramps with the cast and decays out.
+        // Underlying glow (glow11, on the body) that ramps with the cast and decays out.
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (40.0, 40.0),   color: (150, 200, 255, 0) ),
-                ( at: 12, offset: (319.0, 291.0), quad: (90.0, 90.0),   color: (170, 215, 255, 90) ),
-                ( at: 19, offset: (319.0, 291.0), quad: (180.0, 180.0), color: (200, 230, 255, 210) ),
-                ( at: 24, offset: (319.0, 291.0), quad: (210.0, 210.0), color: (170, 210, 255, 100) ),
-                ( at: 30, offset: (319.0, 291.0), quad: (150.0, 150.0), color: (150, 200, 255, 0) ),
+                ( at: 0,  offset: (319.0, 250.0), quad: (24.0, 24.0),   color: (150, 200, 255, 0) ),
+                ( at: 12, offset: (319.0, 250.0), quad: (54.0, 54.0),   color: (170, 215, 255, 90) ),
+                ( at: 19, offset: (319.0, 250.0), quad: (108.0, 108.0), color: (120, 180, 255, 210) ),
+                ( at: 24, offset: (319.0, 250.0), quad: (126.0, 126.0), color: (170, 210, 255, 100) ),
+                ( at: 30, offset: (319.0, 250.0), quad: (90.0, 90.0), color: (150, 200, 255, 0) ),
             ],
         ),
     ],

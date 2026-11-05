@@ -46,9 +46,14 @@ use net_contract::events::{
 const SPECIAL_EFFECT_LIFETIME_SECS: f32 = 8.0;
 
 /// Vertical offset from a unit's `Transform.translation` (its feet) to where a
-/// procedural VFX anchors, lifting the burst off the ground so it reads over
-/// the target's body rather than clipping into the terrain.
+/// feet-anchored effect plays: STR special effects (authored around the feet)
+/// and `ground` shader effects that erupt out of the terrain.
 const VFX_CENTER_HEIGHT: f32 = 2.0;
+
+/// Vertical offset from a unit's feet to its body center, where shader bursts
+/// and projectiles play so their billboards clear the terrain instead of
+/// sinking half into it.
+const VFX_BODY_HEIGHT: f32 = 9.0;
 
 /// Delay between successive damage numbers of a multi-hit skill (bolts, Napalm
 /// Beat), so `div` hits read as a sequence rather than one stacked total.
@@ -107,14 +112,19 @@ fn emit_procedural_vfx(
         debug!("No transform for procedural vfx anchor {anchor}");
         return;
     };
-    let center = Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0);
-    // The caster's body center, for `travel` entries. Skipped when the caster is
-    // the anchor (a self-targeted effect would travel zero distance) so those play
-    // straight at the anchor as before.
+    let lift = if grounded(shader_fx, key) {
+        Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
+    } else {
+        Vec3::new(0.0, VFX_BODY_HEIGHT, 0.0)
+    };
+    // The caster at the same height, for `travel` entries, so ground effects
+    // skim the terrain and bursts fly body to body. Skipped when the caster is
+    // the anchor (a self-targeted effect would travel zero distance) so those
+    // play straight at the anchor as before.
     let source = source
         .filter(|&s| s != anchor)
         .and_then(|s| transforms.get(s).ok())
-        .map(|t| t.translation + center);
+        .map(|t| t.translation + lift);
     // The per-projectile whoosh rides the message only for traveling effects; the
     // trigger plays a non-traveling effect's sound once at cast instead (see
     // `play_procedural_sound`). Riding it here would double a non-travel sound.
@@ -123,12 +133,20 @@ fn emit_procedural_vfx(
         .flatten();
     proc_vfx.write(PlayProceduralVfx {
         key: key.to_string(),
-        position: transform.translation + center,
+        position: transform.translation + lift,
         source,
         hits: hits.max(1),
         sound,
         color: descriptor_tint(descriptor),
     });
+}
+
+/// Whether `key`'s shader-fx entry anchors at the feet. `false` while the
+/// catalog is still loading, so an early burst plays at the body center.
+fn grounded(shader_fx: Option<&ShaderFxCatalog>, key: &str) -> bool {
+    shader_fx
+        .and_then(|catalog| catalog.get(key))
+        .is_some_and(|entry| entry.ground)
 }
 
 /// Whether `key`'s shader-fx entry declares `travel`. `false` while the catalog
@@ -1487,6 +1505,57 @@ mod tests {
         );
     }
 
+    /// Plays `skill_id` as a single hit on a unit at `target_pos` with the real
+    /// shader catalog loaded, returning where its procedural vfx anchored.
+    fn procedural_anchor(skill_id: u32, target_pos: Vec3) -> Vec3 {
+        let mut app = test_app();
+        let ron = include_str!("../../../../../assets/data/ron/effects.ron");
+        let asset = ron::from_str::<EffectDataAsset>(ron).expect("seed RON");
+        app.insert_resource(ShaderFxCatalog::from_entries(asset.0.shader_fx))
+            .add_systems(Update, on_skill_damage);
+        let target = spawn_unit(&mut app, 200);
+        app.world_mut()
+            .entity_mut(target)
+            .insert(Transform::from_translation(target_pos));
+        spawn_unit(&mut app, 100);
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id,
+            missed: false,
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 75,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+        app.update();
+
+        let vfx = app.world().resource::<Messages<PlayProceduralVfx>>();
+        let positions: Vec<_> = vfx.get_cursor().read(vfx).map(|m| m.position).collect();
+        assert_eq!(
+            positions.len(),
+            1,
+            "skill {skill_id} emits one procedural vfx"
+        );
+        positions[0]
+    }
+
+    #[test]
+    fn ground_shader_effects_anchor_at_the_feet_and_bursts_at_the_body() {
+        let target_pos = Vec3::new(3.0, 0.0, 7.0);
+        assert_eq!(
+            procedural_anchor(90, target_pos), // WZ_EARTHSPIKE, a `ground` entry
+            target_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
+        );
+        assert_eq!(
+            procedural_anchor(11, target_pos), // MG_NAPALMBEAT, a burst
+            target_pos + Vec3::new(0.0, VFX_BODY_HEIGHT, 0.0)
+        );
+    }
+
     #[test]
     fn procedural_skill_emits_vfx_without_spawning_effect() {
         let mut app = test_app();
@@ -1530,7 +1599,7 @@ mod tests {
         assert_eq!(emitted[0].key, "napalm_beat");
         assert_eq!(
             emitted[0].position,
-            target_pos + Vec3::new(0.0, VFX_CENTER_HEIGHT, 0.0)
+            target_pos + Vec3::new(0.0, VFX_BODY_HEIGHT, 0.0)
         );
 
         let damage = app
