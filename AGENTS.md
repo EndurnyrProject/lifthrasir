@@ -351,6 +351,9 @@ cargo run --release -p lifthrasir-runtime --example fx_capture -- \
   ro://effects/adrenaline_rush.strfx.ron /tmp/ar 0.05,0.15,0.3,0.5
 ```
 
+Pass `shader:<key>` instead of a path to play a `shader_fx` catalog entry at
+the client's anchor height (traveling entries fly in from the left).
+
 CPU tests do not validate
 rendering, sound, login, equipment previews or map-warp gameplay.
 
