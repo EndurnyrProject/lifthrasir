@@ -36,7 +36,7 @@ use bevy::render::camera::{MipBias, TemporalJitter};
 #[cfg(feature = "dlss")]
 use crate::domain::settings::resources::DlssMode;
 #[cfg(feature = "dlss")]
-use bevy::anti_alias::dlss::{Dlss, DlssSuperResolutionSupported};
+use bevy::anti_alias::dlss::{Dlss, DlssSuperResolutionFeature, DlssSuperResolutionSupported};
 
 /// Mirror saved preferences before shared sprite jobs dispatch, including boot defaults.
 #[auto_add_system(plugin = super::SettingsRuntimePlugin, schedule = Update,
@@ -304,7 +304,7 @@ fn apply_camera_effects(
     #[cfg(feature = "dlss")]
     if dlss_active {
         if let Some(perf_quality_mode) = graphics.dlss.to_perf_quality_mode() {
-            entity.insert(Dlss {
+            entity.insert(Dlss::<DlssSuperResolutionFeature> {
                 perf_quality_mode,
                 ..default()
             });

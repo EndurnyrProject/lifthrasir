@@ -97,3 +97,59 @@ jobs:
 
       - name: Build & Test
         run: cargo test --workspace --locked
+
+  # The `dlss` feature is only compiled by the release workflow, so without this
+  # job a break in its cfg-gated code reaches master silently. Both the DLSS SDK
+  # and the Vulkan headers are cloned here exactly as release.yml does, and the
+  # job is a `cargo check` rather than a build: it type-checks the feature-gated
+  # code without producing a distributable binary.
+  dlss-check:
+    runs-on: warp-ubuntu-latest-x64-8x
+    timeout-minutes: 60
+    env:
+      # Must match the dlss_wgpu version chart for the locked dlss_wgpu
+      # (6.0.0 for Bevy 0.20). Vulkan headers track its Dockerfile.
+      DLSS_VERSION: "310.9.1"
+      VULKAN_HEADERS_TAG: vulkan-sdk-1.4.335.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mold \
+            pkg-config \
+            libasound2-dev \
+            libudev-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            clang \
+            libclang-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up DLSS build environment
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "v${DLSS_VERSION}" \
+            https://github.com/NVIDIA/DLSS.git "${RUNNER_TEMP}/DLSS"
+          git clone --depth 1 --branch "${VULKAN_HEADERS_TAG}" \
+            https://github.com/KhronosGroup/Vulkan-Headers.git "${RUNNER_TEMP}/Vulkan-Headers"
+          echo "DLSS_SDK=${RUNNER_TEMP}/DLSS" >> "$GITHUB_ENV"
+          echo "VULKAN_SDK=${RUNNER_TEMP}/Vulkan-Headers" >> "$GITHUB_ENV"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: dlss-check
+          cache-on-failure: true
+
+      - name: Check dlss feature
+        run: cargo check -p lifthrasir --locked --features dlss
