@@ -14,10 +14,17 @@ impl StatusIconCatalog {
 
     /// The `ro://` texture path for an EFST's icon, or `None` when the status is
     /// name-only (empty image) or absent from the catalog. A `None` result is a
-    /// UI placeholder, not an error.
+    /// UI placeholder, not an error. An image containing `/` is a bundled icon
+    /// already rooted at `ro://`.
     pub fn icon_path(&self, efst: u32) -> Option<String> {
-        let entry = self.data.icons.get(&efst)?;
-        (!entry.image.is_empty()).then(|| format!("ro://data/texture/effect/{}", entry.image))
+        let image = &self.data.icons.get(&efst)?.image;
+        if image.is_empty() {
+            return None;
+        }
+        if image.contains('/') {
+            return Some(format!("ro://{image}"));
+        }
+        Some(format!("ro://data/texture/effect/{image}"))
     }
 
     /// The English display name for an EFST, or `None` when it is empty or the
@@ -92,6 +99,22 @@ mod tests {
         assert_eq!(
             catalog().icon_path(140).as_deref(),
             Some("ro://data/texture/effect/FOO.tga")
+        );
+    }
+
+    #[test]
+    fn icon_path_roots_bundled_image_at_ro() {
+        let mut data = StatusIconData::default();
+        data.icons.insert(
+            23,
+            StatusIconEntry {
+                image: "textures/status_icons/adrenaline.png".to_string(),
+                name: "Adrenaline Rush".to_string(),
+            },
+        );
+        assert_eq!(
+            StatusIconCatalog::new(data).icon_path(23).as_deref(),
+            Some("ro://textures/status_icons/adrenaline.png")
         );
     }
 

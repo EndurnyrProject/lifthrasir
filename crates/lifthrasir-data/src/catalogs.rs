@@ -87,8 +87,10 @@ pub struct SkillData {
     pub skills: BTreeMap<u32, SkillMeta>,
 }
 
-/// Per-status icon presentation: TGA image name and English display name,
-/// decoded from the client's EFST icon tables.
+/// Per-status icon presentation: image and English display name, decoded from
+/// the client's EFST icon tables. `image` is a bare retail TGA name under
+/// `data/texture/effect/`, or, when it contains a `/`, a path from the `ro://`
+/// root to a Lifthrasir-bundled icon.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusIconEntry {
     pub image: String,

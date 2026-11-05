@@ -342,7 +342,16 @@ cargo check --locked -p lifthrasir-runtime --examples
 
 The examples compile without a client session. Running `effect_preview` or
 `content_viewer` opens a window (the latter also opens audio), so obtain approval
-and suitable hardware first; see README commands. CPU tests do not validate
+and suitable hardware first; see README commands. `fx_capture` (same approval)
+plays one effect once beside a character-sized box and saves timed screenshots,
+which is the way to judge an authored `.strfx.ron` without running the client:
+
+```bash
+cargo run --release -p lifthrasir-runtime --example fx_capture -- \
+  ro://effects/adrenaline_rush.strfx.ron /tmp/ar 0.05,0.15,0.3,0.5
+```
+
+CPU tests do not validate
 rendering, sound, login, equipment previews or map-warp gameplay.
 
 The two ignored `effect_assets`/`gr2_assets` commands above are read-only checks

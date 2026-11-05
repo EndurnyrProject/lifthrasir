@@ -1084,9 +1084,9 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        155: ( // MC_LOUD -- native megaphone burst; no dedicated reference wav.
+        155: ( // MC_LOUD -- native megaphone burst with the EF_LOUD wav.
             visuals: [Str("loud.str")],
-            sound: None,
+            sound: Some("effect/고성방가.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1699,10 +1699,10 @@
             color: (0.7, 0.8, 1.0, 1.0),
             repeating: false,
         ),
-        459: ( // BS_ADRENALINE2 -- native advanced-rush STR (roBrowserLegacy).
+        459: ( // BS_ADRENALINE2 -- native advanced-rush STR with the EF_HASTEUP wav.
                // Aesir currently rejects the missing empowerment prerequisite.
             visuals: [Str("adrenaline.str")],
-            sound: None,
+            sound: Some("effect/black_adrenalinerush_b.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,

@@ -7,6 +7,8 @@ use anyhow::Context;
 use lifthrasir_data::{StatusIconData, StatusIconEntry};
 use std::path::Path;
 
+mod bundled;
+
 const EFSTIDS_PATH: &str = "data/luafiles514/lua files/stateicon/efstids.lub";
 const IMGINFO_PATH: &str = "data/luafiles514/lua files/stateicon/stateiconimginfo.lub";
 const INFO_PATH: &str = "data/luafiles514/lua files/stateicon/stateiconinfo.lub";
@@ -35,7 +37,8 @@ pub fn run(vfs: &GrfVfs, out: &Path) -> anyhow::Result<OperationReport> {
     lua::exec_chunk(&lua, &read_grf_lub(vfs, IMGINFO_PATH)?).map_err(lua_err)?;
     lua::exec_chunk(&lua, &read_state_icon_info(vfs)?).map_err(lua_err)?;
 
-    let data = extract_status_icons(&lua)?;
+    let mut data = extract_status_icons(&lua)?;
+    apply_bundled_icons(&mut data);
 
     let ron = ron::ser::to_string_pretty(&data, ron::ser::PrettyConfig::default())?;
     std::fs::create_dir_all(out).with_context(|| format!("creating {}", out.display()))?;
@@ -117,6 +120,17 @@ fn extract_status_icons(lua: &mlua::Lua) -> anyhow::Result<StatusIconData> {
         data.icons.entry(*id).or_default().name = (*name).to_string();
     }
     Ok(data)
+}
+
+/// Gives every EFST in [`bundled::ICONS`] its bundled image when the retail
+/// tables left it without one.
+fn apply_bundled_icons(data: &mut StatusIconData) {
+    for (id, file) in bundled::ICONS {
+        let entry = data.icons.entry(*id).or_default();
+        if entry.image.is_empty() {
+            entry.image = format!("{}/{file}", bundled::DIR);
+        }
+    }
 }
 
 /// `StateIconImgList` is `{ [priority] = { [efst_id] = "NAME.TGA" } }`. Flatten the
@@ -250,6 +264,41 @@ mod tests {
         assert_eq!(cart.name, "Cart");
         assert_eq!(cart.image, "");
         Ok(())
+    }
+
+    #[test]
+    fn bundled_icons_fill_only_missing_images() {
+        let mut data = StatusIconData::default();
+        data.icons.insert(
+            0,
+            StatusIconEntry {
+                image: "PROVOKE.TGA".to_string(),
+                name: "Provoke".to_string(),
+            },
+        );
+        data.icons.insert(
+            30,
+            StatusIconEntry {
+                image: String::new(),
+                name: "Crazy Uproar".to_string(),
+            },
+        );
+
+        apply_bundled_icons(&mut data);
+
+        assert_eq!(data.icons[&0].image, "PROVOKE.TGA");
+        assert_eq!(data.icons[&30].image, "textures/status_icons/shout.png");
+        assert_eq!(data.icons[&30].name, "Crazy Uproar");
+    }
+
+    #[test]
+    fn bundled_icon_files_exist() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/data")
+            .join(bundled::DIR);
+        for (id, file) in bundled::ICONS {
+            assert!(dir.join(file).is_file(), "EFST {id}: missing {file}");
+        }
     }
 
     #[test]
