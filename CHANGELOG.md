@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.0...v0.14.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* Pinning dep that broke DLSS compilation on windows/linux ([2700241](https://github.com/EndurnyrProject/lifthrasir/commit/27002414fccc25a0c8e88e3707f74be64f757cef))
+
 ## [0.14.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.13.0...v0.14.0) (2026-11-05)
 
 
