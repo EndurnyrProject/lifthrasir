@@ -8,7 +8,10 @@ use bevy::shader::ShaderRef;
 use lifthrasir_assets::effects::EffectBlend;
 
 /// Minimal unlit material for STR skill-effect billboards. The fragment shader
-/// outputs `texture x vertex_color`; blend is driven entirely by `alpha_mode`,
+/// outputs `texture x vertex_color` and gives pixels below the layer's anchor
+/// the depth of the ground plane, so the ground no longer hides the lower half
+/// of feet-anchored effects while props and units in front still do. Blend is
+/// driven entirely by `alpha_mode`,
 /// which Bevy already specializes the pipeline on. Per-frame texture is set on
 /// the material; per-frame geometry / UV / tint live in the mesh attributes.
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -20,6 +23,10 @@ pub struct EffectMaterial {
 }
 
 impl Material for EffectMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "ro://shaders/effect.wesl".into()
+    }
+
     fn fragment_shader() -> ShaderRef {
         "ro://shaders/effect.wesl".into()
     }
