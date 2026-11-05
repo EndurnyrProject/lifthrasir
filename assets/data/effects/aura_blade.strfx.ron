@@ -1,0 +1,108 @@
+// Aura Blade (LK_AURABLADE): the reference EF_AURABLADE plays the sound over a
+// small double white aura on the caster. Here two white aura pulses, pale
+// blue-white rays, and a blade of light (a tall streak with a short crossguard)
+// rising out of the body to stand over the head, with glints at its tips.
+// Effect layers share the character's plane, so nothing load-bearing sits
+// behind the body.
+// A cast burst, not the duration aura. ~0.8s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the caster's feet, smaller
+// y is higher, 1024 angle units per turn. Soft billboard textures only.
+(
+    fps: 30,
+    layers: [
+        // Pale rays rising around the body.
+        (
+            textures: ["ro://data/texture/effect/light_y_01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 278.0), quad: (70.0, 40.0), color: (190, 220, 255, 0) ),
+                ( at: 4, offset: (319.0, 246.0), quad: (120.0, 115.0), color: (200, 225, 255, 210) ),
+                ( at: 14, offset: (319.0, 228.0), quad: (130.0, 145.0), color: (190, 215, 255, 120) ),
+                ( at: 24, offset: (319.0, 212.0), quad: (135.0, 160.0), color: (180, 210, 255, 0) ),
+            ],
+        ),
+        // First white aura pulse, a halo around the body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 242.0), quad: (40.0, 40.0), color: (235, 245, 255, 0) ),
+                ( at: 3, offset: (319.0, 242.0), quad: (150.0, 165.0), color: (235, 245, 255, 255) ),
+                ( at: 12, offset: (319.0, 242.0), quad: (190.0, 205.0), color: (215, 230, 255, 0) ),
+            ],
+        ),
+        // Second pulse, the "double" of the reference.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7, offset: (319.0, 242.0), quad: (40.0, 40.0), color: (235, 245, 255, 0) ),
+                ( at: 10, offset: (319.0, 242.0), quad: (140.0, 155.0), color: (235, 245, 255, 235) ),
+                ( at: 19, offset: (319.0, 242.0), quad: (180.0, 195.0), color: (215, 230, 255, 0) ),
+            ],
+        ),
+        // Soft glow giving the light blade its body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 3, offset: (319.0, 225.0), quad: (14.0, 40.0), color: (170, 205, 255, 0) ),
+                ( at: 8, offset: (319.0, 170.0), quad: (34.0, 175.0), color: (180, 215, 255, 220) ),
+                ( at: 16, offset: (319.0, 162.0), quad: (34.0, 180.0), color: (170, 205, 255, 160) ),
+                ( at: 25, offset: (319.0, 154.0), quad: (20.0, 150.0), color: (150, 190, 255, 0) ),
+            ],
+        ),
+        // Blade of light rising out of the body to stand over the head.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 3, offset: (319.0, 230.0), quad: (60.0, 24.0), color: (220, 240, 255, 0), angle: 256.0 ),
+                ( at: 8, offset: (319.0, 170.0), quad: (170.0, 44.0), color: (235, 245, 255, 255), angle: 256.0 ),
+                ( at: 16, offset: (319.0, 162.0), quad: (176.0, 40.0), color: (225, 238, 255, 230), angle: 256.0 ),
+                ( at: 25, offset: (319.0, 154.0), quad: (150.0, 20.0), color: (210, 230, 255, 0), angle: 256.0 ),
+            ],
+        ),
+        // Crossguard just above the head.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (319.0, 200.0), quad: (20.0, 16.0), color: (220, 240, 255, 0) ),
+                ( at: 9, offset: (319.0, 186.0), quad: (90.0, 30.0), color: (235, 245, 255, 255) ),
+                ( at: 16, offset: (319.0, 178.0), quad: (96.0, 26.0), color: (225, 238, 255, 220) ),
+                ( at: 25, offset: (319.0, 168.0), quad: (70.0, 12.0), color: (210, 230, 255, 0) ),
+            ],
+        ),
+        // Glow where blade and crossguard meet.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7, offset: (319.0, 188.0), quad: (20.0, 20.0), color: (225, 240, 255, 0) ),
+                ( at: 9, offset: (319.0, 184.0), quad: (60.0, 60.0), color: (230, 242, 255, 230) ),
+                ( at: 22, offset: (319.0, 172.0), quad: (70.0, 70.0), color: (210, 230, 255, 0) ),
+            ],
+        ),
+        // Glint at the blade tip.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 8, offset: (319.0, 94.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 11, offset: (319.0, 88.0), quad: (56.0, 56.0), color: (240, 248, 255, 255), angle: 64.0 ),
+                ( at: 18, offset: (319.0, 80.0), quad: (16.0, 16.0), color: (220, 235, 255, 0), angle: 160.0 ),
+            ],
+        ),
+        // Glint on the crossguard tip.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 11, offset: (362.0, 184.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 14, offset: (364.0, 178.0), quad: (36.0, 36.0), color: (240, 248, 255, 240), angle: -64.0 ),
+                ( at: 20, offset: (366.0, 170.0), quad: (12.0, 12.0), color: (220, 235, 255, 0), angle: -160.0 ),
+            ],
+        ),
+    ],
+)

@@ -237,7 +237,7 @@
             repeating: false,
         ),
         8: ( // SM_ENDURE — hardcoded in the official client, no native STR; authored
-             // golden resolve pulse on the caster.
+             // after EF_ENDURE: the 忍 emblem shrinking onto the caster.
             visuals: [Str("endure.strfx.ron")],
             sound: Some("effect/ef_endure.wav"),
             placement: Caster,
@@ -1708,8 +1708,8 @@
             repeating: false,
         ),
         // --- Lord Knight (LK_*) ---------------------------------------------
-        355: ( // LK_AURABLADE -- approximate the hardcoded cast flash.
-            visuals: [Str("overthrust.strfx.ron")],
+        355: ( // LK_AURABLADE -- authored after the hardcoded double white aura.
+            visuals: [Str("aura_blade.strfx.ron")],
             sound: Some("effect/오라 블레이드.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -1736,11 +1736,12 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        359: ( // LK_BERSERK -- approximate the cast, not a persistent aura.
-            visuals: [Str("explosion_spirits.strfx.ron")],
+        359: ( // LK_BERSERK -- EF_REDBODY: red flare cast plus the reference quake.
+            visuals: [Str("berserk.strfx.ron")],
             sound: Some("effect/버서크.wav"),
+            shake: Some((amplitude: 4.0, duration_secs: 0.5)),
             placement: Caster,
-            color: (1.0, 0.65, 0.65, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         // --- High Priest (HP_*) ---------------------------------------------

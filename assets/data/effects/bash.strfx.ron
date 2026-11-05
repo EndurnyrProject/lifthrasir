@@ -32,13 +32,42 @@
             ],
         ),
         // Gold impact flash behind the slashes.
+        // Impact flash.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0, offset: (319.0, 238.0), quad: (14.0, 14.0),   color: (255, 240, 190, 0) ),
-                ( at: 2, offset: (319.0, 238.0), quad: (130.0, 130.0), color: (255, 242, 195, 230) ),
-                ( at: 8, offset: (319.0, 238.0), quad: (180.0, 180.0), color: (255, 232, 175, 0) ),
+                ( at: 0, offset: (319.0, 238.0), quad: (20.0, 20.0),   color: (255, 240, 190, 0) ),
+                ( at: 2, offset: (319.0, 238.0), quad: (120.0, 120.0), color: (255, 242, 195, 255) ),
+                ( at: 8, offset: (319.0, 238.0), quad: (150.0, 150.0), color: (255, 232, 175, 0) ),
+            ],
+        ),
+        // Hit sparkles thrown off the impact (the reference EF_HIT1 pok3 stars).
+        (
+            textures: ["ro://data/texture/effect/pok3.tga"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (319.0, 238.0), quad: (10.0, 10.0), color: (255, 250, 220, 0) ),
+                ( at: 3, offset: (296.0, 222.0), quad: (36.0, 36.0), color: (255, 250, 220, 255) ),
+                ( at: 9, offset: (284.0, 214.0), quad: (14.0, 14.0), color: (255, 235, 180, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok3.tga"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (319.0, 238.0), quad: (10.0, 10.0), color: (255, 250, 220, 0) ),
+                ( at: 3, offset: (345.0, 230.0), quad: (30.0, 30.0), color: (255, 250, 220, 255) ),
+                ( at: 9, offset: (358.0, 226.0), quad: (12.0, 12.0), color: (255, 235, 180, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok3.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (319.0, 240.0), quad: (10.0, 10.0), color: (255, 250, 220, 0) ),
+                ( at: 4, offset: (326.0, 262.0), quad: (28.0, 28.0), color: (255, 250, 220, 240) ),
+                ( at: 10, offset: (330.0, 274.0), quad: (10.0, 10.0), color: (255, 235, 180, 0) ),
             ],
         ),
     ],

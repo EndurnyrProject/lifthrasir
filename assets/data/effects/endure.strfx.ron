@@ -1,43 +1,86 @@
-// Endure (SM_ENDURE) - authored effect.
-//
-// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
-// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
-// linear key lerp, Add = additive.
-//
-// Shape: a brief golden resolve pulse on the caster -- a warm body flash, tall
-// golden streaks sweeping up the body, and a small ring pulse at the feet.
-// Hardcoded in the official client, no native STR. ~16f.
+// Endure (SM_ENDURE): as the reference EF_ENDURE draws it, the native endure.tga
+// (忍) emblem shrinks onto the caster while light streaks slide in toward
+// the body, over a short gold glow. ~0.5s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the anchor's feet, smaller
+// y is higher, 1024 angle units per turn. Soft billboard textures only: the
+// ring_*/lens_* bands are cylinder wraps and read as boxes when drawn flat.
 (
     fps: 30,
     layers: [
-        // Warm golden body flash.
+        // Gold glow.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 250.0), quad: (20.0, 20.0),   color: (255, 220, 140, 0) ),
-                ( at: 4,  offset: (319.0, 250.0), quad: (150.0, 150.0), color: (255, 226, 150, 220) ),
-                ( at: 12, offset: (319.0, 250.0), quad: (190.0, 190.0), color: (255, 210, 130, 0) ),
+                ( at: 0, offset: (319.0, 245.0), quad: (30.0, 30.0), color: (255, 220, 120, 0) ),
+                ( at: 4, offset: (319.0, 245.0), quad: (120.0, 120.0), color: (255, 225, 130, 200) ),
+                ( at: 15, offset: (319.0, 245.0), quad: (140.0, 140.0), color: (255, 200, 90, 0) ),
             ],
         ),
-        // Golden streaks rising along the body.
+        // Shrinking 忍 emblem.
         (
-            textures: ["ro://data/texture/effect/lens_y.bmp"],
+            textures: ["ro://data/texture/effect/endure.tga"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 270.0), quad: (60.0, 120.0), color: (255, 230, 150, 0) ),
-                ( at: 5,  offset: (319.0, 235.0), quad: (80.0, 170.0), color: (255, 235, 160, 200) ),
-                ( at: 14, offset: (319.0, 202.0), quad: (90.0, 200.0), color: (255, 220, 140, 0) ),
+                ( at: 0, offset: (319.0, 240.0), quad: (140.0, 140.0), color: (255, 255, 255, 0) ),
+                ( at: 4, offset: (319.0, 240.0), quad: (100.0, 100.0), color: (255, 255, 255, 255) ),
+                ( at: 10, offset: (319.0, 240.0), quad: (75.0, 75.0), color: (255, 255, 255, 230) ),
+                ( at: 16, offset: (319.0, 240.0), quad: (45.0, 45.0), color: (255, 255, 255, 0) ),
             ],
         ),
-        // Ground ring pulse at the feet.
+        // Inward streak.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/line3y.tga"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 291.0), quad: (30.0, 18.0),   color: (255, 215, 140, 0) ),
-                ( at: 5,  offset: (319.0, 291.0), quad: (140.0, 80.0),  color: (255, 220, 150, 170) ),
-                ( at: 12, offset: (319.0, 291.0), quad: (190.0, 110.0), color: (255, 205, 130, 0) ),
+                ( at: 0, offset: (249.0, 240.0), quad: (70.0, 12.8), color: (255, 235, 150, 0), angle: 256.0 ),
+                ( at: 3, offset: (277.0, 240.0), quad: (60.0, 11.2), color: (255, 240, 170, 230), angle: 256.0 ),
+                ( at: 7, offset: (305.0, 240.0), quad: (40.0, 6.4), color: (255, 220, 120, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (389.0, 230.0), quad: (70.0, 12.8), color: (255, 235, 150, 0), angle: 256.0 ),
+                ( at: 4, offset: (361.0, 230.0), quad: (60.0, 11.2), color: (255, 240, 170, 230), angle: 256.0 ),
+                ( at: 8, offset: (333.0, 230.0), quad: (40.0, 6.4), color: (255, 220, 120, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (259.0, 205.0), quad: (70.0, 12.8), color: (255, 235, 150, 0), angle: 256.0 ),
+                ( at: 5, offset: (283.0, 205.0), quad: (60.0, 11.2), color: (255, 240, 170, 230), angle: 256.0 ),
+                ( at: 9, offset: (307.0, 205.0), quad: (40.0, 6.4), color: (255, 220, 120, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 3, offset: (381.0, 255.0), quad: (70.0, 12.8), color: (255, 235, 150, 0), angle: 256.0 ),
+                ( at: 6, offset: (356.2, 255.0), quad: (60.0, 11.2), color: (255, 240, 170, 230), angle: 256.0 ),
+                ( at: 10, offset: (331.4, 255.0), quad: (40.0, 6.4), color: (255, 220, 120, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 4, offset: (244.0, 260.0), quad: (70.0, 12.8), color: (255, 235, 150, 0), angle: 256.0 ),
+                ( at: 7, offset: (274.0, 260.0), quad: (60.0, 11.2), color: (255, 240, 170, 230), angle: 256.0 ),
+                ( at: 11, offset: (304.0, 260.0), quad: (40.0, 6.4), color: (255, 220, 120, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (393.0, 210.0), quad: (70.0, 12.8), color: (255, 235, 150, 0), angle: 256.0 ),
+                ( at: 8, offset: (363.4, 210.0), quad: (60.0, 11.2), color: (255, 240, 170, 230), angle: 256.0 ),
+                ( at: 12, offset: (333.8, 210.0), quad: (40.0, 6.4), color: (255, 220, 120, 0), angle: 256.0 ),
             ],
         ),
     ],

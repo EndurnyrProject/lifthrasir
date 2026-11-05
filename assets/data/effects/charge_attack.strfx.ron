@@ -1,47 +1,93 @@
-// Charge Attack (KN_CHARGEATK) - authored effect.
-//
-// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
-// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
-// linear key lerp, Add = additive.
-//
-// Shape: a body-slam rush impact on the target -- a hard white core flash, a
-// flat shockwave ring snapping outward along the ground, and a dust kick-up
-// thrown forward off the hit. Hardcoded in the official client, no native
-// STR. Neutral white/grey so it reads as raw force, not an element. ~20f.
+// Charge Attack (KN_CHARGEATK): the reference only plays the hit sound. Here
+// speed streaks rush in from the side into a heavy impact: an explosion
+// flipbook, a white flash and a dust puff at the feet. ~0.6s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the anchor's feet, smaller
+// y is higher, 1024 angle units per turn. Soft billboard textures only: the
+// ring_*/lens_* bands are cylinder wraps and read as boxes when drawn flat.
 (
     fps: 30,
     layers: [
-        // Hard core flash at the point of impact.
+        // Impact flash.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 245.0), quad: (16.0, 16.0),   color: (255, 255, 255, 0) ),
-                ( at: 2,  offset: (319.0, 245.0), quad: (140.0, 140.0), color: (255, 255, 255, 245) ),
-                ( at: 7,  offset: (319.0, 245.0), quad: (190.0, 190.0), color: (235, 240, 255, 120) ),
-                ( at: 12, offset: (319.0, 245.0), quad: (220.0, 220.0), color: (220, 230, 250, 0) ),
+                ( at: 2, offset: (319.0, 245.0), quad: (30.0, 30.0), color: (255, 250, 230, 0) ),
+                ( at: 4, offset: (319.0, 245.0), quad: (150.0, 150.0), color: (255, 250, 230, 255) ),
+                ( at: 12, offset: (319.0, 245.0), quad: (170.0, 170.0), color: (255, 230, 190, 0) ),
             ],
         ),
-        // Ground shockwave ring.
+        // Rush streaks.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/line3y.tga"],
             blend: Add,
             keys: [
-                ( at: 1,  offset: (319.0, 291.0), quad: (30.0, 18.0),   color: (255, 255, 255, 0) ),
-                ( at: 6,  offset: (319.0, 291.0), quad: (240.0, 135.0), color: (245, 248, 255, 220) ),
-                ( at: 13, offset: (319.0, 291.0), quad: (380.0, 215.0), color: (225, 235, 250, 100) ),
-                ( at: 19, offset: (319.0, 291.0), quad: (440.0, 250.0), color: (210, 225, 245, 0) ),
+                ( at: 0, offset: (239.0, 232.0), quad: (40.0, 10.0), color: (255, 245, 220, 0) ),
+                ( at: 2, offset: (289.0, 232.0), quad: (110.0, 16.0), color: (255, 245, 225, 240) ),
+                ( at: 6, offset: (330.0, 232.0), quad: (66.0, 8.0), color: (255, 230, 190, 0) ),
             ],
         ),
-        // Dust thrown up off the slam.
         (
-            textures: ["ro://data/texture/effect/dust_blast.bmp"],
+            textures: ["ro://data/texture/effect/line3y.tga"],
             blend: Add,
             keys: [
-                ( at: 2,  offset: (319.0, 285.0), quad: (50.0, 38.0),   color: (190, 185, 175, 0) ),
-                ( at: 7,  offset: (319.0, 272.0), quad: (160.0, 120.0), color: (205, 200, 190, 170) ),
-                ( at: 14, offset: (319.0, 258.0), quad: (220.0, 160.0), color: (185, 180, 170, 80) ),
-                ( at: 20, offset: (319.0, 246.0), quad: (260.0, 185.0), color: (165, 160, 150, 0) ),
+                ( at: 1, offset: (239.0, 248.0), quad: (40.0, 10.0), color: (255, 245, 220, 0) ),
+                ( at: 3, offset: (289.0, 248.0), quad: (130.0, 16.0), color: (255, 245, 225, 240) ),
+                ( at: 7, offset: (330.0, 248.0), quad: (78.0, 8.0), color: (255, 230, 190, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (239.0, 262.0), quad: (40.0, 10.0), color: (255, 245, 220, 0) ),
+                ( at: 4, offset: (289.0, 262.0), quad: (100.0, 16.0), color: (255, 245, 225, 240) ),
+                ( at: 8, offset: (330.0, 262.0), quad: (60.0, 8.0), color: (255, 230, 190, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (239.0, 220.0), quad: (40.0, 10.0), color: (255, 245, 220, 0) ),
+                ( at: 4, offset: (289.0, 220.0), quad: (80.0, 16.0), color: (255, 245, 225, 240) ),
+                ( at: 8, offset: (330.0, 220.0), quad: (48.0, 8.0), color: (255, 230, 190, 0) ),
+            ],
+        ),
+        // Impact explosion.
+        (
+            textures: [
+                "ro://data/texture/effect/폭발1.tga",
+                "ro://data/texture/effect/폭발2.tga",
+                "ro://data/texture/effect/폭발3.tga",
+                "ro://data/texture/effect/폭발4.tga",
+                "ro://data/texture/effect/폭발5.tga",
+                "ro://data/texture/effect/폭발6.tga",
+                "ro://data/texture/effect/폭발7.tga",
+                "ro://data/texture/effect/폭발8.tga",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 3, offset: (319.0, 245.0), quad: (50.0, 50.0), color: (255, 255, 255, 0), texture_index: 0 ),
+                ( at: 4, offset: (319.0, 245.0), quad: (90.0, 90.0), color: (255, 255, 240, 255), texture_index: 0 ),
+                ( at: 6, offset: (319.0, 243.0), quad: (98.0, 98.0), color: (255, 255, 240, 255), texture_index: 1 ),
+                ( at: 8, offset: (319.0, 241.0), quad: (106.0, 106.0), color: (255, 255, 240, 255), texture_index: 2 ),
+                ( at: 10, offset: (319.0, 239.0), quad: (114.0, 114.0), color: (255, 255, 240, 255), texture_index: 3 ),
+                ( at: 12, offset: (319.0, 237.0), quad: (122.0, 122.0), color: (255, 255, 240, 255), texture_index: 4 ),
+                ( at: 14, offset: (319.0, 235.0), quad: (130.0, 130.0), color: (255, 255, 240, 185), texture_index: 5 ),
+                ( at: 16, offset: (319.0, 233.0), quad: (138.0, 138.0), color: (255, 255, 240, 115), texture_index: 6 ),
+                ( at: 18, offset: (319.0, 231.0), quad: (146.0, 146.0), color: (255, 255, 240, 45), texture_index: 7 ),
+                ( at: 21, offset: (319.0, 228.0), quad: (160.0, 160.0), color: (255, 230, 200, 0), texture_index: 7 ),
+            ],
+        ),
+        // Dust at the feet.
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4, offset: (319.0, 287.0), quad: (40.0, 14.0), color: (230, 210, 180, 0) ),
+                ( at: 7, offset: (319.0, 286.0), quad: (150.0, 45.0), color: (200, 170, 130, 200) ),
+                ( at: 18, offset: (319.0, 284.0), quad: (210.0, 60.0), color: (210, 190, 160, 0) ),
             ],
         ),
     ],

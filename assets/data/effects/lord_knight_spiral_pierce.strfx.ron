@@ -1,33 +1,157 @@
-// Spiral Pierce: approximate the five-hit spear impact in one damage event.
-// Damage numbers are staggered separately by the skill-damage handler.
+// Spiral Pierce (LK_SPIRALPIERCE): five spear thrusts dive into the target from
+// alternating sides, each landing with a glow and a cross glint, over a steady cool glow.
+// The reference only plays sounds; this is an approximation. Also reused by
+// Shield Chain. ~0.9s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the anchor's feet, smaller
+// y is higher, 1024 angle units per turn. Soft billboard textures only: the
+// ring_*/lens_* bands are cylinder wraps and read as boxes when drawn flat.
 (
     fps: 30,
     layers: [
+        // Steady glow under the five hits.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (319.0, 245.0), quad: (35.0, 80.0), color: (220, 235, 255, 0), angle: 0.0),
-                (at: 4, offset: (319.0, 245.0), quad: (120.0, 150.0), color: (220, 235, 255, 210), angle: 384.0),
-                (at: 12, offset: (319.0, 245.0), quad: (165.0, 190.0), color: (200, 220, 255, 180), angle: 1152.0),
-                (at: 24, offset: (319.0, 245.0), quad: (200.0, 225.0), color: (180, 205, 255, 0), angle: 2304.0),
+                ( at: 0, offset: (319.0, 245.0), quad: (30.0, 30.0), color: (230, 240, 255, 0) ),
+                ( at: 3, offset: (319.0, 245.0), quad: (130.0, 130.0), color: (230, 240, 255, 200) ),
+                ( at: 26, offset: (319.0, 245.0), quad: (150.0, 150.0), color: (220, 230, 255, 0) ),
+            ],
+        ),
+        // Thrust 1.
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (229.0, 155.0), quad: (50.0, 10.0), color: (220, 235, 255, 0), angle: 128.0 ),
+                ( at: 2, offset: (274.0, 200.0), quad: (170.0, 24.0), color: (235, 245, 255, 255), angle: 128.0 ),
+                ( at: 4, offset: (319.0, 245.0), quad: (90.0, 12.0), color: (220, 235, 255, 0), angle: 128.0 ),
             ],
         ),
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
-                (at: 1, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
-                (at: 3, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
-                (at: 5, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
-                (at: 7, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
-                (at: 10, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
-                (at: 12, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
-                (at: 14, offset: (319.0, 245.0), quad: (105.0, 105.0), color: (255, 255, 255, 235)),
-                (at: 16, offset: (319.0, 245.0), quad: (65.0, 65.0), color: (255, 255, 255, 0)),
-                (at: 19, offset: (319.0, 245.0), quad: (125.0, 125.0), color: (255, 255, 255, 255)),
-                (at: 23, offset: (319.0, 245.0), quad: (150.0, 150.0), color: (225, 235, 255, 0)),
+                ( at: 2, offset: (319.0, 245.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 3, offset: (319.0, 245.0), quad: (90.0, 90.0), color: (240, 248, 255, 255) ),
+                ( at: 7, offset: (319.0, 245.0), quad: (100.0, 100.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (319.0, 245.0), quad: (5.0, 5.0), color: (235, 245, 255, 0) ),
+                ( at: 3, offset: (319.0, 245.0), quad: (60.0, 60.0), color: (240, 248, 255, 255) ),
+                ( at: 7, offset: (319.0, 245.0), quad: (71.0, 71.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (409.0, 155.0), quad: (50.0, 10.0), color: (220, 235, 255, 0), angle: 384.0 ),
+                ( at: 7, offset: (364.0, 200.0), quad: (170.0, 24.0), color: (235, 245, 255, 255), angle: 384.0 ),
+                ( at: 9, offset: (319.0, 245.0), quad: (90.0, 12.0), color: (220, 235, 255, 0), angle: 384.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7, offset: (319.0, 245.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 8, offset: (319.0, 245.0), quad: (90.0, 90.0), color: (240, 248, 255, 255) ),
+                ( at: 12, offset: (319.0, 245.0), quad: (100.0, 100.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7, offset: (319.0, 245.0), quad: (5.0, 5.0), color: (235, 245, 255, 0) ),
+                ( at: 8, offset: (319.0, 245.0), quad: (60.0, 60.0), color: (240, 248, 255, 255) ),
+                ( at: 12, offset: (319.0, 245.0), quad: (71.0, 71.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 10, offset: (229.0, 191.0), quad: (50.0, 10.0), color: (220, 235, 255, 0), angle: 179.2 ),
+                ( at: 12, offset: (274.0, 218.0), quad: (170.0, 24.0), color: (235, 245, 255, 255), angle: 179.2 ),
+                ( at: 14, offset: (319.0, 245.0), quad: (90.0, 12.0), color: (220, 235, 255, 0), angle: 179.2 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (319.0, 245.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 13, offset: (319.0, 245.0), quad: (90.0, 90.0), color: (240, 248, 255, 255) ),
+                ( at: 17, offset: (319.0, 245.0), quad: (100.0, 100.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (319.0, 245.0), quad: (5.0, 5.0), color: (235, 245, 255, 0) ),
+                ( at: 13, offset: (319.0, 245.0), quad: (60.0, 60.0), color: (240, 248, 255, 255) ),
+                ( at: 17, offset: (319.0, 245.0), quad: (71.0, 71.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 15, offset: (409.0, 191.0), quad: (50.0, 10.0), color: (220, 235, 255, 0), angle: 332.8 ),
+                ( at: 17, offset: (364.0, 218.0), quad: (170.0, 24.0), color: (235, 245, 255, 255), angle: 332.8 ),
+                ( at: 19, offset: (319.0, 245.0), quad: (90.0, 12.0), color: (220, 235, 255, 0), angle: 332.8 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 17, offset: (319.0, 245.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 18, offset: (319.0, 245.0), quad: (90.0, 90.0), color: (240, 248, 255, 255) ),
+                ( at: 22, offset: (319.0, 245.0), quad: (100.0, 100.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 17, offset: (319.0, 245.0), quad: (5.0, 5.0), color: (235, 245, 255, 0) ),
+                ( at: 18, offset: (319.0, 245.0), quad: (60.0, 60.0), color: (240, 248, 255, 255) ),
+                ( at: 22, offset: (319.0, 245.0), quad: (71.0, 71.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/line3y.tga"],
+            blend: Add,
+            keys: [
+                ( at: 20, offset: (319.0, 155.0), quad: (50.0, 10.0), color: (220, 235, 255, 0), angle: 256.0 ),
+                ( at: 22, offset: (319.0, 200.0), quad: (170.0, 24.0), color: (235, 245, 255, 255), angle: 256.0 ),
+                ( at: 24, offset: (319.0, 245.0), quad: (90.0, 12.0), color: (220, 235, 255, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 22, offset: (319.0, 245.0), quad: (10.0, 10.0), color: (235, 245, 255, 0) ),
+                ( at: 23, offset: (319.0, 245.0), quad: (90.0, 90.0), color: (240, 248, 255, 255) ),
+                ( at: 27, offset: (319.0, 245.0), quad: (100.0, 100.0), color: (220, 235, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 22, offset: (319.0, 245.0), quad: (5.0, 5.0), color: (235, 245, 255, 0) ),
+                ( at: 23, offset: (319.0, 245.0), quad: (60.0, 60.0), color: (240, 248, 255, 255) ),
+                ( at: 27, offset: (319.0, 245.0), quad: (71.0, 71.0), color: (220, 235, 255, 0) ),
             ],
         ),
     ],
