@@ -47,7 +47,7 @@
         ),
         // Pink glow around the head.
         (
-            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 212.0), quad: (30.0, 30.0),   color: (255, 150, 200, 0) ),

@@ -13,7 +13,7 @@
     layers: [
         // Cold flash at the chest.
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 240.0), quad: (20.0, 20.0),   color: (200, 235, 255, 0) ),
@@ -45,12 +45,12 @@
         ),
         // Frost ring racing out along the ground.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 3,  offset: (319.0, 291.0), quad: (40.0, 20.0),   color: (200, 235, 255, 0) ),
-                ( at: 8,  offset: (319.0, 291.0), quad: (200.0, 100.0), color: (215, 240, 255, 210) ),
-                ( at: 22, offset: (319.0, 291.0), quad: (380.0, 190.0), color: (190, 225, 255, 0) ),
+                ( at: 3,  offset: (319.0, 287.0), quad: (40.0, 12.0),   color: (200, 235, 255, 0) ),
+                ( at: 8,  offset: (319.0, 287.0), quad: (200.0, 60.0), color: (215, 240, 255, 210) ),
+                ( at: 22, offset: (319.0, 287.0), quad: (380.0, 114.0), color: (190, 225, 255, 0) ),
             ],
         ),
     ],

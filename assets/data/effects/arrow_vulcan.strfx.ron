@@ -4,91 +4,98 @@
 // (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
 // key lerp, Add = additive. Angles are raw STR units (1024 per turn).
 //
-// Shape: the Clown/Gypsy signature volley -- a dense gold-white flurry of six
-// arrows hammering the torso in rapid succession. The warm tint reads as the
-// bard's own barrage, distinct from the cool two-shot Double Strafe and the
-// broad scattered Arrow Shower. ~22f so the flurry stays one burst.
+// Shape: the Clown/Gypsy signature volley -- six retail arrow streaks
+// (allow_b.bmp) hammer the torso from all sides in rapid succession, each tip
+// stopping at the body, then a warm glow11 flash where they concentrate. ~22f
+// so the flurry stays one burst. allow_b points left at angle 0 and angles
+// turn clockwise, so each angle is derived from its flight direction.
 (
     fps: 30,
     layers: [
         // Arrow 1: upper-left, first to land.
         (
-            textures: ["ro://data/texture/effect/spear.bmp"],
+            textures: ["ro://data/texture/effect/allow_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 0, offset: (262.0, 196.0), quad: (24.0, 6.0),   color: (255, 240, 195, 0),   angle: 128.0 ),
-                ( at: 2, offset: (292.0, 228.0), quad: (108.0, 22.0), color: (255, 245, 205, 235), angle: 128.0 ),
-                ( at: 4, offset: (310.0, 240.0), quad: (126.0, 25.0), color: (255, 232, 170, 0),   angle: 128.0 ),
+                ( at: 0, offset: (212.0, 157.0), quad: (90.0, 17.0), color: (255, 245, 210, 0), angle: 616.9 ),
+                ( at: 1, offset: (237.6, 176.2), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 616.9 ),
+                ( at: 3, offset: (276.0, 205.0), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 616.9 ),
+                ( at: 5, offset: (282.4, 209.8), quad: (54.0, 15.3), color: (255, 220, 160, 0), angle: 616.9 ),
             ],
         ),
         // Arrow 2: upper-right, a beat behind.
         (
-            textures: ["ro://data/texture/effect/spear.bmp"],
+            textures: ["ro://data/texture/effect/allow_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 2, offset: (376.0, 196.0), quad: (24.0, 6.0),   color: (255, 240, 195, 0),   angle: -128.0 ),
-                ( at: 4, offset: (346.0, 228.0), quad: (108.0, 22.0), color: (255, 245, 205, 235), angle: -128.0 ),
-                ( at: 6, offset: (328.0, 240.0), quad: (126.0, 25.0), color: (255, 232, 170, 0),   angle: -128.0 ),
+                ( at: 2, offset: (426.0, 157.0), quad: (90.0, 17.0), color: (255, 245, 210, 0), angle: 919.1 ),
+                ( at: 3, offset: (400.4, 176.2), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 919.1 ),
+                ( at: 5, offset: (362.0, 205.0), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 919.1 ),
+                ( at: 7, offset: (355.6, 209.8), quad: (54.0, 15.3), color: (255, 220, 160, 0), angle: 919.1 ),
             ],
         ),
         // Arrow 3: near-horizontal from the left.
         (
-            textures: ["ro://data/texture/effect/spear.bmp"],
+            textures: ["ro://data/texture/effect/allow_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 4, offset: (258.0, 232.0), quad: (22.0, 6.0),   color: (255, 240, 195, 0),   angle: 96.0 ),
-                ( at: 6, offset: (296.0, 238.0), quad: (100.0, 21.0), color: (255, 245, 205, 240), angle: 96.0 ),
-                ( at: 8, offset: (314.0, 241.0), quad: (120.0, 24.0), color: (255, 232, 170, 0),   angle: 96.0 ),
+                ( at: 4, offset: (188.9, 227.1), quad: (90.0, 17.0), color: (255, 245, 210, 0), angle: 531.5 ),
+                ( at: 5, offset: (220.7, 230.9), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 531.5 ),
+                ( at: 7, offset: (268.3, 236.6), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 531.5 ),
+                ( at: 9, offset: (276.3, 237.6), quad: (54.0, 15.3), color: (255, 220, 160, 0), angle: 531.5 ),
             ],
         ),
         // Arrow 4: near-horizontal from the right.
         (
-            textures: ["ro://data/texture/effect/spear.bmp"],
+            textures: ["ro://data/texture/effect/allow_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 6, offset: (380.0, 232.0), quad: (22.0, 6.0),   color: (255, 240, 195, 0),   angle: -96.0 ),
-                ( at: 8, offset: (342.0, 238.0), quad: (100.0, 21.0), color: (255, 245, 205, 240), angle: -96.0 ),
-                ( at: 10, offset: (324.0, 241.0), quad: (120.0, 24.0), color: (255, 232, 170, 0),   angle: -96.0 ),
+                ( at: 6, offset: (449.1, 227.1), quad: (90.0, 17.0), color: (255, 245, 210, 0), angle: 1004.5 ),
+                ( at: 7, offset: (417.3, 230.9), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 1004.5 ),
+                ( at: 9, offset: (369.7, 236.6), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 1004.5 ),
+                ( at: 11, offset: (361.7, 237.6), quad: (54.0, 15.3), color: (255, 220, 160, 0), angle: 1004.5 ),
             ],
         ),
         // Arrow 5: dropping from above.
         (
-            textures: ["ro://data/texture/effect/spear.bmp"],
+            textures: ["ro://data/texture/effect/allow_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 8,  offset: (300.0, 190.0), quad: (22.0, 6.0),   color: (255, 240, 195, 0),   angle: 64.0 ),
-                ( at: 10, offset: (314.0, 230.0), quad: (104.0, 22.0), color: (255, 245, 205, 240), angle: 64.0 ),
-                ( at: 12, offset: (319.0, 240.0), quad: (124.0, 25.0), color: (255, 232, 170, 0),   angle: 64.0 ),
+                ( at: 8, offset: (281.1, 110.3), quad: (90.0, 17.0), color: (255, 245, 210, 0), angle: 720.5 ),
+                ( at: 9, offset: (290.3, 140.9), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 720.5 ),
+                ( at: 11, offset: (304.1, 186.9), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 720.5 ),
+                ( at: 13, offset: (306.4, 194.6), quad: (54.0, 15.3), color: (255, 220, 160, 0), angle: 720.5 ),
             ],
         ),
         // Arrow 6: rising from below to close the volley.
         (
-            textures: ["ro://data/texture/effect/spear.bmp"],
+            textures: ["ro://data/texture/effect/allow_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 10, offset: (270.0, 268.0), quad: (22.0, 6.0),   color: (255, 240, 195, 0),   angle: 200.0 ),
-                ( at: 12, offset: (300.0, 248.0), quad: (100.0, 21.0), color: (255, 245, 205, 240), angle: 200.0 ),
-                ( at: 14, offset: (315.0, 242.0), quad: (118.0, 24.0), color: (255, 232, 170, 0),   angle: 200.0 ),
+                ( at: 10, offset: (199.8, 296.8), quad: (90.0, 17.0), color: (255, 245, 210, 0), angle: 443.8 ),
+                ( at: 11, offset: (229.0, 283.8), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 443.8 ),
+                ( at: 13, offset: (272.9, 264.3), quad: (90.0, 17.0), color: (255, 245, 210, 255), angle: 443.8 ),
+                ( at: 15, offset: (280.2, 261.0), quad: (54.0, 15.3), color: (255, 220, 160, 0), angle: 443.8 ),
             ],
         ),
         // Warm impact flash where the volley concentrates.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 12, offset: (319.0, 240.0), quad: (18.0, 18.0),   color: (255, 245, 200, 0) ),
-                ( at: 14, offset: (319.0, 240.0), quad: (120.0, 120.0), color: (255, 240, 180, 235) ),
-                ( at: 18, offset: (319.0, 240.0), quad: (150.0, 150.0), color: (255, 228, 160, 0) ),
+                ( at: 12, offset: (319.0, 240.0), quad: (18.0, 18.0), color: (255, 245, 200, 0) ),
+                ( at: 14, offset: (319.0, 240.0), quad: (130.0, 130.0), color: (255, 240, 180, 240) ),
+                ( at: 18, offset: (319.0, 240.0), quad: (160.0, 160.0), color: (255, 228, 160, 0) ),
             ],
         ),
         // Lingering afterglow.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 16, offset: (319.0, 242.0), quad: (16.0, 16.0),   color: (255, 240, 190, 0) ),
-                ( at: 18, offset: (319.0, 242.0), quad: (90.0, 90.0),   color: (255, 235, 175, 200) ),
-                ( at: 22, offset: (319.0, 242.0), quad: (110.0, 110.0), color: (255, 225, 150, 0) ),
+                ( at: 16, offset: (319.0, 242.0), quad: (16.0, 16.0), color: (255, 240, 190, 0) ),
+                ( at: 18, offset: (319.0, 242.0), quad: (96.0, 96.0), color: (255, 235, 175, 200) ),
+                ( at: 22, offset: (319.0, 242.0), quad: (116.0, 116.0), color: (255, 225, 150, 0) ),
             ],
         ),
     ],

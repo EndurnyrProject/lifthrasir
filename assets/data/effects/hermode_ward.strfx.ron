@@ -18,14 +18,14 @@
             blend: Blend,
             keys: [
                 ( at: 0,  offset: (319.0, 216.0), quad: (24.0, 24.0),   color: (185, 205, 255, 0),   angle: 0.0 ),
-                ( at: 8,  offset: (319.0, 214.0), quad: (110.0, 110.0), color: (205, 220, 255, 220), angle: 40.0 ),
-                ( at: 24, offset: (319.0, 212.0), quad: (140.0, 140.0), color: (190, 208, 255, 150), angle: 110.0 ),
-                ( at: 38, offset: (319.0, 210.0), quad: (160.0, 160.0), color: (175, 195, 250, 0),   angle: 170.0 ),
+                ( at: 8,  offset: (319.0, 214.0), quad: (90.0, 90.0), color: (205, 220, 255, 220), angle: 40.0 ),
+                ( at: 24, offset: (319.0, 212.0), quad: (90.0, 90.0), color: (190, 208, 255, 150), angle: 110.0 ),
+                ( at: 38, offset: (319.0, 210.0), quad: (90.0, 90.0), color: (175, 195, 250, 0),   angle: 170.0 ),
             ],
         ),
         // Cold flare sealing at the chest.
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 2,  offset: (319.0, 240.0), quad: (20.0, 20.0),   color: (200, 220, 255, 0) ),
@@ -36,13 +36,13 @@
         ),
         // Sealing ring clamping outward along the ground.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 5,  offset: (319.0, 291.0), quad: (40.0, 20.0),   color: (185, 205, 255, 0) ),
-                ( at: 11, offset: (319.0, 291.0), quad: (220.0, 110.0), color: (205, 222, 255, 220) ),
-                ( at: 24, offset: (319.0, 291.0), quad: (360.0, 180.0), color: (185, 205, 255, 120) ),
-                ( at: 36, offset: (319.0, 291.0), quad: (420.0, 210.0), color: (170, 190, 248, 0) ),
+                ( at: 5,  offset: (319.0, 287.0), quad: (40.0, 12.0),   color: (185, 205, 255, 0) ),
+                ( at: 11, offset: (319.0, 287.0), quad: (220.0, 66.0), color: (205, 222, 255, 220) ),
+                ( at: 24, offset: (319.0, 287.0), quad: (360.0, 108.0), color: (185, 205, 255, 120) ),
+                ( at: 36, offset: (319.0, 287.0), quad: (420.0, 126.0), color: (170, 190, 248, 0) ),
             ],
         ),
         // Cold note rising as the block settles.

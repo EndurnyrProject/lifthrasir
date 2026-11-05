@@ -12,7 +12,7 @@
     layers: [
         // Flash at the mouth.
         (
-            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0, offset: (319.0, 218.0), quad: (16.0, 16.0),   color: (255, 200, 200, 0) ),
@@ -22,7 +22,7 @@
         ),
         // First shockwave ring from the head.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
                 ( at: 1,  offset: (319.0, 220.0), quad: (20.0, 20.0),   color: (255, 220, 220, 0) ),
@@ -32,7 +32,7 @@
         ),
         // Second ring, chasing the first.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
                 ( at: 7,  offset: (319.0, 220.0), quad: (20.0, 20.0),   color: (255, 220, 220, 0) ),
@@ -42,12 +42,12 @@
         ),
         // Shock ring along the ground.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 4,  offset: (319.0, 291.0), quad: (40.0, 20.0),   color: (255, 220, 220, 0) ),
-                ( at: 9,  offset: (319.0, 291.0), quad: (220.0, 110.0), color: (255, 230, 225, 190) ),
-                ( at: 22, offset: (319.0, 291.0), quad: (400.0, 200.0), color: (255, 210, 210, 0) ),
+                ( at: 4,  offset: (319.0, 287.0), quad: (40.0, 12.0),   color: (255, 220, 220, 0) ),
+                ( at: 9,  offset: (319.0, 287.0), quad: (220.0, 66.0), color: (255, 230, 225, 190) ),
+                ( at: 22, offset: (319.0, 287.0), quad: (400.0, 120.0), color: (255, 210, 210, 0) ),
             ],
         ),
     ],

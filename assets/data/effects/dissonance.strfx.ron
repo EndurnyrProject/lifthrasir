@@ -47,7 +47,7 @@
         ),
         // Dull purple flash on the torso.
         (
-            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 238.0), quad: (20.0, 20.0),   color: (170, 90, 220, 0) ),

@@ -1,15 +1,35 @@
-// Approximate Tarot reveal using the retail card texture.
+// Tarot Card of Fate (CG_TAROTCARD) outcome card 04, retail card texture.
+//
+// Shape: the card appears above the target's head, spins in twice (its width
+// collapses and reopens like a flip) over a soft glow11 halo, holds so the
+// card reads, then rises and fades. Above the head so the sprite does not hide
+// it. (319, 291) is the feet; the body spans about y 191..291.
 (
     fps: 30,
     layers: [
+        // Soft halo behind the card.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 150.0), quad: (30.0, 30.0), color: (255, 240, 210, 0)),
+                (at: 6, offset: (319.0, 145.0), quad: (140.0, 140.0), color: (255, 240, 210, 170)),
+                (at: 40, offset: (319.0, 145.0), quad: (130.0, 130.0), color: (255, 235, 200, 120)),
+                (at: 50, offset: (319.0, 135.0), quad: (110.0, 110.0), color: (255, 230, 190, 0)),
+            ],
+        ),
         (
             textures: ["ro://data/texture/effect/tarot04.tga"],
             blend: Blend,
             keys: [
-                (at: 0, offset: (319.0, 250.0), quad: (60.0, 90.0), color: (255, 255, 255, 0)),
-                (at: 6, offset: (319.0, 225.0), quad: (60.0, 90.0), color: (255, 255, 255, 255)),
-                (at: 40, offset: (319.0, 225.0), quad: (60.0, 90.0), color: (255, 255, 255, 255)),
-                (at: 50, offset: (319.0, 215.0), quad: (60.0, 90.0), color: (255, 255, 255, 0)),
+                (at: 0, offset: (319.0, 155.0), quad: (4.0, 90.0), color: (255, 255, 255, 0)),
+                (at: 4, offset: (319.0, 147.0), quad: (54.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 7, offset: (319.0, 146.0), quad: (4.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 10, offset: (319.0, 145.0), quad: (54.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 13, offset: (319.0, 145.0), quad: (4.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 17, offset: (319.0, 145.0), quad: (54.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 40, offset: (319.0, 145.0), quad: (54.0, 90.0), color: (255, 255, 255, 255)),
+                (at: 50, offset: (319.0, 132.0), quad: (54.0, 90.0), color: (255, 255, 255, 0)),
             ],
         ),
     ],

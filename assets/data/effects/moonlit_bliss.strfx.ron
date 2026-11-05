@@ -14,7 +14,7 @@
     layers: [
         // Moon-bloom opening behind the performer.
         (
-            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 214.0), quad: (30.0, 30.0),   color: (170, 195, 255, 0) ),
@@ -25,13 +25,13 @@
         ),
         // Moonlight ripple racing out along the ground.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
-                ( at: 4,  offset: (319.0, 291.0), quad: (40.0, 20.0),   color: (170, 195, 255, 0) ),
-                ( at: 10, offset: (319.0, 291.0), quad: (220.0, 110.0), color: (195, 215, 255, 210) ),
-                ( at: 26, offset: (319.0, 291.0), quad: (380.0, 190.0), color: (175, 198, 255, 110) ),
-                ( at: 40, offset: (319.0, 291.0), quad: (440.0, 220.0), color: (160, 185, 250, 0) ),
+                ( at: 4,  offset: (319.0, 287.0), quad: (40.0, 12.0),   color: (170, 195, 255, 0) ),
+                ( at: 10, offset: (319.0, 287.0), quad: (220.0, 66.0), color: (195, 215, 255, 210) ),
+                ( at: 26, offset: (319.0, 287.0), quad: (380.0, 114.0), color: (175, 198, 255, 110) ),
+                ( at: 40, offset: (319.0, 287.0), quad: (440.0, 132.0), color: (160, 185, 250, 0) ),
             ],
         ),
         // Cold note drifting up on the left.
@@ -58,7 +58,7 @@
         ),
         // Faint sheltering glow at the performer.
         (
-            textures: ["ro://data/texture/effect/lens_b.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 240.0), quad: (60.0, 60.0),   color: (180, 205, 255, 0) ),

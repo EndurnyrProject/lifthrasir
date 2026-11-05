@@ -5,7 +5,7 @@
     fps: 30,
     layers: [
         (
-            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 (at: 0, offset: (319.0, 275.0), quad: (30.0, 30.0), color: (170, 195, 255, 190)),

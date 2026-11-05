@@ -50,7 +50,7 @@
         ),
         // Soft violet link glow blooming at the torso.
         (
-            textures: ["ro://data/texture/effect/magic_blue.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 6,  offset: (319.0, 238.0), quad: (20.0, 20.0),   color: (180, 150, 255, 0) ),
@@ -61,7 +61,7 @@
         ),
         // Thin marionette control ring tightening around the torso.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/ring_b.bmp"],
             blend: Add,
             keys: [
                 ( at: 8,  offset: (319.0, 240.0), quad: (150.0, 90.0), color: (200, 175, 255, 0) ),

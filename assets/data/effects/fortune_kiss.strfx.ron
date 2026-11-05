@@ -55,7 +55,7 @@
         ),
         // Pink glow behind the dancer.
         (
-            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
                 ( at: 0,  offset: (319.0, 240.0), quad: (60.0, 60.0),   color: (255, 150, 200, 0) ),
