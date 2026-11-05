@@ -1894,15 +1894,17 @@
             repeating: false,
         ),
         // --- Sniper (SN_*) --------------------------------------------------
-        380: ( // SN_SIGHT -- approximate self-buff flash and sound.
-            visuals: [Str("ac_concentration.str")],
+        380: ( // SN_SIGHT -- authored lock-on reticle, brackets and glowing eyes;
+               // no retail STR or wav, so Improve Concentration's wav.
+            visuals: [Str("true_sight.strfx.ron")],
             sound: Some("effect/ac_concentration.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        381: ( // SN_FALCONASSAULT -- approximate falcon strike and sound.
-            visuals: [Str("blitz_beat.strfx.ron")],
+        381: ( // SN_FALCONASSAULT -- authored diving falcon, crossed talons and
+               // feather burst; no retail STR or wav, so Blitz Beat's wav.
+            visuals: [Str("falcon_assault.strfx.ron")],
             sound: Some("effect/hunter_blitzbeat.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),

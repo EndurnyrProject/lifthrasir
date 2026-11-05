@@ -1,0 +1,94 @@
+// True Sight (SN_SIGHT) - authored effect.
+//
+// Convention (see bash.strfx.ron): offset & quad in STR pixels, anchor at
+// (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30, linear
+// key lerp, Add = additive. Angles are raw STR units (1024 per turn).
+//
+// Shape: the sniper's sight sharpens. A cool cyan lock-on reticle
+// (lockon128.tga) spins in and settles on the head while target1/target2
+// brackets snap in beside the face, a pair of glowing eyes (nif_eyes.bmp)
+// opens above the head with a twinkle, and a scan line sweeps down the body.
+// Motifs sit around and above the body, since the sprite hides its torso.
+// ~1.2s; distinct from Improve Concentration's sparkle cloud.
+(
+    fps: 30,
+    layers: [
+        // Soft cyan halo around the head.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 205.0), quad: (30.0, 30.0), color: (150, 230, 255, 0) ),
+                ( at: 4, offset: (319.0, 205.0), quad: (130.0, 130.0), color: (150, 230, 255, 150) ),
+                ( at: 26, offset: (319.0, 205.0), quad: (120.0, 120.0), color: (150, 230, 255, 100) ),
+                ( at: 36, offset: (319.0, 205.0), quad: (90.0, 90.0), color: (150, 230, 255, 0) ),
+            ],
+        ),
+        // Lock-on reticle spins in and settles on the head.
+        (
+            textures: ["ro://data/texture/effect/lockon128.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 205.0), quad: (200.0, 200.0), color: (150, 230, 255, 0), angle: -256.0 ),
+                ( at: 6, offset: (319.0, 205.0), quad: (92.0, 92.0), color: (150, 230, 255, 230), angle: 0.0 ),
+                ( at: 10, offset: (319.0, 205.0), quad: (80.0, 80.0), color: (200, 245, 255, 255), angle: 0.0 ),
+                ( at: 24, offset: (319.0, 205.0), quad: (80.0, 80.0), color: (200, 245, 255, 200), angle: 0.0 ),
+                ( at: 32, offset: (319.0, 205.0), quad: (98.0, 98.0), color: (150, 230, 255, 0), angle: 0.0 ),
+            ],
+        ),
+        // Left bracket snaps in beside the face.
+        (
+            textures: ["ro://data/texture/effect/target2.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (236.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 0) ),
+                ( at: 7, offset: (268.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 255) ),
+                ( at: 26, offset: (268.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 220) ),
+                ( at: 32, offset: (262.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 0) ),
+            ],
+        ),
+        // Right bracket snaps in from the other side.
+        (
+            textures: ["ro://data/texture/effect/target1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (402.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 0) ),
+                ( at: 7, offset: (370.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 255) ),
+                ( at: 26, offset: (370.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 220) ),
+                ( at: 32, offset: (376.0, 205.0), quad: (24.0, 48.0), color: (200, 245, 255, 0) ),
+            ],
+        ),
+        // Glowing eyes open above the head as the lock lands.
+        (
+            textures: ["ro://data/texture/effect/nif_eyes.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 9, offset: (319.0, 163.0), quad: (44.0, 10.0), color: (170, 240, 255, 0) ),
+                ( at: 12, offset: (319.0, 163.0), quad: (44.0, 44.0), color: (190, 245, 255, 255) ),
+                ( at: 26, offset: (319.0, 163.0), quad: (44.0, 44.0), color: (170, 240, 255, 220) ),
+                ( at: 32, offset: (319.0, 163.0), quad: (48.0, 16.0), color: (150, 230, 255, 0) ),
+            ],
+        ),
+        // Twinkle off one eye.
+        (
+            textures: ["ro://data/texture/effect/shine_y_01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 11, offset: (330.0, 161.0), quad: (10.0, 10.0), color: (230, 250, 255, 0), angle: 0.0 ),
+                ( at: 13, offset: (330.0, 161.0), quad: (56.0, 56.0), color: (240, 252, 255, 255), angle: 128.0 ),
+                ( at: 19, offset: (330.0, 161.0), quad: (20.0, 20.0), color: (200, 240, 255, 0), angle: 256.0 ),
+            ],
+        ),
+        // Scan line sweeps down the body, revealing what hides.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (319.0, 182.0), quad: (150.0, 20.0), color: (150, 230, 255, 0) ),
+                ( at: 14, offset: (319.0, 196.0), quad: (170.0, 26.0), color: (150, 230, 255, 255) ),
+                ( at: 22, offset: (319.0, 276.0), quad: (170.0, 26.0), color: (150, 230, 255, 220) ),
+                ( at: 25, offset: (319.0, 289.0), quad: (150.0, 16.0), color: (150, 230, 255, 0) ),
+            ],
+        ),
+    ],
+)
