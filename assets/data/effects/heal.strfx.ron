@@ -16,18 +16,9 @@
 //     frame layers, so their painted shading survives). RON implicit_some is on,
 //     so optional fields (quad) are written bare.
 //
-// Texture path convention (PROVEN here, first authored effect to use local PNGs):
-//   Local frames are referenced ASSET-ROOT-RELATIVE, no source prefix and no
-//   leading "./": `data/textures/effects/heal/frame_01.png` resolves to
-//   `assets/data/textures/effects/heal/frame_01.png`.
-//   Verified against bevy_asset 0.19.0: LoadContext::load (loader.rs:684) forwards
-//   the path verbatim through load_builder().load (loader_builders.rs:91) into
-//   load_internal (loader_builders.rs:224), which hands it straight to
-//   asset_server.load_with_meta_transform. No AssetPath::resolve against the
-//   parent asset's directory is invoked, so the path is NOT relative to this
-//   strfx file's dir -- it is asset-root-relative (default asset source = assets/).
-//   GRF textures keep their `ro://` source prefix, as in the bolts.
-//   In-game render confirmation is deferred to Task 15.
+// Texture paths: everything goes through the ro:// source, rooted at
+//   assets/data: local frames are `ro://textures/effects/heal/frame_01.png`,
+//   GRF textures `ro://data/texture/effect/...`. The loader rejects bare paths.
 //
 // Pack frames: cherry-picked from the Frostwindz "Pixel Art VFX - Priest" pack,
 // set VFX2 (rising golden light column with a ground ring and sparkle crosses),
@@ -66,17 +57,17 @@
         // up and fading, tinted green-white over the golden art.
         (
             textures: [
-                "data/textures/effects/heal/frame_01.png",
-                "data/textures/effects/heal/frame_02.png",
-                "data/textures/effects/heal/frame_03.png",
-                "data/textures/effects/heal/frame_04.png",
-                "data/textures/effects/heal/frame_05.png",
-                "data/textures/effects/heal/frame_06.png",
-                "data/textures/effects/heal/frame_07.png",
-                "data/textures/effects/heal/frame_08.png",
-                "data/textures/effects/heal/frame_09.png",
-                "data/textures/effects/heal/frame_10.png",
-                "data/textures/effects/heal/frame_11.png",
+                "ro://textures/effects/heal/frame_01.png",
+                "ro://textures/effects/heal/frame_02.png",
+                "ro://textures/effects/heal/frame_03.png",
+                "ro://textures/effects/heal/frame_04.png",
+                "ro://textures/effects/heal/frame_05.png",
+                "ro://textures/effects/heal/frame_06.png",
+                "ro://textures/effects/heal/frame_07.png",
+                "ro://textures/effects/heal/frame_08.png",
+                "ro://textures/effects/heal/frame_09.png",
+                "ro://textures/effects/heal/frame_10.png",
+                "ro://textures/effects/heal/frame_11.png",
             ],
             blend: Blend,
             keys: [
@@ -96,17 +87,17 @@
         // Secondary smaller column: offset to the side, staggered, same frames.
         (
             textures: [
-                "data/textures/effects/heal/frame_01.png",
-                "data/textures/effects/heal/frame_02.png",
-                "data/textures/effects/heal/frame_03.png",
-                "data/textures/effects/heal/frame_04.png",
-                "data/textures/effects/heal/frame_05.png",
-                "data/textures/effects/heal/frame_06.png",
-                "data/textures/effects/heal/frame_07.png",
-                "data/textures/effects/heal/frame_08.png",
-                "data/textures/effects/heal/frame_09.png",
-                "data/textures/effects/heal/frame_10.png",
-                "data/textures/effects/heal/frame_11.png",
+                "ro://textures/effects/heal/frame_01.png",
+                "ro://textures/effects/heal/frame_02.png",
+                "ro://textures/effects/heal/frame_03.png",
+                "ro://textures/effects/heal/frame_04.png",
+                "ro://textures/effects/heal/frame_05.png",
+                "ro://textures/effects/heal/frame_06.png",
+                "ro://textures/effects/heal/frame_07.png",
+                "ro://textures/effects/heal/frame_08.png",
+                "ro://textures/effects/heal/frame_09.png",
+                "ro://textures/effects/heal/frame_10.png",
+                "ro://textures/effects/heal/frame_11.png",
             ],
             blend: Blend,
             keys: [

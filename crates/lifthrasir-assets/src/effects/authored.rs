@@ -155,6 +155,23 @@ pub enum AuthoredEffectLoaderError {
     Parse(#[from] ron::error::SpannedError),
     #[error(transparent)]
     Convert(#[from] AuthoredEffectError),
+    #[error("layer {layer} texture {path:?} must be an ro:// path")]
+    NonRoTexture { layer: usize, path: String },
+}
+
+/// Every runtime asset loads through the `ro://` source; a bare path would fall
+/// back to Bevy's default source and only resolve by accident of the working
+/// directory.
+fn require_ro_textures(effect: &AuthoredEffect) -> Result<(), AuthoredEffectLoaderError> {
+    for (layer, data) in effect.layers.iter().enumerate() {
+        if let Some(path) = data.textures.iter().find(|path| !path.starts_with("ro://")) {
+            return Err(AuthoredEffectLoaderError::NonRoTexture {
+                layer,
+                path: path.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 impl AssetLoader for AuthoredEffectLoader {
@@ -171,11 +188,44 @@ impl AssetLoader for AuthoredEffectLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let effect: AuthoredEffect = ron_options().from_bytes(&bytes)?;
+        require_ro_textures(&effect)?;
         let asset = convert_authored_effect(&effect, |path| load_context.load(path.to_string()))?;
         Ok(asset)
     }
 
     fn extensions(&self) -> &[&str] {
         &["strfx.ron"]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn effect_with(textures: &[&str]) -> AuthoredEffect {
+        ron_options()
+            .from_str(&format!(
+                "(fps: 30, layers: [(textures: {textures:?}, blend: Add, keys: [(at: 0, quad: (1.0, 1.0), color: (255, 255, 255, 255))])])"
+            ))
+            .unwrap()
+    }
+
+    #[test]
+    fn bare_texture_path_is_rejected() {
+        let error = require_ro_textures(&effect_with(&[
+            "ro://data/texture/effect/glow11.bmp",
+            "data/textures/effects/heal/frame_01.png",
+        ]))
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            AuthoredEffectLoaderError::NonRoTexture { layer: 0, ref path }
+                if path == "data/textures/effects/heal/frame_01.png"
+        ));
+    }
+
+    #[test]
+    fn ro_texture_paths_are_accepted() {
+        require_ro_textures(&effect_with(&["ro://textures/effects/heal/frame_01.png"])).unwrap();
     }
 }
