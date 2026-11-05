@@ -18,8 +18,9 @@ use lifthrasir_runtime::effects::{EffectAnchor, spawn_effect};
 use lifthrasir_runtime::{EffectsPlaybackPlugin, RuntimeCorePlugin};
 use std::sync::{Arc, RwLock};
 
-/// Character stand-in: about the height of a player sprite in world units.
-const BODY_SIZE: Vec3 = Vec3::new(7.0, 20.0, 3.0);
+/// Character stand-in: a thin slab about the size of a player sprite, so effects
+/// drawn at the anchor are not hidden behind it as they would be by a solid box.
+const BODY_SIZE: Vec3 = Vec3::new(7.0, 20.0, 0.2);
 
 /// Seconds to let the window and renderer settle before spawning the effect.
 const WARMUP_SECS: f32 = 1.0;
