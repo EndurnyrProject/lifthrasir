@@ -1,0 +1,64 @@
+// Pressure / Gloria Domini (PA_PRESSURE): as the reference EF_PRESSURE draws
+// it, the silver cross_old.bmp drops onto the victim from high above while
+// spinning about 1.7 turns over 0.5s (two here, so it lands upright), then hangs over the body and fades.
+// Here the landing adds a white-gold flash and a burst of light rays. ~1s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the victim's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
+(
+    fps: 30,
+    layers: [
+        // Glow trailing the falling cross.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, -40.0), quad: (60.0, 90.0), color: (255, 245, 215, 0) ),
+                ( at: 4, offset: (319.0, 40.0), quad: (90.0, 130.0), color: (255, 245, 215, 140) ),
+                ( at: 15, offset: (319.0, 196.0), quad: (120.0, 150.0), color: (255, 240, 200, 160) ),
+                ( at: 30, offset: (319.0, 200.0), quad: (130.0, 160.0), color: (255, 230, 180, 0) ),
+            ],
+        ),
+        // The falling cross, spinning down and settling over the body.
+        (
+            textures: ["ro://data/texture/effect/cross_old.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0, offset: (319.0, -40.0), quad: (84.0, 84.0), color: (255, 255, 255, 0), angle: 0.0 ),
+                ( at: 3, offset: (319.0, 20.0), quad: (84.0, 84.0), color: (255, 255, 255, 230), angle: -400.0 ),
+                ( at: 15, offset: (319.0, 184.0), quad: (84.0, 84.0), color: (255, 255, 255, 240), angle: -2048.0 ),
+                ( at: 22, offset: (319.0, 182.0), quad: (88.0, 88.0), color: (255, 255, 255, 200), angle: -2048.0 ),
+                ( at: 30, offset: (319.0, 178.0), quad: (92.0, 92.0), color: (255, 255, 255, 0), angle: -2048.0 ),
+            ],
+        ),
+        // White-gold flash where the cross lands.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (319.0, 220.0), quad: (40.0, 40.0), color: (255, 245, 210, 0) ),
+                ( at: 16, offset: (319.0, 220.0), quad: (190.0, 200.0), color: (255, 245, 215, 230) ),
+                ( at: 28, offset: (319.0, 220.0), quad: (220.0, 230.0), color: (255, 230, 180, 0) ),
+            ],
+        ),
+        // Light rays bursting up from the landing.
+        (
+            textures: ["ro://data/texture/effect/light_y_01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 15, offset: (319.0, 270.0), quad: (80.0, 40.0), color: (255, 240, 190, 0) ),
+                ( at: 18, offset: (319.0, 232.0), quad: (150.0, 130.0), color: (255, 240, 195, 210) ),
+                ( at: 30, offset: (319.0, 210.0), quad: (165.0, 170.0), color: (255, 230, 170, 0) ),
+            ],
+        ),
+        // Ground flash under the victim.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 15, offset: (319.0, 287.0), quad: (40.0, 10.0), color: (255, 240, 200, 0) ),
+                ( at: 17, offset: (319.0, 287.0), quad: (170.0, 36.0), color: (255, 240, 200, 210) ),
+                ( at: 30, offset: (319.0, 287.0), quad: (210.0, 44.0), color: (255, 225, 170, 0) ),
+            ],
+        ),
+    ],
+)

@@ -1679,7 +1679,7 @@ mod tests {
 
     #[test]
     fn special_effect_guard_spawns_one_finite_effect_at_source() {
-        assert_finite_special_effect_at_source(336, "ro://data/texture/effect/kyrie.str");
+        assert_finite_special_effect_at_source(336, "ro://effects/guard.strfx.ron");
     }
 
     /// One `SpecialEffectShown` for a known Crusader proc id spawns exactly one

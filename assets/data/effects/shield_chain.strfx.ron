@@ -1,0 +1,161 @@
+// Shield Chain (PA_SHIELDCHAIN) impacts on the victim: five Shield Boomerang
+// clangs, one per thrown shield. The `shield_chain` shader_fx throws one shield
+// per hit 0.15s apart, matching the client's damage number stagger, so the
+// clangs sit 4.5 frames apart after the same ~5 frame flight. ~1.1s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the victim's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
+(
+    fps: 30,
+    layers: [
+        // Impact 1: white clang flash on the body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (325.0, 232.0), quad: (30.0, 30.0), color: (235, 240, 255, 0) ),
+                ( at: 6, offset: (325.0, 232.0), quad: (120.0, 110.0), color: (240, 245, 255, 230) ),
+                ( at: 13, offset: (325.0, 232.0), quad: (140.0, 130.0), color: (220, 230, 255, 0) ),
+            ],
+        ),
+        // Impact 1: horizontal shock streak.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (319.0, 228.0), quad: (40.0, 14.0), color: (235, 245, 255, 0), angle: 40.0 ),
+                ( at: 6, offset: (319.0, 228.0), quad: (150.0, 26.0), color: (240, 248, 255, 255), angle: 40.0 ),
+                ( at: 12, offset: (319.0, 228.0), quad: (190.0, 8.0), color: (220, 235, 255, 0), angle: 40.0 ),
+            ],
+        ),
+        // Impact 1: glint thrown off the shield's rim.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (341.0, 208.0), quad: (10.0, 10.0), color: (245, 248, 255, 0) ),
+                ( at: 7, offset: (349.0, 198.0), quad: (44.0, 44.0), color: (250, 252, 255, 255), angle: 64.0 ),
+                ( at: 14, offset: (359.0, 188.0), quad: (12.0, 12.0), color: (225, 235, 255, 0), angle: 192.0 ),
+            ],
+        ),
+        // Impact 2: white clang flash on the body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 9, offset: (313.0, 232.0), quad: (30.0, 30.0), color: (235, 240, 255, 0) ),
+                ( at: 10, offset: (313.0, 232.0), quad: (120.0, 110.0), color: (240, 245, 255, 230) ),
+                ( at: 17, offset: (313.0, 232.0), quad: (140.0, 130.0), color: (220, 230, 255, 0) ),
+            ],
+        ),
+        // Impact 2: horizontal shock streak.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 9, offset: (319.0, 232.0), quad: (40.0, 14.0), color: (235, 245, 255, 0), angle: -40.0 ),
+                ( at: 10, offset: (319.0, 232.0), quad: (150.0, 26.0), color: (240, 248, 255, 255), angle: -40.0 ),
+                ( at: 16, offset: (319.0, 232.0), quad: (190.0, 8.0), color: (220, 235, 255, 0), angle: -40.0 ),
+            ],
+        ),
+        // Impact 2: glint thrown off the shield's rim.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 9, offset: (297.0, 208.0), quad: (10.0, 10.0), color: (245, 248, 255, 0) ),
+                ( at: 11, offset: (289.0, 198.0), quad: (44.0, 44.0), color: (250, 252, 255, 255), angle: 64.0 ),
+                ( at: 18, offset: (279.0, 188.0), quad: (12.0, 12.0), color: (225, 235, 255, 0), angle: 192.0 ),
+            ],
+        ),
+        // Impact 3: white clang flash on the body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (325.0, 232.0), quad: (30.0, 30.0), color: (235, 240, 255, 0) ),
+                ( at: 15, offset: (325.0, 232.0), quad: (120.0, 110.0), color: (240, 245, 255, 230) ),
+                ( at: 22, offset: (325.0, 232.0), quad: (140.0, 130.0), color: (220, 230, 255, 0) ),
+            ],
+        ),
+        // Impact 3: horizontal shock streak.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (319.0, 236.0), quad: (40.0, 14.0), color: (235, 245, 255, 0), angle: 40.0 ),
+                ( at: 15, offset: (319.0, 236.0), quad: (150.0, 26.0), color: (240, 248, 255, 255), angle: 40.0 ),
+                ( at: 21, offset: (319.0, 236.0), quad: (190.0, 8.0), color: (220, 235, 255, 0), angle: 40.0 ),
+            ],
+        ),
+        // Impact 3: glint thrown off the shield's rim.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (341.0, 208.0), quad: (10.0, 10.0), color: (245, 248, 255, 0) ),
+                ( at: 16, offset: (349.0, 198.0), quad: (44.0, 44.0), color: (250, 252, 255, 255), angle: 64.0 ),
+                ( at: 23, offset: (359.0, 188.0), quad: (12.0, 12.0), color: (225, 235, 255, 0), angle: 192.0 ),
+            ],
+        ),
+        // Impact 4: white clang flash on the body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 18, offset: (313.0, 232.0), quad: (30.0, 30.0), color: (235, 240, 255, 0) ),
+                ( at: 19, offset: (313.0, 232.0), quad: (120.0, 110.0), color: (240, 245, 255, 230) ),
+                ( at: 26, offset: (313.0, 232.0), quad: (140.0, 130.0), color: (220, 230, 255, 0) ),
+            ],
+        ),
+        // Impact 4: horizontal shock streak.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 18, offset: (319.0, 240.0), quad: (40.0, 14.0), color: (235, 245, 255, 0), angle: -40.0 ),
+                ( at: 19, offset: (319.0, 240.0), quad: (150.0, 26.0), color: (240, 248, 255, 255), angle: -40.0 ),
+                ( at: 25, offset: (319.0, 240.0), quad: (190.0, 8.0), color: (220, 235, 255, 0), angle: -40.0 ),
+            ],
+        ),
+        // Impact 4: glint thrown off the shield's rim.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 18, offset: (297.0, 208.0), quad: (10.0, 10.0), color: (245, 248, 255, 0) ),
+                ( at: 20, offset: (289.0, 198.0), quad: (44.0, 44.0), color: (250, 252, 255, 255), angle: 64.0 ),
+                ( at: 27, offset: (279.0, 188.0), quad: (12.0, 12.0), color: (225, 235, 255, 0), angle: 192.0 ),
+            ],
+        ),
+        // Impact 5: white clang flash on the body.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 23, offset: (325.0, 232.0), quad: (30.0, 30.0), color: (235, 240, 255, 0) ),
+                ( at: 24, offset: (325.0, 232.0), quad: (120.0, 110.0), color: (240, 245, 255, 230) ),
+                ( at: 31, offset: (325.0, 232.0), quad: (140.0, 130.0), color: (220, 230, 255, 0) ),
+            ],
+        ),
+        // Impact 5: horizontal shock streak.
+        (
+            textures: ["ro://data/texture/effect/line.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 23, offset: (319.0, 244.0), quad: (40.0, 14.0), color: (235, 245, 255, 0), angle: 40.0 ),
+                ( at: 24, offset: (319.0, 244.0), quad: (150.0, 26.0), color: (240, 248, 255, 255), angle: 40.0 ),
+                ( at: 30, offset: (319.0, 244.0), quad: (190.0, 8.0), color: (220, 235, 255, 0), angle: 40.0 ),
+            ],
+        ),
+        // Impact 5: glint thrown off the shield's rim.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 23, offset: (341.0, 208.0), quad: (10.0, 10.0), color: (245, 248, 255, 0) ),
+                ( at: 25, offset: (349.0, 198.0), quad: (44.0, 44.0), color: (250, 252, 255, 255), angle: 64.0 ),
+                ( at: 32, offset: (359.0, 188.0), quad: (12.0, 12.0), color: (225, 235, 255, 0), angle: 192.0 ),
+            ],
+        ),
+    ],
+)

@@ -16,9 +16,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     @else
     var color = vec4<f32>(1.0);
     // RO color-key: some effect BMPs use magenta (1, 0, 1) as the transparent
-    // background. Key it out. (Most, like stormgust's layers, are black-backed
-    // and rely on the additive blend below to drop the background instead.)
-    if (color.r > 0.9 && color.g < 0.1 && color.b > 0.9) {
+    // background. Key it out. Pure black is keyed too, as the reference client's
+    // STR shader discards it: additive layers lose nothing, and opaque layers on
+    // black-backed BMPs (shield_charge.str's `shield.bmp`) drop the square.
+    let is_magenta = color.r > 0.9 && color.g < 0.1 && color.b > 0.9;
+    let is_black = max(color.r, max(color.g, color.b)) < 0.004;
+    if (is_magenta || is_black) {
         color.a = 0.0;
     }
     @if(VERTEX_COLORS)

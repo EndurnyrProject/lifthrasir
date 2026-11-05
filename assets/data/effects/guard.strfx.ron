@@ -1,0 +1,42 @@
+// Auto Guard (CR_AUTOGUARD cast and the EF_GUARD block proc): the reference
+// wraps the guardk.tga emblem around the unit as a short pale green band. Here
+// the octagonal guard emblem flashes up wider than the body so its rim reads
+// around the sprite, with a soft glow behind it and a glint on its edge. ~0.6s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
+(
+    fps: 30,
+    layers: [
+        // Soft green-white glow behind the emblem.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 236.0), quad: (60.0, 60.0), color: (200, 255, 210, 0) ),
+                ( at: 3, offset: (319.0, 236.0), quad: (160.0, 170.0), color: (210, 255, 215, 120) ),
+                ( at: 16, offset: (319.0, 236.0), quad: (190.0, 200.0), color: (190, 240, 200, 0) ),
+            ],
+        ),
+        // Guard emblem snapping out from the body and holding briefly.
+        (
+            textures: ["ro://data/texture/effect/guardk.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 236.0), quad: (70.0, 75.0), color: (232, 255, 230, 0) ),
+                ( at: 3, offset: (319.0, 236.0), quad: (112.0, 118.0), color: (232, 255, 230, 115) ),
+                ( at: 10, offset: (319.0, 236.0), quad: (116.0, 122.0), color: (232, 255, 230, 75) ),
+                ( at: 16, offset: (319.0, 236.0), quad: (128.0, 134.0), color: (220, 250, 220, 0) ),
+            ],
+        ),
+        // Glint running along the upper rim.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (290.0, 186.0), quad: (10.0, 10.0), color: (235, 255, 235, 0) ),
+                ( at: 5, offset: (319.0, 180.0), quad: (42.0, 42.0), color: (245, 255, 245, 255), angle: 64.0 ),
+                ( at: 10, offset: (350.0, 188.0), quad: (12.0, 12.0), color: (225, 250, 225, 0), angle: 160.0 ),
+            ],
+        ),
+    ],
+)

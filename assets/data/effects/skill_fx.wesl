@@ -498,7 +498,9 @@ fn eruption_fragment(uv: vec2<f32>) -> vec4<f32> {
 // (fireorb, waterorb, lightningorb, thunder_ball_*) as a soft glowing ball tinted
 // by the entry's OWN colors, so each skill's in-flight projectile looks like that
 // skill. The orb art carries the shape; a radial vignette hides the quad corners
-// and a fast subtle pulse keeps it alive. shape and factor are unused (the
+// and a fast subtle pulse keeps it alive. shape.w mixes in the art's own hue
+// (0 = tinted luminance, 1 = the texture's colors, for thrown objects such as
+// shields); shape.xyz and factor are unused (the
 // projectile holds a steady look across its flight, driven by its ECS motion).
 fn projectile_fragment(uv: vec2<f32>) -> vec4<f32> {
     let centered = uv * 2.0 - 1.0;
@@ -512,7 +514,9 @@ fn projectile_fragment(uv: vec2<f32>) -> vec4<f32> {
     if (alpha < 0.01) {
         discard;
     }
-    let color = material.primary.rgb * core + material.secondary.rgb * glow;
+    let art = textureSampleLevel(fx_texture, fx_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0).rgb;
+    let hue = mix(vec3<f32>(1.0), art / max(tex, 0.0001), material.shape.w);
+    let color = (material.primary.rgb * core + material.secondary.rgb * glow) * hue;
     return vec4<f32>(color, alpha);
 }
 

@@ -634,10 +634,15 @@ mod tests {
         let catalog = seeded_catalog();
 
         // The approved Crusader skill table (249-258 + quest 1002): exact
-        // native/authored assets, placements, and the three verified
-        // dedicated sounds. Every entry is a non-repeating one-shot.
+        // native/authored assets, placements, and the verified dedicated or
+        // reference sounds. Every entry is a non-repeating one-shot.
         let expected: [(u32, &str, EffectPlacement, Option<&str>); 11] = [
-            (249, "kyrie.str", EffectPlacement::Caster, None),
+            (
+                249,
+                "guard.strfx.ron",
+                EffectPlacement::Caster,
+                Some("effect/kyrie_guard.wav"),
+            ),
             (250, "shield_charge.str", EffectPlacement::Target, None),
             (
                 251,
@@ -668,9 +673,9 @@ mod tests {
             (257, "defense.str", EffectPlacement::Caster, None),
             (
                 258,
-                "spear_quicken.strfx.ron",
+                "twohand.str",
                 EffectPlacement::Caster,
-                None,
+                Some("effect/knight_twohandquicken.wav"),
             ),
             (1002, "shrink.strfx.ron", EffectPlacement::Caster, None),
         ];
@@ -910,10 +915,10 @@ mod tests {
         assert!(!reflect.repeating);
 
         // EF_GUARD (336): Auto Guard's reactive proc flash on the guarding
-        // unit, using the native kyrie STR.
+        // unit: the authored guardk emblem and the reference wav.
         let guard = catalog.special(336).expect("EF_GUARD descriptor");
-        assert_eq!(guard.str_name(), Some("kyrie.str"));
-        assert_eq!(guard.sound, None);
+        assert_eq!(guard.str_name(), Some("guard.strfx.ron"));
+        assert_eq!(guard.sound.as_deref(), Some("effect/kyrie_guard.wav"));
         assert_eq!(guard.placement, EffectPlacement::Ground);
         assert!(!guard.repeating);
     }

@@ -1,14 +1,87 @@
+// Reflect Shield (CR_REFLECTSHIELD cast and the EF_REFLECTSHIELD reflect proc):
+// the reference spins a ring_yellow cylinder around the unit. A flat ring band
+// reads as a box, so here the shell is drawn as its two bright edges, soft gold
+// columns either side of the body, over a gold glow and rising pale rays, with
+// a mirror glint sweeping across the top. Kept to ~1s because every reflected
+// hit replays it.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
+        // Gold glow around the body.
         (
-            textures: ["ro://data/texture/effect/ring_yellow.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 255.0), quad: (48.0, 48.0),   color: (255, 235, 160, 0) ),
-                ( at: 4,  offset: (319.0, 255.0), quad: (105.0, 105.0), color: (255, 240, 175, 255) ),
-                ( at: 10, offset: (319.0, 255.0), quad: (170.0, 170.0), color: (255, 225, 125, 185) ),
-                ( at: 16, offset: (319.0, 255.0), quad: (240.0, 240.0), color: (255, 215, 100, 0) ),
+                ( at: 0, offset: (319.0, 238.0), quad: (50.0, 50.0), color: (255, 220, 120, 0) ),
+                ( at: 4, offset: (319.0, 238.0), quad: (150.0, 170.0), color: (255, 210, 100, 200) ),
+                ( at: 22, offset: (319.0, 238.0), quad: (170.0, 190.0), color: (255, 205, 100, 0) ),
+            ],
+        ),
+        // Pale gold rays rising through the shell.
+        (
+            textures: ["ro://data/texture/effect/light_y_01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 276.0), quad: (80.0, 40.0), color: (255, 230, 150, 0) ),
+                ( at: 5, offset: (319.0, 240.0), quad: (110.0, 120.0), color: (255, 235, 165, 170) ),
+                ( at: 16, offset: (319.0, 222.0), quad: (115.0, 145.0), color: (255, 225, 150, 90) ),
+                ( at: 28, offset: (319.0, 208.0), quad: (115.0, 155.0), color: (255, 215, 130, 0) ),
+            ],
+        ),
+        // Left edge of the shell.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (300.0, 245.0), quad: (20.0, 60.0), color: (255, 225, 130, 0) ),
+                ( at: 5, offset: (287.0, 236.0), quad: (30.0, 150.0), color: (255, 205, 90, 230) ),
+                ( at: 18, offset: (285.0, 230.0), quad: (30.0, 160.0), color: (255, 195, 80, 160) ),
+                ( at: 30, offset: (283.0, 224.0), quad: (20.0, 150.0), color: (255, 205, 110, 0) ),
+            ],
+        ),
+        // Right edge of the shell.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (338.0, 245.0), quad: (20.0, 60.0), color: (255, 225, 130, 0) ),
+                ( at: 5, offset: (351.0, 236.0), quad: (30.0, 150.0), color: (255, 205, 90, 230) ),
+                ( at: 18, offset: (353.0, 230.0), quad: (30.0, 160.0), color: (255, 195, 80, 160) ),
+                ( at: 30, offset: (355.0, 224.0), quad: (20.0, 150.0), color: (255, 205, 110, 0) ),
+            ],
+        ),
+        // Cap closing the shell over the head.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (319.0, 180.0), quad: (30.0, 12.0), color: (255, 215, 110, 0) ),
+                ( at: 6, offset: (319.0, 172.0), quad: (96.0, 34.0), color: (255, 210, 100, 210) ),
+                ( at: 18, offset: (319.0, 168.0), quad: (100.0, 34.0), color: (255, 200, 90, 140) ),
+                ( at: 30, offset: (319.0, 162.0), quad: (90.0, 24.0), color: (255, 190, 80, 0) ),
+            ],
+        ),
+        // Base of the shell on the ground.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 287.0), quad: (40.0, 10.0), color: (255, 215, 110, 0) ),
+                ( at: 4, offset: (319.0, 287.0), quad: (110.0, 26.0), color: (255, 210, 100, 200) ),
+                ( at: 26, offset: (319.0, 287.0), quad: (130.0, 30.0), color: (255, 195, 80, 0) ),
+            ],
+        ),
+        // Mirror glint sweeping across the top of the shell.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 4, offset: (288.0, 176.0), quad: (10.0, 10.0), color: (255, 245, 210, 0) ),
+                ( at: 8, offset: (312.0, 168.0), quad: (46.0, 46.0), color: (255, 250, 225, 255), angle: 64.0 ),
+                ( at: 13, offset: (338.0, 170.0), quad: (34.0, 34.0), color: (255, 245, 210, 200), angle: 128.0 ),
+                ( at: 18, offset: (354.0, 180.0), quad: (10.0, 10.0), color: (255, 235, 190, 0), angle: 192.0 ),
             ],
         ),
     ],

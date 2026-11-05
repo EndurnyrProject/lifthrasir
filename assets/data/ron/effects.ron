@@ -1311,11 +1311,12 @@
         // (EF_REFLECTSHIELD, `special:` id 252); Grand Cross (254) renders once
         // from GroundSkillPlaced and its Ground placement suppresses the
         // per-tick SkillDamage duplicate.
-        249: ( // CR_AUTOGUARD -- native kyrie guard flash on the caster. The
-               // proc flash is the reactive map effect (EF_GUARD, `special:` id
-               // 336), not this cast entry.
-            visuals: [Str("kyrie.str")],
-            sound: None,
+        249: ( // CR_AUTOGUARD -- authored after EF_GUARD: the guardk emblem
+               // flashing around the caster, with the reference kyrie_guard
+               // wav. The block proc is the reactive map effect (EF_GUARD,
+               // `special:` id 336), not this cast entry.
+            visuals: [Str("guard.strfx.ron")],
+            sound: Some("effect/kyrie_guard.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1327,10 +1328,11 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        251: ( // CR_SHIELDBOOMERANG -- authored spinning-shield approach and
-               // impact on the victim (hardcoded emitter in the official
-               // client, no native STR). Dedicated native wav.
-            visuals: [Str("shield_boomerang.strfx.ron")],
+        251: ( // CR_SHIELDBOOMERANG -- as the reference: the shield thrown from
+               // the caster (`shield_boomerang` shader_fx projectile, no native
+               // STR), then an authored clang on the victim. Dedicated native
+               // wav, played as the shield leaves.
+            visuals: [Shader("shield_boomerang"), Str("shield_boomerang.strfx.ron")],
             sound: Some("effect/cru_shield boomerang.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -1355,7 +1357,8 @@
         ),
         254: ( // CR_GRANDCROSS -- self-cast (aesir cr_grandcross.ex places
                // its timed ground group at the caster cell); one authored
-               // luminous cross burst from GroundSkillPlaced. Ground
+               // burst from GroundSkillPlaced: white light pillars under a
+               // cross of light, pulsing three times as in EF_GRANDCROSS. Ground
                // placement suppresses the per-tick SkillDamage visual.
                // Dedicated native wav.
             visuals: [Str("grand_cross.strfx.ron")],
@@ -1387,11 +1390,11 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        258: ( // CR_SPEARQUICKEN -- authored caster flourish (no native STR
-               // in the official client). The persistent loop lives in
-               // `efsts:` (EFST 68).
-            visuals: [Str("spear_quicken.strfx.ron")],
-            sound: None,
+        258: ( // CR_SPEARQUICKEN -- the reference EF_SPEARQUICKEN reuses
+               // Two-Hand Quicken's native STR and wav. The persistent loop
+               // lives in `efsts:` (EFST 68).
+            visuals: [Str("twohand.str")],
+            sound: Some("effect/knight_twohandquicken.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1776,18 +1779,21 @@
             repeating: false,
         ),
         // --- Paladin (PA_*) --------------------------------------------------
-        367: ( // PA_PRESSURE -- approximate holy impact with dedicated sound.
-            visuals: [Str("holy_cross.str")],
+        367: ( // PA_PRESSURE -- authored after EF_PRESSURE: cross_old spinning
+               // down onto the victim. Dedicated sound. The reference quake
+               // lands 0.5s in; shakes cannot be delayed, so it is omitted.
+            visuals: [Str("pressure.strfx.ron")],
             sound: Some("effect/프레셔.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        368: ( // PA_SACRIFICE -- approximate cast burst, not a persistent aura.
-            visuals: [Str("explosion_spirits.strfx.ron")],
+        368: ( // PA_SACRIFICE -- authored after EF_BASH3D: light red halo and
+               // radial ray bursts on the caster; a cast burst, not an aura.
+            visuals: [Str("sacrifice.strfx.ron")],
             sound: Some("effect/세크리파이스.wav"),
             placement: Caster,
-            color: (1.0, 0.65, 0.65, 1.0),
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         369: ( // PA_GOSPEL -- field is owned by skill_units, not the cast.
@@ -2021,8 +2027,10 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        480: ( // PA_SHIELDCHAIN -- approximate five-hit strike with borrowed sound.
-            visuals: [Str("lord_knight_spiral_pierce.strfx.ron")],
+        480: ( // PA_SHIELDCHAIN -- the reference throws the Shield Boomerang
+               // shield: one projectile per hit, each with an authored clang.
+               // Borrowed Shield Boomerang wav, played per throw.
+            visuals: [Shader("shield_chain"), Str("shield_chain.strfx.ron")],
             sound: Some("effect/cru_shield boomerang.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -2379,9 +2387,10 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
-        369: ( // PA_GOSPEL -- approximate chant notes per surviving field cell.
+        369: ( // PA_GOSPEL -- hovering silver cross per surviving field cell
+               // (roBrowserLegacy GospelEffects).
             ground_anchor: Footprint,
-            visuals: [Str("performance_whistle.strfx.ron")],
+            visuals: [Str("gospel_cell.strfx.ron")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
@@ -2655,9 +2664,9 @@
             repeating: false,
         ),
         336: ( // EF_GUARD -- Auto Guard's reactive proc flash on the guarding
-               // unit, using the native kyrie STR.
-            visuals: [Str("kyrie.str")],
-            sound: None,
+               // unit: the authored guardk emblem and the reference wav.
+            visuals: [Str("guard.strfx.ron")],
+            sound: Some("effect/kyrie_guard.wav"),
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -2953,6 +2962,36 @@
                 speed: 150.0,
                 scale: 3.0,
                 texture: Some("data/texture/유저인터페이스/item/베넘나이프.bmp"),
+            )),
+        ),
+        "shield_boomerang": ( // EF_SHIELDBOOMERANG -- the reference throws shield_boomerang.bmp from the caster.
+            kind: 100,
+            primary: (1.15, 1.15, 1.15, 1.0),
+            secondary: (0.35, 0.35, 0.4, 1.0),
+            shape: (0.0, 0.0, 0.0, 1.0),
+            duration: 0.08,
+            scale: 8.0,
+            texture: Some("data/texture/effect/shield_boomerang.bmp"),
+            travel: Some((
+                speed: 120.0,
+                scale: 8.0,
+                texture: Some("data/texture/effect/shield_boomerang.bmp"),
+            )),
+        ),
+        "shield_chain": ( // PA_SHIELDCHAIN -- the Shield Boomerang shield, one throw per hit.
+            kind: 100,
+            primary: (1.15, 1.15, 1.15, 1.0),
+            secondary: (0.35, 0.35, 0.4, 1.0),
+            shape: (0.0, 0.0, 0.0, 1.0),
+            duration: 0.08,
+            scale: 8.0,
+            texture: Some("data/texture/effect/shield_boomerang.bmp"),
+            travel: Some((
+                speed: 140.0,
+                scale: 8.0,
+                texture: Some("data/texture/effect/shield_boomerang.bmp"),
+                per_hit: true,
+                stagger: 0.15,
             )),
         ),
         "stone_fling": (

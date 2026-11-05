@@ -1,0 +1,28 @@
+// Gospel / Battle Chant field: one small silver cross hovering over each server
+// footprint cell, as roBrowserLegacy's GospelEffects draw it (a hovering
+// cross_old.bmp per tile over a faint white tile tint), with a soft white glow
+// on the ground standing in for the tint. Skill-unit cell parenting owns the
+// lifetime and partial removal.
+(
+    fps: 30,
+    layers: [
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                (at: 0, offset: (319.0, 287.0), quad: (30.0, 10.0), color: (245, 248, 255, 60)),
+                (at: 45, offset: (319.0, 287.0), quad: (34.0, 12.0), color: (245, 248, 255, 90)),
+                (at: 90, offset: (319.0, 287.0), quad: (30.0, 10.0), color: (245, 248, 255, 60)),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/cross_old.bmp"],
+            blend: Blend,
+            keys: [
+                (at: 0, offset: (319.0, 270.0), quad: (20.0, 20.0), color: (255, 255, 255, 170)),
+                (at: 45, offset: (319.0, 258.0), quad: (20.0, 20.0), color: (255, 255, 255, 215)),
+                (at: 90, offset: (319.0, 270.0), quad: (20.0, 20.0), color: (255, 255, 255, 170)),
+            ],
+        ),
+    ],
+)
