@@ -1,36 +1,40 @@
-// Root / Blade Stop (MO_BLADESTOP) - authored STR-style effect.
-//
-// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
-// anchor at (319, 291) on the caster, STR_WORLD_SCALE 0.2, smaller offset.y =
-// higher; fps 30, linear key lerp, Add = additive.
-//
-// The Monk roots and readies to catch a blow. Shape: a sharp white focus flash
-// snaps at the caster's hands, and a tight ring clamps inward -- a controlled
-// "seize" rather than a burst. Quick and taut (~14f). The paired hold status
-// (EFST 85/1114) is an icon/opt3 aura on both combatants, not this cast flash.
+// Root / Blade Stop (MO_BLADESTOP) ready stance - no reference artwork. A sharp
+// cool flash at the guard, a large cross glint clamping shut on it and a
+// catch glint: a controlled seize rather than a burst. ~0.35s. The paired hold
+// status (EFST 85/1114) is an opt3 tint, not this cast.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
-        // Sharp focus flash at the caster's guard.
+        // Sharp focus flash at the guard.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0, offset: (319.0, 286.0), quad: (12.0, 12.0),   color: (235, 240, 250, 0) ),
-                ( at: 2, offset: (319.0, 286.0), quad: (110.0, 110.0), color: (245, 248, 255, 255) ),
-                ( at: 6, offset: (319.0, 286.0), quad: (150.0, 150.0), color: (225, 232, 245, 110) ),
-                ( at: 11, offset: (319.0, 286.0), quad: (170.0, 170.0), color: (210, 220, 238, 0) ),
+                ( at: 0, offset: (319.0, 224.0), quad: (14.0, 14.0), color: (235, 242, 255, 0) ),
+                ( at: 2, offset: (319.0, 224.0), quad: (120.0, 120.0), color: (235, 242, 255, 230) ),
+                ( at: 9, offset: (319.0, 224.0), quad: (150.0, 150.0), color: (235, 242, 255, 0) ),
             ],
         ),
-        // Tight ring clamping inward (the seize).
+        // Large cross glint clamping shut on the guard: the seize.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 288.0), quad: (190.0, 115.0), color: (220, 230, 245, 0) ),
-                ( at: 5,  offset: (319.0, 288.0), quad: (110.0, 66.0),  color: (240, 246, 255, 235) ),
-                ( at: 10, offset: (319.0, 288.0), quad: (46.0, 28.0),   color: (225, 234, 248, 130) ),
-                ( at: 14, offset: (319.0, 288.0), quad: (22.0, 13.0),   color: (210, 222, 240, 0) ),
+                ( at: 0, offset: (319.0, 224.0), quad: (220.0, 220.0), color: (235, 242, 255, 0) ),
+                ( at: 2, offset: (319.0, 224.0), quad: (160.0, 160.0), color: (235, 242, 255, 255) ),
+                ( at: 8, offset: (319.0, 224.0), quad: (50.0, 50.0), color: (235, 242, 255, 0) ),
+            ],
+        ),
+        // Catch glint as it closes.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7, offset: (319.0, 224.0), quad: (17.5, 17.5), color: (245, 248, 255, 0) ),
+                ( at: 9, offset: (319.0, 224.0), quad: (70.0, 70.0), color: (245, 248, 255, 255) ),
+                ( at: 13, offset: (319.0, 224.0), quad: (21.0, 21.0), color: (245, 248, 255, 0) ),
             ],
         ),
     ],

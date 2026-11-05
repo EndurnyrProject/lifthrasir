@@ -1,48 +1,162 @@
-// Ki Impact (MO_INVESTIGATE / MO_COMBOFINISH / MO_BALKYOUNG) - authored effect.
-//
-// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
-// anchor at (319, 291), STR_WORLD_SCALE 0.2, smaller offset.y = higher; fps 30,
-// linear key lerp, Add = additive.
-//
-// Shape: a single heavy focused impact -- a bright core flash detonates on the
-// target, a broad shockwave ring snaps outward along the ground, and a dust
-// burst kicks up. Base is white/gold so the descriptor `color` can retint it:
-// used neutral for Occult Impaction (266) and Combo Finish (273), and orange
-// for Ki Explosion / Balkyoung (1016) via its descriptor tint. ~22f.
+// Ki Impact - a single heavy blow (Occult Impaction 266, Raging Thrust 273, Palm
+// Strike 370, Tiger Fist 371, Ki Explosion 1016 retinted by its descriptor). The
+// reference is sound plus a quake for most of these; here a white-gold core
+// flash and glint detonate on the victim, twelve shock lines blow outward, a
+// flat shock crosses the ground and dust kicks up. ~0.75s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
         // Core detonation flash.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0, offset: (319.0, 288.0), quad: (16.0, 16.0),   color: (255, 246, 210, 0) ),
-                ( at: 3, offset: (319.0, 288.0), quad: (150.0, 150.0), color: (255, 252, 230, 255) ),
-                ( at: 8, offset: (319.0, 288.0), quad: (210.0, 210.0), color: (255, 244, 200, 130) ),
-                ( at: 14, offset: (319.0, 288.0), quad: (250.0, 250.0), color: (255, 238, 190, 0) ),
+                ( at: 0, offset: (319.0, 228.0), quad: (20.0, 20.0), color: (255, 246, 215, 0) ),
+                ( at: 3, offset: (319.0, 228.0), quad: (170.0, 170.0), color: (255, 246, 215, 255) ),
+                ( at: 9, offset: (319.0, 228.0), quad: (220.0, 220.0), color: (255, 246, 215, 120) ),
+                ( at: 15, offset: (319.0, 228.0), quad: (250.0, 250.0), color: (255, 246, 215, 0) ),
             ],
         ),
-        // Ground shockwave ring.
+        // Hard white glint at the moment of impact.
         (
-            textures: ["ro://data/texture/effect/ring_white.tga"],
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
             blend: Add,
             keys: [
-                ( at: 2,  offset: (319.0, 291.0), quad: (30.0, 18.0),   color: (255, 248, 215, 0) ),
-                ( at: 7,  offset: (319.0, 291.0), quad: (200.0, 115.0), color: (255, 250, 220, 235) ),
-                ( at: 14, offset: (319.0, 291.0), quad: (330.0, 185.0), color: (255, 242, 200, 120) ),
-                ( at: 20, offset: (319.0, 291.0), quad: (400.0, 225.0), color: (255, 236, 190, 0) ),
+                ( at: 1, offset: (319.0, 228.0), quad: (24.0, 24.0), color: (255, 252, 235, 0) ),
+                ( at: 3, offset: (319.0, 228.0), quad: (96.0, 96.0), color: (255, 252, 235, 255) ),
+                ( at: 8, offset: (319.0, 228.0), quad: (28.8, 28.8), color: (255, 252, 235, 0) ),
             ],
         ),
-        // Dust kick-up off the impact.
+        // Shock lines blowing outward.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (343.2, 230.7), quad: (24.4, 7.0), color: (255, 238, 195, 0), angle: 18.2 ),
+                ( at: 5, offset: (383.7, 235.3), quad: (73.2, 9.0), color: (255, 238, 195, 255), angle: 18.2 ),
+                ( at: 12, offset: (416.0, 238.9), quad: (44.7, 4.0), color: (255, 238, 195, 0), angle: 18.2 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (338.8, 240.6), quad: (23.5, 7.0), color: (255, 238, 195, 0), angle: 92.2 ),
+                ( at: 5, offset: (371.9, 261.6), quad: (70.4, 9.0), color: (255, 238, 195, 255), angle: 92.2 ),
+                ( at: 12, offset: (398.3, 278.3), quad: (43.0, 4.0), color: (255, 238, 195, 0), angle: 92.2 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (331.9, 246.9), quad: (22.9, 7.0), color: (255, 238, 195, 0), angle: 158.7 ),
+                ( at: 5, offset: (353.3, 278.4), quad: (68.6, 9.0), color: (255, 238, 195, 255), angle: 158.7 ),
+                ( at: 12, offset: (370.4, 303.7), quad: (41.9, 4.0), color: (255, 238, 195, 0), angle: 158.7 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (318.6, 247.7), quad: (19.7, 7.0), color: (255, 238, 195, 0), angle: 259.6 ),
+                ( at: 5, offset: (317.8, 280.6), quad: (59.2, 9.0), color: (255, 238, 195, 255), angle: 259.6 ),
+                ( at: 12, offset: (317.2, 306.9), quad: (36.2, 4.0), color: (255, 238, 195, 0), angle: 259.6 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (307.1, 244.1), quad: (20.0, 7.0), color: (255, 238, 195, 0), angle: 359.7 ),
+                ( at: 5, offset: (287.2, 271.0), quad: (60.1, 9.0), color: (255, 238, 195, 255), angle: 359.7 ),
+                ( at: 12, offset: (271.4, 292.5), quad: (36.7, 4.0), color: (255, 238, 195, 0), angle: 359.7 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (297.2, 238.6), quad: (24.2, 7.0), color: (255, 238, 195, 0), angle: 438.2 ),
+                ( at: 5, offset: (260.9, 256.3), quad: (72.7, 9.0), color: (255, 238, 195, 255), angle: 438.2 ),
+                ( at: 12, offset: (231.8, 270.4), quad: (44.4, 4.0), color: (255, 238, 195, 0), angle: 438.2 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (294.5, 230.8), quad: (24.7, 7.0), color: (255, 238, 195, 0), angle: 493.6 ),
+                ( at: 5, offset: (253.7, 235.4), quad: (74.0, 9.0), color: (255, 238, 195, 255), angle: 493.6 ),
+                ( at: 12, offset: (221.0, 239.1), quad: (45.2, 4.0), color: (255, 238, 195, 0), angle: 493.6 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (300.3, 218.2), quad: (21.1, 7.0), color: (255, 238, 195, 0), angle: 590.6 ),
+                ( at: 5, offset: (269.1, 201.9), quad: (63.3, 9.0), color: (255, 238, 195, 255), angle: 590.6 ),
+                ( at: 12, offset: (244.2, 188.9), quad: (38.7, 4.0), color: (255, 238, 195, 0), angle: 590.6 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (302.6, 205.1), quad: (28.1, 7.0), color: (255, 238, 195, 0), angle: 666.8 ),
+                ( at: 5, offset: (275.4, 167.1), quad: (84.3, 9.0), color: (255, 238, 195, 255), angle: 666.8 ),
+                ( at: 12, offset: (253.6, 136.6), quad: (51.5, 4.0), color: (255, 238, 195, 0), angle: 666.8 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (319.7, 207.2), quad: (20.8, 7.0), color: (255, 238, 195, 0), angle: 773.7 ),
+                ( at: 5, offset: (321.0, 172.6), quad: (62.4, 9.0), color: (255, 238, 195, 255), angle: 773.7 ),
+                ( at: 12, offset: (321.9, 144.9), quad: (38.1, 4.0), color: (255, 238, 195, 0), angle: 773.7 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (332.2, 206.3), quad: (25.4, 7.0), color: (255, 238, 195, 0), angle: 857.1 ),
+                ( at: 5, offset: (354.2, 170.1), quad: (76.3, 9.0), color: (255, 238, 195, 255), angle: 857.1 ),
+                ( at: 12, offset: (371.8, 141.1), quad: (46.6, 4.0), color: (255, 238, 195, 0), angle: 857.1 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (341.2, 215.0), quad: (25.7, 7.0), color: (255, 238, 195, 0), angle: 938.1 ),
+                ( at: 5, offset: (378.3, 193.5), quad: (77.2, 9.0), color: (255, 238, 195, 255), angle: 938.1 ),
+                ( at: 12, offset: (408.0, 176.2), quad: (47.2, 4.0), color: (255, 238, 195, 0), angle: 938.1 ),
+            ],
+        ),
+        // Shock flattening across the ground.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (319.0, 286.0), quad: (60.0, 18.0), color: (255, 235, 190, 0) ),
+                ( at: 6, offset: (319.0, 286.0), quad: (210.0, 46.0), color: (255, 235, 190, 150) ),
+                ( at: 14, offset: (319.0, 286.0), quad: (300.0, 60.0), color: (255, 235, 190, 0) ),
+            ],
+        ),
+        // Dust kicked up off the impact.
         (
             textures: ["ro://data/texture/effect/dust_blast.bmp"],
             blend: Add,
             keys: [
-                ( at: 3,  offset: (319.0, 291.0), quad: (40.0, 30.0),   color: (200, 180, 150, 0) ),
-                ( at: 8,  offset: (319.0, 282.0), quad: (150.0, 110.0), color: (220, 200, 165, 180) ),
-                ( at: 15, offset: (319.0, 268.0), quad: (210.0, 150.0), color: (190, 170, 140, 90) ),
-                ( at: 22, offset: (319.0, 255.0), quad: (250.0, 175.0), color: (160, 145, 120, 0) ),
+                ( at: 3, offset: (319.0, 286.0), quad: (40.0, 30.0), color: (200, 180, 150, 0) ),
+                ( at: 8, offset: (319.0, 278.0), quad: (150.0, 100.0), color: (220, 200, 165, 170) ),
+                ( at: 15, offset: (319.0, 264.0), quad: (210.0, 140.0), color: (190, 170, 140, 80) ),
+                ( at: 22, offset: (319.0, 252.0), quad: (250.0, 165.0), color: (160, 145, 120, 0) ),
             ],
         ),
     ],

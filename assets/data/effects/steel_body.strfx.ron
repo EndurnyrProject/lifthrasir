@@ -1,48 +1,178 @@
-// Mental Strength / Steel Body (MO_STEELBODY) - authored STR-style effect.
-//
-// Convention (see fire_bolt.strfx.ron / systems.rs): offset & quad in STR pixels,
-// anchor at (319, 291) on the caster, STR_WORLD_SCALE 0.2, smaller offset.y =
-// higher; fps 30, linear key lerp, Add = additive.
-//
-// The Monk hardens body and mind to steel. Shape: a pale steel-white flash at
-// the caster, then two concentric guard rings sweep up around them like a
-// tempering shell settling into a protective dome. Cool grey-white, deliberate
-// (~28f). The classic golden sprite tint for the duration is the opt3 aura
-// (id 16), handled by the sprite/status system, not this cast burst.
+// Mental Strength / Steel Body (MO_STEELBODY): the reference is sound plus a
+// quake; the golden tint for the duration is the opt3 aura owned by the sprite
+// system. Here a warm metallic shell hardens around the body under a
+// white-hot tempering flash and a short flare of glare, then glints run over
+// it. ~0.75s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
-        // Steel flash at the core.
+        // Warm metallic shell hardening around the body.
         (
-            textures: ["ro://data/texture/effect/lens_w.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 285.0), quad: (30.0, 30.0),   color: (200, 210, 225, 0) ),
-                ( at: 4,  offset: (319.0, 285.0), quad: (180.0, 180.0), color: (225, 232, 245, 255) ),
-                ( at: 12, offset: (319.0, 285.0), quad: (240.0, 240.0), color: (205, 215, 232, 130) ),
-                ( at: 20, offset: (319.0, 285.0), quad: (280.0, 280.0), color: (190, 200, 220, 0) ),
+                ( at: 0, offset: (319.0, 236.0), quad: (60.0, 90.0), color: (255, 236, 190, 0) ),
+                ( at: 3, offset: (319.0, 236.0), quad: (104.0, 150.0), color: (255, 236, 190, 210) ),
+                ( at: 12, offset: (319.0, 236.0), quad: (112.0, 156.0), color: (255, 236, 190, 110) ),
+                ( at: 22, offset: (319.0, 236.0), quad: (120.0, 164.0), color: (255, 236, 190, 0) ),
             ],
         ),
-        // Lower guard ring sweeping up around the caster.
+        // White-hot tempering flash at the chest.
         (
-            textures: ["ro://data/texture/effect/guardk.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 2,  offset: (319.0, 300.0), quad: (60.0, 40.0),   color: (200, 212, 230, 0) ),
-                ( at: 10, offset: (319.0, 288.0), quad: (230.0, 170.0), color: (225, 232, 245, 235) ),
-                ( at: 20, offset: (319.0, 275.0), quad: (300.0, 230.0), color: (205, 216, 234, 130) ),
-                ( at: 28, offset: (319.0, 266.0), quad: (330.0, 255.0), color: (190, 202, 222, 0) ),
+                ( at: 1, offset: (319.0, 224.0), quad: (30.0, 30.0), color: (255, 250, 235, 0) ),
+                ( at: 3, offset: (319.0, 224.0), quad: (120.0, 120.0), color: (255, 250, 235, 230) ),
+                ( at: 9, offset: (319.0, 224.0), quad: (70.0, 70.0), color: (255, 250, 235, 0) ),
             ],
         ),
-        // Upper guard ring, staggered, forming the dome cap.
+        // Short flare of metal glare.
         (
-            textures: ["ro://data/texture/effect/guardk2.tga"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 8,  offset: (319.0, 292.0), quad: (50.0, 34.0),   color: (205, 216, 234, 0) ),
-                ( at: 16, offset: (319.0, 280.0), quad: (200.0, 150.0), color: (228, 235, 248, 220) ),
-                ( at: 24, offset: (319.0, 270.0), quad: (270.0, 205.0), color: (208, 218, 236, 120) ),
-                ( at: 30, offset: (319.0, 263.0), quad: (300.0, 228.0), color: (192, 204, 224, 0) ),
+                ( at: 2, offset: (349.4, 237.6), quad: (20.3, 7.0), color: (255, 230, 180, 0), angle: 8.3 ),
+                ( at: 5, offset: (381.8, 239.2), quad: (58.8, 8.0), color: (255, 230, 180, 230), angle: 8.3 ),
+                ( at: 13, offset: (404.0, 240.3), quad: (30.4, 3.0), color: (255, 230, 180, 0), angle: 8.3 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (346.7, 254.6), quad: (22.3, 7.0), color: (255, 230, 180, 0), angle: 96.5 ),
+                ( at: 5, offset: (376.2, 274.5), quad: (64.5, 8.0), color: (255, 230, 180, 230), angle: 96.5 ),
+                ( at: 13, offset: (396.6, 288.1), quad: (33.4, 3.0), color: (255, 230, 180, 0), angle: 96.5 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (327.0, 267.7), quad: (21.8, 7.0), color: (255, 230, 180, 0), angle: 216.0 ),
+                ( at: 5, offset: (335.4, 301.6), quad: (63.2, 8.0), color: (255, 230, 180, 230), angle: 216.0 ),
+                ( at: 13, offset: (341.3, 324.8), quad: (32.7, 3.0), color: (255, 230, 180, 0), angle: 216.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (306.6, 267.7), quad: (22.7, 7.0), color: (255, 230, 180, 0), angle: 316.8 ),
+                ( at: 5, offset: (293.4, 301.5), quad: (65.8, 8.0), color: (255, 230, 180, 230), angle: 316.8 ),
+                ( at: 13, offset: (284.2, 324.7), quad: (34.0, 3.0), color: (255, 230, 180, 0), angle: 316.8 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (291.9, 257.6), quad: (23.1, 7.0), color: (255, 230, 180, 0), angle: 402.3 ),
+                ( at: 5, offset: (263.1, 280.6), quad: (66.9, 8.0), color: (255, 230, 180, 230), angle: 402.3 ),
+                ( at: 13, offset: (243.2, 296.4), quad: (34.6, 3.0), color: (255, 230, 180, 0), angle: 402.3 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (292.3, 234.9), quad: (17.8, 7.0), color: (255, 230, 180, 0), angle: 518.8 ),
+                ( at: 5, offset: (263.8, 233.7), quad: (51.6, 8.0), color: (255, 230, 180, 230), angle: 518.8 ),
+                ( at: 13, offset: (244.3, 232.9), quad: (26.7, 3.0), color: (255, 230, 180, 0), angle: 518.8 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (296.8, 222.1), quad: (17.4, 7.0), color: (255, 230, 180, 0), angle: 603.1 ),
+                ( at: 5, offset: (273.2, 207.3), quad: (50.6, 8.0), color: (255, 230, 180, 230), angle: 603.1 ),
+                ( at: 13, offset: (256.9, 197.1), quad: (26.2, 3.0), color: (255, 230, 180, 0), angle: 603.1 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (313.2, 210.2), quad: (17.6, 7.0), color: (255, 230, 180, 0), angle: 731.9 ),
+                ( at: 5, offset: (307.0, 182.8), quad: (51.1, 8.0), color: (255, 230, 180, 230), angle: 731.9 ),
+                ( at: 13, offset: (302.7, 163.9), quad: (26.4, 3.0), color: (255, 230, 180, 0), angle: 731.9 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (332.6, 203.1), quad: (23.7, 7.0), color: (255, 230, 180, 0), angle: 831.7 ),
+                ( at: 5, offset: (347.0, 168.0), quad: (68.8, 8.0), color: (255, 230, 180, 230), angle: 831.7 ),
+                ( at: 13, offset: (356.9, 143.9), quad: (35.6, 3.0), color: (255, 230, 180, 0), angle: 831.7 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (339.5, 221.4), quad: (16.8, 7.0), color: (255, 230, 180, 0), angle: 923.2 ),
+                ( at: 5, offset: (361.4, 205.8), quad: (48.7, 8.0), color: (255, 230, 180, 230), angle: 923.2 ),
+                ( at: 13, offset: (376.5, 195.1), quad: (25.2, 3.0), color: (255, 230, 180, 0), angle: 923.2 ),
+            ],
+        ),
+        // Glints running over the hardened body.
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 5, offset: (299.0, 228.6), quad: (12.5, 12.5), color: (255, 246, 220, 0) ),
+                ( at: 7, offset: (299.0, 228.6), quad: (49.8, 49.8), color: (255, 246, 220, 255) ),
+                ( at: 11, offset: (299.0, 228.6), quad: (14.9, 14.9), color: (255, 246, 220, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7, offset: (339.3, 207.0), quad: (13.7, 13.7), color: (255, 246, 220, 0) ),
+                ( at: 9, offset: (339.3, 207.0), quad: (54.7, 54.7), color: (255, 246, 220, 255) ),
+                ( at: 13, offset: (339.3, 207.0), quad: (16.4, 16.4), color: (255, 246, 220, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 9, offset: (298.6, 207.5), quad: (12.3, 12.3), color: (255, 246, 220, 0) ),
+                ( at: 11, offset: (298.6, 207.5), quad: (49.3, 49.3), color: (255, 246, 220, 255) ),
+                ( at: 15, offset: (298.6, 207.5), quad: (14.8, 14.8), color: (255, 246, 220, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 11, offset: (340.1, 216.3), quad: (12.2, 12.2), color: (255, 246, 220, 0) ),
+                ( at: 13, offset: (340.1, 216.3), quad: (48.7, 48.7), color: (255, 246, 220, 255) ),
+                ( at: 17, offset: (340.1, 216.3), quad: (14.6, 14.6), color: (255, 246, 220, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 13, offset: (303.8, 253.4), quad: (14.4, 14.4), color: (255, 246, 220, 0) ),
+                ( at: 15, offset: (303.8, 253.4), quad: (57.6, 57.6), color: (255, 246, 220, 255) ),
+                ( at: 19, offset: (303.8, 253.4), quad: (17.3, 17.3), color: (255, 246, 220, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/superstar1.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 15, offset: (334.6, 204.2), quad: (14.4, 14.4), color: (255, 246, 220, 0) ),
+                ( at: 17, offset: (334.6, 204.2), quad: (57.6, 57.6), color: (255, 246, 220, 255) ),
+                ( at: 21, offset: (334.6, 204.2), quad: (17.3, 17.3), color: (255, 246, 220, 0) ),
             ],
         ),
     ],

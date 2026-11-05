@@ -144,8 +144,8 @@
             repeating: false,
         ),
         // 86 EFST_EXPLOSIONSPIRITS (Fury) -- the classic thundershock: brief
-        // red lightning arcs (native elec_y_03.bmp) crackling around the
-        // sprite for the buff duration, looped, on top of the opt3 red tint.
+        // red lightning arcs (native elec_y_03.bmp) crackling around the upper
+        // body for the buff duration, looped, on top of the opt3 red tint.
         // The cast burst is the one-shot explosion_spirits.strfx.ron in
         // `skills:` (id 270). Steel Body (87) and Blade Stop (85) render as
         // opt3 sprite tints only, so they are intentionally absent here.
@@ -1400,11 +1400,12 @@
             repeating: false,
         ),
         // --- Monk (MO_*) -----------------------------------------------------
-        // Classic Monk skills have no native STR in the official client (they
-        // are hardcoded emitters), so the visible ones are authored strfx that
-        // reuse GRF effect textures, matching the Mage-bolt / Acolyte pattern.
-        // Passives (Iron Hand 259, Spirit Recovery 260, Dodge 265) render
-        // nothing and are intentionally absent.
+        // Reference: roBrowserLegacy SkillEffect.js / EffectTable.js. Classic
+        // Monk skills are hardcoded emitters in the official client; only Chain
+        // Combo has a native STR (연환.str). The rest are authored strfx on GRF
+        // effect textures, with the reference CYLINDER entries approximated by
+        // rings of trapezoid billboards. Passives (Iron Hand 259, Spirit
+        // Recovery 260, Dodge 265) render nothing and are intentionally absent.
         261: ( // MO_CALLSPIRITS (Summon Spirit Sphere) -- authored: a quiet blue
                // ki-gather flourish (the sphere itself is drawn by the separate
                // spirit-sphere system, not this cast burst).
@@ -1414,26 +1415,28 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        262: ( // MO_ABSORBSPIRITS (Absorb Spirit Sphere) -- reuses the
-               // call_spirits gather flourish on the caster.
-            visuals: [Str("call_spirits.strfx.ron")],
-            sound: None,
+        262: ( // MO_ABSORBSPIRITS (Absorb Spirit Sphere) -- reference EF 253:
+               // faint blue columns with rising sparks, and its 흡기 wav.
+            visuals: [Str("absorb_spirits.strfx.ron")],
+            sound: Some("effect/흡기.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         263: ( // MO_TRIPLEATTACK (Raging Trifecta) -- attack-replacement proc;
-               // authored ki_strike flurry of knuckle sparks on the victim.
+               // the reference is sound-only (ef_hit2/ef_hit4/ef_hit2), so the
+               // ki_strike flurry is authored; one wav plays for the proc.
             visuals: [Str("ki_strike.strfx.ron")],
-            sound: Some("effect/ef_hit3.wav"),
+            sound: Some("effect/ef_hit2.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        264: ( // MO_BODYRELOCATION (Snap) -- a forward blink; reuses the teleport
-               // swirl on the caster at the departure cell. No damage/EFST.
-            visuals: [Str("teleport.strfx.ron")],
-            sound: Some("effect/ef_teleportation.wav"),
+        264: ( // MO_BODYRELOCATION (Snap) -- reference EF_MAKEBLUR blurs the
+               // dashing body and plays no sound: an authored afterimage with
+               // speed streaks and dust. No damage/EFST.
+            visuals: [Str("body_relocation.strfx.ron")],
+            sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1447,40 +1450,43 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        267: ( // MO_FINGEROFFENSIVE (Throw Spirit Sphere, 탄지신통) -- authored:
-               // blue ki spheres streak into the victim and burst. Dedicated
-               // native wav.
-            visuals: [Str("spirit_sphere_throw.strfx.ron")],
+        267: ( // MO_FINGEROFFENSIVE (Throw Spirit Sphere, 탄지신통) -- as the
+               // reference EF_TANJI: one blue ki sphere flies from the caster
+               // per hit, and an authored blue burst lands on the victim.
+               // Dedicated native wav.
+            visuals: [Shader("spirit_sphere"), Str("spirit_sphere_throw.strfx.ron")],
             sound: Some("effect/mon_탄지신통.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        268: ( // MO_STEELBODY (Mental Strength, 금강불괴) -- self-buff; authored
-               // steel tempering flash + guard-ring dome. The golden sprite tint
-               // for the duration is the opt3 aura (16), owned by the sprite
-               // system. Dedicated native wav.
+        268: ( // MO_STEELBODY (Mental Strength, 금강불괴) -- self-buff; the
+               // reference is its wav plus a quake, so the metallic shell and
+               // glints are authored. The golden sprite tint for the duration
+               // is the opt3 aura (16), owned by the sprite system.
             visuals: [Str("steel_body.strfx.ron")],
             sound: Some("effect/mon_금강불괴.wav"),
+            shake: Some((amplitude: 3.0, duration_secs: 0.3)),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        269: ( // MO_BLADESTOP (Root) -- self-cast ready stance; authored sharp
-               // focus flash + clamping ring. The paired hold status (EFST
-               // 85/1114) is an icon/opt3 aura, not this cast flash.
+        269: ( // MO_BLADESTOP (Root) -- self-cast ready stance with no reference
+               // artwork; authored focus flash + clamping cross glint. The
+               // paired hold status (EFST 85/1114) is an icon/opt3 aura.
             visuals: [Str("blade_stop.strfx.ron")],
             sound: None,
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        270: ( // MO_EXPLOSIONSPIRITS (Fury) -- self-buff; authored cast burst
-               // from the native 폭기.tga starburst emblem. Dedicated native
-               // wav. The persistent red ki aura for the duration lives in
-               // `efsts:` (EFST 86 -> native kiaura1.str).
+        270: ( // MO_EXPLOSIONSPIRITS (Fury) -- self-buff; reference EF 261:
+               // four rising golden ring_yellow cylinders and a quake. Dedicated
+               // native wav. The red crackle for the duration lives in
+               // `efsts:` (EFST 86 -> fury_sparks.strfx.ron).
             visuals: [Str("explosion_spirits.strfx.ron")],
             sound: Some("effect/mon_폭기.wav"),
+            shake: Some((amplitude: 3.0, duration_secs: 0.4)),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1488,25 +1494,30 @@
         271: ( // MO_EXTREMITYFIST (Asura Strike / Guillotine Fist) -- the
                // signature finisher; authored classic look: the six skill-name
                // kanji (asura1-6/asura11-16.tga) flash on in an arc and slam
-               // into the victim. Kanji only, no blast. Dedicated native wav.
+               // into the victim, then the reference EF_TEIHIT1X hit lines
+               // burst off it. The reference quakes on cast. Dedicated wav.
             visuals: [Str("asura_strike.strfx.ron")],
             sound: Some("effect/mon_아수라 패황권.wav"),
+            shake: Some((amplitude: 5.0, duration_secs: 0.6)),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        272: ( // MO_CHAINCOMBO (Raging Quadruple Blow, 연환격) -- 4-hit combo;
-               // reuses the ki_strike knuckle flurry. Dedicated native wav.
-            visuals: [Str("ki_strike.strfx.ron")],
+        272: ( // MO_CHAINCOMBO (Raging Quadruple Blow, 연환격) -- as the
+               // reference: native 연환.str (EF_CHAINCOMBO) plus the EF_TEIHIT1
+               // burst lines, here the ki_strike flurry. Dedicated native wav.
+            visuals: [Str("연환.str"), Str("ki_strike.strfx.ron")],
             sound: Some("effect/mon_연환.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
         273: ( // MO_COMBOFINISH (Raging Thrust, 맹룡과강) -- combo finisher;
-               // reuses the ki_impact single heavy blow. Dedicated native wav.
+               // reuses the ki_impact heavy blow with the reference quake.
+               // Dedicated native wav.
             visuals: [Str("ki_impact.strfx.ron")],
             sound: Some("effect/mon_맹룡과강.wav"),
+            shake: Some((amplitude: 4.0, duration_secs: 0.35)),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1805,16 +1816,20 @@
             repeating: false,
         ),
         // --- Champion (CH_*) -------------------------------------------------
-        370: ( // CH_PALMSTRIKE -- approximate delayed impact and borrowed sound.
+        370: ( // CH_PALMSTRIKE -- reference EF_HITLINE2: its 맹호경파산 wav and a
+               // quake on the hit; the ki_impact heavy blow is authored.
             visuals: [Str("ki_impact.strfx.ron")],
-            sound: Some("effect/mon_침투경.wav"),
+            sound: Some("effect/맹호경파산.wav"),
+            shake: Some((amplitude: 4.0, duration_secs: 0.35)),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        371: ( // CH_TIGERFIST -- approximate strike with retail-named sound.
+        371: ( // CH_TIGERFIST -- ki_impact strike with retail-named sound and
+               // the reference quake.
             visuals: [Str("ki_impact.strfx.ron")],
             sound: Some("effect/복호격.wav"),
+            shake: Some((amplitude: 4.0, duration_secs: 0.35)),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -2992,6 +3007,24 @@
                 texture: Some("data/texture/effect/shield_boomerang.bmp"),
                 per_hit: true,
                 stagger: 0.15,
+            )),
+        ),
+        "spirit_sphere": ( // EF_TANJI -- one blue ki sphere per hit, caster to target.
+            // The reference flies the directional blue_ivy.bmp comet; the shared
+            // projectile is camera-facing, so a round blue-tinted glow11 stands in.
+            kind: 100,
+            primary: (0.6, 0.85, 1.4, 1.0),
+            secondary: (0.25, 0.45, 1.0, 1.0),
+            shape: (0.0, 0.0, 0.0, 0.0),
+            duration: 0.08,
+            scale: 7.0,
+            texture: Some("data/texture/effect/glow11.bmp"),
+            travel: Some((
+                speed: 160.0,
+                scale: 7.0,
+                texture: Some("data/texture/effect/glow11.bmp"),
+                per_hit: true,
+                stagger: 0.1,
             )),
         ),
         "stone_fling": (

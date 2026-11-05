@@ -1,0 +1,58 @@
+// Snap (MO_BODYRELOCATION): the reference EF_MAKEBLUR leaves a motion-blur trail
+// on the dashing body. Here a pale afterimage glow fades where the monk stood,
+// speed streaks stretch out of it and dust kicks off the cell. ~0.4s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
+(
+    fps: 30,
+    layers: [
+        // Afterimage glow left where the monk stood.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 236.0), quad: (74.0, 132.0), color: (180, 210, 255, 220) ),
+                ( at: 4, offset: (319.0, 236.0), quad: (86.0, 138.0), color: (180, 210, 255, 130) ),
+                ( at: 11, offset: (319.0, 236.0), quad: (100.0, 144.0), color: (180, 210, 255, 0) ),
+            ],
+        ),
+        // Speed streaks stretching out of the afterimage.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (305.0, 206.0), quad: (40.0, 7.0), color: (180, 210, 255, 0) ),
+                ( at: 2, offset: (319.0, 206.0), quad: (150.0, 9.0), color: (180, 210, 255, 255) ),
+                ( at: 9, offset: (339.0, 206.0), quad: (190.0, 4.0), color: (180, 210, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 1, offset: (305.0, 238.0), quad: (40.0, 7.0), color: (180, 210, 255, 0) ),
+                ( at: 3, offset: (319.0, 238.0), quad: (150.0, 9.0), color: (180, 210, 255, 255) ),
+                ( at: 10, offset: (339.0, 238.0), quad: (190.0, 4.0), color: (180, 210, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (305.0, 268.0), quad: (40.0, 7.0), color: (180, 210, 255, 0) ),
+                ( at: 4, offset: (319.0, 268.0), quad: (150.0, 9.0), color: (180, 210, 255, 255) ),
+                ( at: 11, offset: (339.0, 268.0), quad: (190.0, 4.0), color: (180, 210, 255, 0) ),
+            ],
+        ),
+        // Dust kicked off the departure cell.
+        (
+            textures: ["ro://data/texture/effect/dust_blast.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 287.0), quad: (50.0, 26.0), color: (200, 185, 160, 0) ),
+                ( at: 3, offset: (319.0, 283.0), quad: (120.0, 56.0), color: (210, 195, 170, 190) ),
+                ( at: 12, offset: (319.0, 276.0), quad: (160.0, 70.0), color: (180, 165, 140, 0) ),
+            ],
+        ),
+    ],
+)
