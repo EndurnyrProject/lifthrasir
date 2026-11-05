@@ -45,6 +45,9 @@ pub struct SkillFxParams {
     /// Per-kind scalars; meaning documented in each fragment function header.
     pub shape: Vec4,
     pub factor: f32,
+    /// Projectile roll: `x` is 1 to roll the billboard along its flight (the
+    /// quad's local +X), `y` the art's nose angle in radians. Zero elsewhere.
+    pub aim: Vec2,
 }
 
 impl Material for SkillFxMaterial {
@@ -187,6 +190,7 @@ pub fn dress_sight_orbits(
                 secondary: Vec4::new(2.4, 0.9, 0.25, 1.0),
                 shape: Vec4::ZERO,
                 factor: 0.0,
+                aim: Vec2::ZERO,
             },
             texture,
         });
@@ -237,6 +241,7 @@ pub fn dress_ruwach_orbits(
                 secondary: Vec4::new(0.4, 1.6, 2.4, 1.0),
                 shape: Vec4::ZERO,
                 factor: 0.0,
+                aim: Vec2::ZERO,
             },
             texture: Some(asset_server.load(format!("ro://{RUWACH_ORB_TEXTURE}"))),
         });
@@ -288,6 +293,7 @@ pub fn dress_spirit_sphere_orbits(
                 secondary: Vec4::new(0.7, 1.1, 2.2, 1.0),
                 shape: Vec4::ZERO,
                 factor: 0.0,
+                aim: Vec2::ZERO,
             },
             texture: Some(asset_server.load(format!("ro://{SPIRIT_SPHERE_TEXTURE}"))),
         });
@@ -379,6 +385,7 @@ pub fn spawn_shader_fx(
             secondary: entry.secondary.into(),
             shape: entry.shape.into(),
             factor: 0.0,
+            aim: Vec2::ZERO,
         },
         texture,
     });
@@ -453,9 +460,15 @@ fn spawn_projectile(
             secondary: entry.secondary.into(),
             shape: entry.shape.into(),
             factor: 0.0,
+            aim: travel
+                .aim
+                .map_or(Vec2::ZERO, |degrees| Vec2::new(1.0, degrees.to_radians())),
         },
         texture,
     });
+    // The flight is a straight line, so its direction rides on the quad's local
+    // +X for the vertex stage to roll an aimed billboard along.
+    let flight = Quat::from_rotation_arc(Vec3::X, (target - source).normalize_or(Vec3::X));
 
     // A staggered bolt waits hidden at the caster until its launch slot.
     let visibility = if delay > 0.0 {
@@ -482,7 +495,7 @@ fn spawn_projectile(
             let mut quad = parent.spawn((
                 Mesh3d(assets.quad.clone()),
                 MeshMaterial3d(material),
-                Transform::from_scale(Vec3::splat(travel.scale)),
+                Transform::from_scale(Vec3::splat(travel.scale)).with_rotation(flight),
                 NotShadowCaster,
             ));
             if let Some(flipbook) = flipbook {
@@ -586,6 +599,7 @@ mod tests {
                 secondary: Vec4::ONE,
                 shape: Vec4::ZERO,
                 factor: 0.0,
+                aim: Vec2::ZERO,
             },
             texture: None,
         };
@@ -621,8 +635,67 @@ mod tests {
                 frames: None,
                 per_hit,
                 stagger: 0.12,
+                aim: None,
             }),
         }
+    }
+
+    /// Spawns `entry`'s projectile from the origin toward `target`, returning
+    /// the quad's rotation and its material's `aim` uniform.
+    fn launched_quad(entry: ShaderFxEntry, target: Vec3) -> (Quat, Vec2) {
+        let mut app = travel_app();
+        app.add_systems(
+            Update,
+            move |mut commands: Commands,
+                  mut mats: ResMut<Assets<SkillFxMaterial>>,
+                  server: Res<AssetServer>,
+                  assets: Res<ImpactAssets>| {
+                spawn_shader_fx(
+                    &mut commands,
+                    &mut mats,
+                    &server,
+                    &assets,
+                    &entry,
+                    target,
+                    Some(Vec3::ZERO),
+                    1,
+                    None,
+                    "soul_breaker",
+                    Color::WHITE,
+                );
+            },
+        );
+        app.update();
+        let (rotation, handle) = app
+            .world_mut()
+            .query::<(&Transform, &MeshMaterial3d<SkillFxMaterial>)>()
+            .single(app.world())
+            .map(|(transform, handle)| (transform.rotation, handle.0.clone()))
+            .expect("one projectile quad");
+        let aim = app
+            .world()
+            .resource::<Assets<SkillFxMaterial>>()
+            .get(&handle)
+            .expect("projectile material")
+            .params
+            .aim;
+        (rotation, aim)
+    }
+
+    #[test]
+    fn aimed_projectile_carries_its_flight_direction_and_art_angle() {
+        let mut entry = travel_entry(false);
+        entry.travel.as_mut().unwrap().aim = Some(180.0);
+        let (rotation, aim) = launched_quad(entry, Vec3::new(0.0, 3.0, 4.0));
+
+        assert!((rotation * Vec3::X).abs_diff_eq(Vec3::new(0.0, 0.6, 0.8), 1e-5));
+        assert_eq!(aim, Vec2::new(1.0, std::f32::consts::PI));
+    }
+
+    #[test]
+    fn unaimed_projectile_stays_upright() {
+        let (_, aim) = launched_quad(travel_entry(false), Vec3::new(20.0, 0.0, 0.0));
+        assert_eq!(aim, Vec2::ZERO);
     }
 
     fn travel_app() -> App {

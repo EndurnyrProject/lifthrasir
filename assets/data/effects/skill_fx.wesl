@@ -23,6 +23,9 @@ struct SkillFxParams {
     secondary: vec4<f32>,
     shape: vec4<f32>,
     factor: f32,
+    // x: 1 rolls the billboard along the flight (the model's local +X);
+    // y: the art's nose angle in radians, counter-clockwise from texture +x.
+    aim: vec2<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(0) var<uniform> material: SkillFxParams;
@@ -44,6 +47,20 @@ struct VertexOutput {
     @location(0) uv: vec2<f32>,
 }
 
+// Rolls a camera-plane corner so an aimed projectile's art nose follows its
+// flight as seen on screen. Unaimed quads, and a flight straight along the view
+// axis, keep the art upright.
+fn aim_corner(corner: vec2<f32>, flight: vec3<f32>, cam_right: vec3<f32>, cam_up: vec3<f32>) -> vec2<f32> {
+    let screen = vec2<f32>(dot(flight, cam_right), dot(flight, cam_up));
+    if (material.aim.x < 0.5 || length(screen) < 1e-4) {
+        return corner;
+    }
+    let theta = atan2(screen.y, screen.x) - material.aim.y;
+    let c = cos(theta);
+    let s = sin(theta);
+    return vec2<f32>(c * corner.x - s * corner.y, s * corner.x + c * corner.y);
+}
+
 @vertex
 fn vertex(v: Vertex) -> VertexOutput {
     let model = get_world_from_local(v.instance_index);
@@ -52,7 +69,13 @@ fn vertex(v: Vertex) -> VertexOutput {
     let scale_y = length(model[1].xyz);
     let cam_right = view.world_from_view[0].xyz;
     let cam_up = view.world_from_view[1].xyz;
-    let world_pos = origin + cam_right * (v.position.x * scale_x) + cam_up * (v.position.y * scale_y);
+    let corner = aim_corner(
+        vec2<f32>(v.position.x * scale_x, v.position.y * scale_y),
+        model[0].xyz,
+        cam_right,
+        cam_up,
+    );
+    let world_pos = origin + cam_right * corner.x + cam_up * corner.y;
 
     var out: VertexOutput;
     out.clip_position = view.clip_from_world * vec4<f32>(world_pos, 1.0);

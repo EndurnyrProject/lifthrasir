@@ -2982,7 +2982,6 @@
             )),
         ),
         "venom_knife": ( // EF_THROWITEM6 -- retail Venom Knife icon in flight, no poison explosion.
-            // NOTE: shared projectile is camera-facing; spinning/directional art needs a projectile renderer upgrade.
             kind: 100,
             primary: (1.0, 1.0, 1.0, 1.0),
             secondary: (0.0, 0.0, 0.0, 0.0),
@@ -2994,21 +2993,22 @@
                 speed: 150.0,
                 scale: 6.0,
                 texture: Some("data/texture/유저인터페이스/item/베넘나이프.bmp"),
+                aim: Some(225.0), // the icon's blade points down-left
             )),
         ),
         "soul_breaker": ( // EF_SOULBREAKER -- purpleslash.tga flies from the caster into the victim.
-            // NOTE: the reference turns the crescent toward the target; the shared projectile is camera-facing.
             kind: 100,
             primary: (1.4, 1.0, 1.5, 1.0),
             secondary: (0.7, 0.3, 0.9, 1.0),
             shape: (0.0, 0.0, 0.0, 0.0),
             duration: 0.15,
             scale: 14.0,
-            texture: Some("data/texture/effect/purpleslash.tga"),
+            texture: Some("data/texture/effect/glow11.bmp"), // round arrival flash
             travel: Some((
                 speed: 110.0,
                 scale: 11.0,
                 texture: Some("data/texture/effect/purpleslash.tga"),
+                aim: Some(180.0), // the crescent's convex edge leads
             )),
         ),
         "shield_boomerang": ( // EF_SHIELDBOOMERANG -- the reference throws shield_boomerang.bmp from the caster.

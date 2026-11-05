@@ -219,6 +219,12 @@ pub struct ShaderFxTravel {
     /// at once; ignored when `per_hit` is false.
     #[serde(default)]
     pub stagger: f32,
+    /// Direction the art's nose points in the texture, in degrees
+    /// counter-clockwise from its +x (right). When set, the camera-facing
+    /// projectile rolls so that direction follows its on-screen flight; `None`
+    /// (default) keeps the art upright, for round orbs.
+    #[serde(default)]
+    pub aim: Option<f32>,
 }
 
 /// One shader-fx catalog entry: the `SkillFxParams` payload plus the optional
