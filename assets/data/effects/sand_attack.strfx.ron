@@ -1,33 +1,76 @@
-// Sand Attack (TF_SPRINKLESAND): retail sand grains scatter across the target.
-// A brief authored impact, independent of the server's Blind status roll.
+// Sand Attack (TF_SPRINKLESAND): hardcoded in the official client and absent
+// from the reference table (310 is unmapped there), so authored: a tan dust
+// cloud hits the face while retail sand grains fan out and settle. ~0.8s.
+// Independent of the server's Blind roll.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
+        // Tan dust cloud thrown into the face.
+        (
+            textures: ["ro://data/texture/effect/dust01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (313.0, 222.0), quad: (40.0, 34.0), color: (225, 190, 125, 0) ),
+                ( at: 3, offset: (319.0, 218.0), quad: (120.0, 96.0), color: (225, 190, 125, 200) ),
+                ( at: 18, offset: (327.0, 226.0), quad: (175.0, 140.0), color: (200, 165, 105, 0) ),
+            ],
+        ),
+        // Sand grain sprays fanning across the victim.
         (
             textures: ["ro://data/texture/effect/sand1.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (303.0, 249.0), quad: (25.0, 25.0), color: (210, 180, 120, 0)),
-                (at: 2, offset: (300.0, 239.0), quad: (65.0, 65.0), color: (210, 180, 120, 230)),
-                (at: 13, offset: (275.0, 254.0), quad: (110.0, 110.0), color: (180, 150, 100, 0)),
+                ( at: 0, offset: (289.0, 228.0), quad: (30.0, 30.0), color: (255, 220, 150, 0) ),
+                ( at: 2, offset: (289.0, 222.0), quad: (80.0, 80.0), color: (255, 220, 150, 255) ),
+                ( at: 15, offset: (240.4, 246.0), quad: (130.0, 130.0), color: (210, 175, 115, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/sand2.bmp"],
             blend: Add,
             keys: [
-                (at: 1, offset: (331.0, 246.0), quad: (25.0, 25.0), color: (220, 195, 135, 0)),
-                (at: 3, offset: (337.0, 232.0), quad: (70.0, 70.0), color: (220, 195, 135, 230)),
-                (at: 15, offset: (363.0, 250.0), quad: (120.0, 120.0), color: (190, 160, 110, 0)),
+                ( at: 1, offset: (309.0, 228.0), quad: (30.0, 30.0), color: (255, 220, 150, 0) ),
+                ( at: 3, offset: (309.0, 222.0), quad: (80.0, 80.0), color: (255, 220, 150, 255) ),
+                ( at: 16, offset: (291.0, 246.0), quad: (130.0, 130.0), color: (210, 175, 115, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/sand3.bmp"],
             blend: Add,
             keys: [
-                (at: 2, offset: (319.0, 242.0), quad: (25.0, 25.0), color: (225, 200, 145, 0)),
-                (at: 4, offset: (319.0, 223.0), quad: (65.0, 65.0), color: (225, 200, 145, 210)),
-                (at: 16, offset: (324.0, 248.0), quad: (115.0, 115.0), color: (190, 165, 115, 0)),
+                ( at: 2, offset: (329.0, 228.0), quad: (30.0, 30.0), color: (255, 220, 150, 0) ),
+                ( at: 4, offset: (329.0, 222.0), quad: (80.0, 80.0), color: (255, 220, 150, 255) ),
+                ( at: 17, offset: (335.8, 246.0), quad: (130.0, 130.0), color: (210, 175, 115, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/sand4.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 3, offset: (349.0, 228.0), quad: (30.0, 30.0), color: (255, 220, 150, 0) ),
+                ( at: 5, offset: (349.0, 222.0), quad: (80.0, 80.0), color: (255, 220, 150, 255) ),
+                ( at: 18, offset: (381.1, 246.0), quad: (130.0, 130.0), color: (210, 175, 115, 0) ),
+            ],
+        ),
+        // Fine yellow grains settling.
+        (
+            textures: ["ro://data/texture/effect/sand_y_01.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 2, offset: (319.0, 232.0), quad: (50.0, 50.0), color: (255, 225, 160, 0) ),
+                ( at: 4, offset: (319.0, 228.0), quad: (110.0, 110.0), color: (255, 225, 160, 230) ),
+                ( at: 20, offset: (319.0, 262.0), quad: (150.0, 150.0), color: (230, 195, 130, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/sand_y_02.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 3, offset: (319.0, 232.0), quad: (50.0, 50.0), color: (255, 225, 160, 0) ),
+                ( at: 5, offset: (319.0, 228.0), quad: (110.0, 110.0), color: (255, 225, 160, 230) ),
+                ( at: 21, offset: (319.0, 262.0), quad: (150.0, 150.0), color: (230, 195, 130, 0) ),
             ],
         ),
     ],

@@ -1,42 +1,110 @@
-// Enchant Poison: rising purple motes on the recipient, not a persistent aura.
-// Authored approximation of EF_PATTACK (20), using roBrowserLegacy's pok1.tga.
+// Enchant Poison (AS_ENCHANTPOISON; EDP retints it): the reference EF_PATTACK
+// (20) raises ten violet pok1.tga motes from the recipient's feet past its
+// head, fading in and out over a second each. Not a persistent aura.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
+        // Mote 1 of 10 rising off the recipient.
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                (at: 0, offset: (301.0, 286.0), quad: (12.0, 12.0), color: (255, 178, 255, 0)),
-                (at: 5, offset: (295.0, 272.0), quad: (24.0, 24.0), color: (255, 178, 255, 210)),
-                (at: 25, offset: (287.0, 223.0), quad: (18.0, 18.0), color: (255, 178, 255, 0)),
+                ( at: 0, offset: (294.3, 298.2), quad: (57.4, 57.4), color: (235, 130, 255, 0) ),
+                ( at: 8, offset: (294.3, 264.2), quad: (57.4, 57.4), color: (235, 130, 255, 255) ),
+                ( at: 20, offset: (294.3, 214.0), quad: (57.4, 57.4), color: (235, 130, 255, 255) ),
+                ( at: 30, offset: (294.3, 172.5), quad: (57.4, 57.4), color: (235, 130, 255, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                (at: 2, offset: (337.0, 285.0), quad: (10.0, 10.0), color: (255, 178, 255, 0)),
-                (at: 7, offset: (343.0, 268.0), quad: (22.0, 22.0), color: (255, 178, 255, 220)),
-                (at: 27, offset: (351.0, 216.0), quad: (16.0, 16.0), color: (255, 178, 255, 0)),
+                ( at: 2, offset: (339.9, 285.3), quad: (60.0, 60.0), color: (235, 130, 255, 0) ),
+                ( at: 10, offset: (339.9, 252.9), quad: (60.0, 60.0), color: (235, 130, 255, 255) ),
+                ( at: 22, offset: (339.9, 204.8), quad: (60.0, 60.0), color: (235, 130, 255, 255) ),
+                ( at: 32, offset: (339.9, 165.1), quad: (60.0, 60.0), color: (235, 130, 255, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                (at: 4, offset: (319.0, 275.0), quad: (12.0, 12.0), color: (255, 178, 255, 0)),
-                (at: 9, offset: (319.0, 257.0), quad: (26.0, 26.0), color: (255, 178, 255, 230)),
-                (at: 30, offset: (319.0, 200.0), quad: (18.0, 18.0), color: (255, 178, 255, 0)),
+                ( at: 4, offset: (278.1, 294.2), quad: (60.8, 60.8), color: (235, 130, 255, 0) ),
+                ( at: 12, offset: (278.1, 257.1), quad: (60.8, 60.8), color: (235, 130, 255, 255) ),
+                ( at: 24, offset: (278.1, 202.3), quad: (60.8, 60.8), color: (235, 130, 255, 255) ),
+                ( at: 34, offset: (278.1, 157.0), quad: (60.8, 60.8), color: (235, 130, 255, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                (at: 7, offset: (309.0, 290.0), quad: (10.0, 10.0), color: (255, 178, 255, 0)),
-                (at: 12, offset: (315.0, 271.0), quad: (20.0, 20.0), color: (255, 178, 255, 200)),
-                (at: 33, offset: (327.0, 220.0), quad: (14.0, 14.0), color: (255, 178, 255, 0)),
+                ( at: 6, offset: (301.2, 286.6), quad: (67.8, 67.8), color: (235, 130, 255, 0) ),
+                ( at: 14, offset: (301.2, 256.7), quad: (67.8, 67.8), color: (235, 130, 255, 255) ),
+                ( at: 26, offset: (301.2, 212.5), quad: (67.8, 67.8), color: (235, 130, 255, 255) ),
+                ( at: 36, offset: (301.2, 176.0), quad: (67.8, 67.8), color: (235, 130, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 8, offset: (357.6, 283.9), quad: (68.8, 68.8), color: (235, 130, 255, 0) ),
+                ( at: 16, offset: (357.6, 249.3), quad: (68.8, 68.8), color: (235, 130, 255, 255) ),
+                ( at: 28, offset: (357.6, 198.1), quad: (68.8, 68.8), color: (235, 130, 255, 255) ),
+                ( at: 38, offset: (357.6, 155.9), quad: (68.8, 68.8), color: (235, 130, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 10, offset: (286.6, 287.8), quad: (64.0, 64.0), color: (235, 130, 255, 0) ),
+                ( at: 18, offset: (286.6, 257.5), quad: (64.0, 64.0), color: (235, 130, 255, 255) ),
+                ( at: 30, offset: (286.6, 212.8), quad: (64.0, 64.0), color: (235, 130, 255, 255) ),
+                ( at: 40, offset: (286.6, 175.9), quad: (64.0, 64.0), color: (235, 130, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (347.8, 292.5), quad: (67.0, 67.0), color: (235, 130, 255, 0) ),
+                ( at: 20, offset: (347.8, 257.0), quad: (67.0, 67.0), color: (235, 130, 255, 255) ),
+                ( at: 32, offset: (347.8, 204.4), quad: (67.0, 67.0), color: (235, 130, 255, 255) ),
+                ( at: 42, offset: (347.8, 161.0), quad: (67.0, 67.0), color: (235, 130, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (283.0, 293.3), quad: (61.0, 61.0), color: (235, 130, 255, 0) ),
+                ( at: 22, offset: (283.0, 263.6), quad: (61.0, 61.0), color: (235, 130, 255, 255) ),
+                ( at: 34, offset: (283.0, 219.5), quad: (61.0, 61.0), color: (235, 130, 255, 255) ),
+                ( at: 44, offset: (283.0, 183.1), quad: (61.0, 61.0), color: (235, 130, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 16, offset: (339.7, 284.8), quad: (63.4, 63.4), color: (235, 130, 255, 0) ),
+                ( at: 24, offset: (339.7, 250.4), quad: (63.4, 63.4), color: (235, 130, 255, 255) ),
+                ( at: 36, offset: (339.7, 199.4), quad: (63.4, 63.4), color: (235, 130, 255, 255) ),
+                ( at: 46, offset: (339.7, 157.3), quad: (63.4, 63.4), color: (235, 130, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 18, offset: (295.6, 295.7), quad: (56.4, 56.4), color: (235, 130, 255, 0) ),
+                ( at: 26, offset: (295.6, 259.2), quad: (56.4, 56.4), color: (235, 130, 255, 255) ),
+                ( at: 38, offset: (295.6, 205.0), quad: (56.4, 56.4), color: (235, 130, 255, 255) ),
+                ( at: 48, offset: (295.6, 160.4), quad: (56.4, 56.4), color: (235, 130, 255, 0) ),
             ],
         ),
     ],

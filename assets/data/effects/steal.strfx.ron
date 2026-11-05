@@ -1,34 +1,83 @@
-// Steal (TF_STEAL): a short gold sparkle burst on the robbed target.
-// Reference: EF_STEAL uses particle7 and ef_steal.wav (roBrowser EffectTable).
-// Authored approximation of the hardcoded burst, not a looping status aura.
+// Steal (TF_STEAL, also Gank): the reference EF_STEAL (18) bursts seven
+// big pok1.tga stars off the robbed unit that shrink while they fly out and
+// up, fading over 0.5s. Played on success only.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
 (
     fps: 30,
     layers: [
+        // Warm bloom where the stars burst from.
         (
-            textures: ["ro://data/texture/effect/pika02.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                (at: 0, offset: (300.0, 250.0), quad: (12.0, 12.0), color: (255, 230, 130, 0)),
-                (at: 3, offset: (288.0, 240.0), quad: (35.0, 35.0), color: (255, 230, 130, 255)),
-                (at: 14, offset: (270.0, 218.0), quad: (12.0, 12.0), color: (255, 215, 100, 0)),
+                ( at: 0, offset: (319.0, 240.0), quad: (40.0, 40.0), color: (255, 250, 215, 0) ),
+                ( at: 2, offset: (319.0, 240.0), quad: (150.0, 150.0), color: (255, 250, 215, 190) ),
+                ( at: 10, offset: (319.0, 240.0), quad: (180.0, 180.0), color: (255, 250, 215, 0) ),
+            ],
+        ),
+        // Star 1 of 7 flying off the victim.
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (351.6, 205.9), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (373.3, 183.1), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
             ],
         ),
         (
-            textures: ["ro://data/texture/effect/pika02.bmp"],
+            textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                (at: 2, offset: (336.0, 242.0), quad: (12.0, 12.0), color: (255, 240, 155, 0)),
-                (at: 5, offset: (346.0, 228.0), quad: (42.0, 42.0), color: (255, 240, 155, 255)),
-                (at: 16, offset: (363.0, 208.0), quad: (14.0, 14.0), color: (255, 220, 110, 0)),
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (346.2, 207.0), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (364.3, 185.1), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
             ],
         ),
         (
-            textures: ["ro://data/texture/effect/pika02.bmp"],
+            textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                (at: 4, offset: (319.0, 232.0), quad: (10.0, 10.0), color: (255, 240, 160, 0)),
-                (at: 7, offset: (319.0, 217.0), quad: (38.0, 38.0), color: (255, 240, 160, 255)),
-                (at: 20, offset: (319.0, 190.0), quad: (12.0, 12.0), color: (255, 225, 120, 0)),
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (319.8, 219.7), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (320.4, 206.2), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (295.8, 208.9), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (280.4, 188.2), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (294.0, 209.2), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (277.4, 188.7), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (321.0, 191.8), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (322.3, 159.7), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 240.0), quad: (48.0, 48.0), color: (255, 255, 217, 255) ),
+                ( at: 5, offset: (346.1, 184.2), quad: (30.0, 30.0), color: (255, 255, 217, 230) ),
+                ( at: 15, offset: (364.2, 147.0), quad: (8.0, 8.0), color: (255, 255, 217, 0) ),
             ],
         ),
     ],

@@ -486,7 +486,7 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        50: ( // TF_STEAL: one-shot success sparkles, also reused by Gank.
+        50: ( // TF_STEAL: reference EF_STEAL star burst on success, also reused by Gank.
             visuals: [Str("steal.strfx.ron")],
             sound: Some("effect/ef_steal.wav"),
             placement: Target,
@@ -1008,6 +1008,14 @@
             repeating: false,
         ),
         // --- Assassin -------------------------------------------------------
+        135: ( // AS_CLOAKING -- reference EF_CLOAKING (120) is its wav only; the
+               // cloak option owns visibility.
+            visuals: [],
+            sound: Some("effect/assasin_cloaking.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+        ),
         136: ( // AS_SONICBLOW -- one native impact; div already staggers damage numbers.
                // NOTE: target feedback only; caster spin/ring needs cast-start presentation.
             visuals: [Str("sonicblow.str")],
@@ -1024,7 +1032,8 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        138: ( // AS_ENCHANTPOISON -- recipient poison motes, not a repeating status aura.
+        138: ( // AS_ENCHANTPOISON -- reference EF_PATTACK violet motes on the recipient,
+               // not a repeating status aura.
             visuals: [Str("enchant_poison.strfx.ron")],
             sound: Some("effect/assasin_enchantpoison.wav"),
             placement: Target,
@@ -1129,10 +1138,11 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        214: ( // RG_RAID -- approximate per-victim impact; caster burst needs a cast event.
+        214: ( // RG_RAID -- reference EF_TEIHIT3 blue streak burst, once per cast
+               // on the caster. The reference plays no sound.
             visuals: [Str("rogue_raid.strfx.ron")],
             sound: None,
-            placement: Target,
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
@@ -1864,16 +1874,20 @@
             repeating: false,
         ),
         // --- Assassin Cross (ASC_*) ------------------------------------------
-        378: ( // ASC_EDP -- approximate cast burst, not a persistent weapon aura.
+        378: ( // ASC_EDP -- reference EF_EDP is the cloaking wav on the caster; the
+               // Enchant Poison motes, retinted deadly crimson, are authored.
+               // Not a persistent weapon aura.
             visuals: [Str("enchant_poison.strfx.ron")],
-            sound: Some("effect/assasin_enchantpoison.wav"),
+            sound: Some("effect/assasin_cloaking.wav"),
             placement: Caster,
-            color: (1.0, 1.0, 1.0, 1.0),
+            color: (1.0, 0.35, 0.45, 1.0),
             repeating: false,
         ),
-        379: ( // ASC_BREAKER -- approximate magical impact and sound.
-            visuals: [Shader("soul_strike")],
-            sound: Some("effect/ef_napalmbeat.wav"),
+        379: ( // ASC_BREAKER (Soul Destroyer) -- reference EF_SOULBREAKER: a
+               // purpleslash flies from the caster into the victim, with its
+               // ki-cannon wav.
+            visuals: [Shader("soul_breaker")],
+            sound: Some("effect/기공포.wav"),
             placement: Target,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -1929,9 +1943,10 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        390: ( // ST_REJECTSWORD -- native EF_REJECTSWORD on cast and counter.
+        390: ( // ST_REJECTSWORD -- native EF_REJECTSWORD and its kyrie_guard wav on
+               // cast and counter.
             visuals: [Str("sword.str")],
-            sound: None,
+            sound: Some("effect/kyrie_guard.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -2021,16 +2036,18 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        406: ( // ASC_METEORASSAULT -- approximate per-victim strike, not a caster burst.
-            visuals: [Str("sonicblow.str")],
+        406: ( // ASC_METEORASSAULT -- reference EF_SOULBREAKER2: eight purple
+               // slashes sweep out from the caster, once per cast.
+            visuals: [Str("meteor_assault.strfx.ron")],
             sound: Some("effect/메테오 어썰트.wav"),
-            placement: Target,
+            placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
-        475: ( // ST_PRESERVE -- authored seal, not a persistent aura.
+        475: ( // ST_PRESERVE -- reference flared ring_jadu cylinder and its wav,
+               // on the completed cast. Not a persistent aura.
             visuals: [Str("stalker_preserve.strfx.ron")],
-            sound: None,
+            sound: Some("effect/black_maximize_power_sword_bic.wav"),
             placement: Caster,
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
@@ -2971,12 +2988,27 @@
             secondary: (0.0, 0.0, 0.0, 0.0),
             shape: (0.0, 0.0, 0.0, 0.0),
             duration: 0.08,
-            scale: 3.0,
+            scale: 6.0,
             texture: Some("data/texture/유저인터페이스/item/베넘나이프.bmp"),
             travel: Some((
                 speed: 150.0,
-                scale: 3.0,
+                scale: 6.0,
                 texture: Some("data/texture/유저인터페이스/item/베넘나이프.bmp"),
+            )),
+        ),
+        "soul_breaker": ( // EF_SOULBREAKER -- purpleslash.tga flies from the caster into the victim.
+            // NOTE: the reference turns the crescent toward the target; the shared projectile is camera-facing.
+            kind: 100,
+            primary: (1.4, 1.0, 1.5, 1.0),
+            secondary: (0.7, 0.3, 0.9, 1.0),
+            shape: (0.0, 0.0, 0.0, 0.0),
+            duration: 0.15,
+            scale: 14.0,
+            texture: Some("data/texture/effect/purpleslash.tga"),
+            travel: Some((
+                speed: 110.0,
+                scale: 11.0,
+                texture: Some("data/texture/effect/purpleslash.tga"),
             )),
         ),
         "shield_boomerang": ( // EF_SHIELDBOOMERANG -- the reference throws shield_boomerang.bmp from the caster.
@@ -3038,7 +3070,7 @@
             texture: Some("data/texture/effect/stone_part.bmp"),
             travel: Some((
                 speed: 65.0,
-                scale: 1.5,
+                scale: 4.0,
                 texture: Some("data/texture/effect/stone64.bmp"),
             )),
         ),

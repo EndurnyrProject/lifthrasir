@@ -1,0 +1,94 @@
+// Meteor Assault (ASC_METEORASSAULT): the reference EF_SOULBREAKER2 (409) sends
+// eight purpleslash.tga crescents out from the caster in the eight ground
+// directions, each growing and fading over 0.5s, convex side leading. Plays
+// once per cast on the caster; the hit riders are server-owned. ~0.5s.
+// Coordinates follow inc_agi.strfx.ron: (319, 291) is the unit's feet, smaller
+// y is higher, 1024 angle units per turn. The body spans about y 191..291.
+(
+    fps: 30,
+    layers: [
+        // Violet flash on the caster.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 240.0), quad: (40.0, 40.0), color: (215, 110, 255, 0) ),
+                ( at: 2, offset: (319.0, 240.0), quad: (150.0, 150.0), color: (215, 110, 255, 170) ),
+                ( at: 12, offset: (319.0, 240.0), quad: (200.0, 200.0), color: (215, 110, 255, 0) ),
+            ],
+        ),
+        // Slash 1 of 8 sweeping out along the ground.
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (341.0, 261.0), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 512.0 ),
+                ( at: 7, offset: (394.0, 261.0), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 512.0 ),
+                ( at: 15, offset: (434.0, 261.0), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 512.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (334.6, 267.9), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 580.4 ),
+                ( at: 7, offset: (372.0, 284.7), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 580.4 ),
+                ( at: 15, offset: (400.3, 297.3), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 580.4 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 270.8), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 768.0 ),
+                ( at: 7, offset: (319.0, 294.4), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 768.0 ),
+                ( at: 15, offset: (319.0, 312.3), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 768.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (303.4, 267.9), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 955.6 ),
+                ( at: 7, offset: (266.0, 284.7), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 955.6 ),
+                ( at: 15, offset: (237.7, 297.3), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 955.6 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (297.0, 261.0), quad: (60.0, 60.0), color: (255, 255, 255, 153) ),
+                ( at: 7, offset: (244.0, 261.0), quad: (95.0, 95.0), color: (255, 255, 255, 110) ),
+                ( at: 15, offset: (204.0, 261.0), quad: (120.0, 120.0), color: (255, 255, 255, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (303.4, 254.1), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 68.4 ),
+                ( at: 7, offset: (266.0, 237.3), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 68.4 ),
+                ( at: 15, offset: (237.7, 224.7), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 68.4 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (319.0, 251.2), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 256.0 ),
+                ( at: 7, offset: (319.0, 227.6), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 256.0 ),
+                ( at: 15, offset: (319.0, 209.7), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 256.0 ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/purpleslash.tga"],
+            blend: Add,
+            keys: [
+                ( at: 0, offset: (334.6, 254.1), quad: (60.0, 60.0), color: (255, 255, 255, 153), angle: 443.6 ),
+                ( at: 7, offset: (372.0, 237.3), quad: (95.0, 95.0), color: (255, 255, 255, 110), angle: 443.6 ),
+                ( at: 15, offset: (400.3, 224.7), quad: (120.0, 120.0), color: (255, 255, 255, 0), angle: 443.6 ),
+            ],
+        ),
+    ],
+)

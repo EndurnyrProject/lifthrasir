@@ -18,6 +18,7 @@ use bevy::prelude::*;
 use lifthrasir_data::{EffectDescriptor, EffectPlacement, SkillMotion, Visual};
 use lifthrasir_runtime::effects::{descriptor_tint, load_effect, load_str_effect};
 use moonshine_behavior::prelude::BehaviorMut;
+use std::collections::HashMap;
 
 use crate::domain::camera::CameraShakeRequest;
 use crate::domain::combat::casting::play_cast_pose;
@@ -337,14 +338,40 @@ pub fn on_skill_effect(
     }
 }
 
+/// How long after a caster-placed damage visual the same caster and skill stay
+/// claimed, so one self-centered cast reported as one damage event per victim
+/// (Raid, Meteor Assault, Magnum Break) shows its burst once.
+const CASTER_BURST_WINDOW_SECS: f32 = 0.2;
+
+/// Recent caster-placed damage visuals, keyed by caster and skill.
+#[derive(Default)]
+pub struct CasterBursts(HashMap<(Entity, u32), f32>);
+
+impl CasterBursts {
+    /// Claims `skill_id`'s caster visual on `src` at `now`; false while an
+    /// earlier claim is inside the window.
+    fn claim(&mut self, src: Entity, skill_id: u32, now: f32) -> bool {
+        self.0
+            .retain(|_, claimed| now - *claimed < CASTER_BURST_WINDOW_SECS);
+        if self.0.contains_key(&(src, skill_id)) {
+            return false;
+        }
+        self.0.insert((src, skill_id), now);
+        true
+    }
+}
+
 /// `SkillDamageReceived` — like `on_skill_effect`, plus the existing
-/// `DisplayDamageNumber` for the target.
+/// `DisplayDamageNumber` for the target. A `Caster`-placed descriptor plays
+/// once per cast on the caster instead of on every victim.
 pub fn on_skill_damage(
     mut events: MessageReader<SkillDamageReceived>,
     mut ctx: EffectSpawnCtx,
     mut damage_display: MessageWriter<DisplayDamageNumber>,
     shader_fx: Option<Res<ShaderFxCatalog>>,
     mut proc_vfx: MessageWriter<PlayProceduralVfx>,
+    time: Res<Time>,
+    mut caster_bursts: Local<CasterBursts>,
 ) {
     let shader_fx = shader_fx.as_deref();
     for event in events.read() {
@@ -412,16 +439,26 @@ pub fn on_skill_damage(
 
         // Ground-placement visuals belong to the GroundSkillPlaced event (the
         // classic poseffect); per-victim damage keeps numbers and motion only.
-        if descriptor.placement == EffectPlacement::Ground {
-            continue;
-        }
+        let anchor = match descriptor.placement {
+            EffectPlacement::Ground => continue,
+            EffectPlacement::Target => target,
+            EffectPlacement::Caster => {
+                let Some(src) = src else {
+                    continue;
+                };
+                if !caster_bursts.claim(src, event.skill_id, time.elapsed_secs()) {
+                    continue;
+                }
+                src
+            }
+        };
 
         let emitter = spawn_str_or_fallback(
             &mut ctx.commands,
             &ctx.asset_server,
             descriptor,
-            EffectAnchor::Entity(target),
-            target,
+            EffectAnchor::Entity(anchor),
+            anchor,
             None,
         );
 
@@ -432,7 +469,7 @@ pub fn on_skill_damage(
             &ctx.transforms,
             shader_fx,
             descriptor,
-            target,
+            anchor,
             src,
             hit_count,
         );
@@ -1503,6 +1540,58 @@ mod tests {
             emitted[0].emitter, target,
             "sound anchors to the target unit"
         );
+    }
+
+    #[test]
+    fn caster_placed_damage_skill_plays_once_on_the_caster() {
+        let mut app = test_app();
+        app.add_systems(Update, on_skill_damage);
+        app.insert_resource(skill_catalog(
+            9998,
+            EffectDescriptor {
+                visuals: vec![Visual::Str("raid.strfx.ron".to_string())],
+                sound: Some("effect/ef_bash.wav".to_string()),
+                placement: EffectPlacement::Caster,
+                color: [1.0, 1.0, 1.0, 1.0],
+                repeating: false,
+                ..Default::default()
+            },
+        ));
+        let caster = spawn_unit(&mut app, 100);
+        spawn_unit(&mut app, 200);
+        spawn_unit(&mut app, 300);
+        let hit = |target_id| SkillDamageReceived {
+            skill_id: 9998,
+            missed: false,
+            level: 1,
+            src_id: 100,
+            target_id,
+            server_tick: 0,
+            damage: 10,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        };
+
+        app.world_mut().write_message(hit(200));
+        app.world_mut().write_message(hit(300));
+        app.update();
+        app.world_mut().write_message(hit(300));
+        app.update();
+
+        let anchors: Vec<_> = app
+            .world_mut()
+            .query::<&EffectAnchor>()
+            .iter(app.world())
+            .map(|anchor| match anchor {
+                EffectAnchor::Entity(entity) => Some(*entity),
+                EffectAnchor::Position(_) => None,
+            })
+            .collect();
+        assert_eq!(anchors, vec![Some(caster)], "one cast, one caster burst");
+        let sfx = app.world().resource::<Messages<PlaySkillSfx>>();
+        assert_eq!(sfx.get_cursor().read(sfx).count(), 1);
     }
 
     /// Plays `skill_id` as a single hit on a unit at `target_pos` with the real

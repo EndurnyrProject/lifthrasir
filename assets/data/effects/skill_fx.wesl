@@ -80,13 +80,14 @@ fn vnoise(p: vec2<f32>) -> f32 {
 }
 
 // Scalar intensity of the bound classic GRF effect texture. Black-background
-// BMPs are additive-safe, so the brightest channel reads as glow. uv is clamped
+// BMPs are additive-safe, so the brightest channel reads as glow; alpha scales
+// it so a TGA's transparent (often white) background stays dark. uv is clamped
 // so out-of-range lookups sample the edge; callers still mask contribution to
 // zero outside [0,1] to avoid edge smear. Level 0 (no derivatives) is required
 // inside the non-uniform per-streak loops.
 fn sample_fx(uv: vec2<f32>) -> f32 {
     let t = textureSampleLevel(fx_texture, fx_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0);
-    return max(max(t.r, t.g), t.b);
+    return max(max(t.r, t.g), t.b) * t.a;
 }
 
 // Fades to zero at the quad's inscribed circle, so a burst that grows to the
@@ -514,7 +515,8 @@ fn projectile_fragment(uv: vec2<f32>) -> vec4<f32> {
     if (alpha < 0.01) {
         discard;
     }
-    let art = textureSampleLevel(fx_texture, fx_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0).rgb;
+    let texel = textureSampleLevel(fx_texture, fx_sampler, clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)), 0.0);
+    let art = texel.rgb * texel.a;
     let hue = mix(vec3<f32>(1.0), art / max(tex, 0.0001), material.shape.w);
     let color = (material.primary.rgb * core + material.secondary.rgb * glow) * hue;
     return vec4<f32>(color, alpha);
