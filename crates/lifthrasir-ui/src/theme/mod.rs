@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 
 pub mod feathers_theme;
+pub mod ro_dark;
 
-// Endurnir palette — the single source of truth for UI colors (raw bevy_ui).
+// Endurnir palette, legacy: new screens use `ro_dark`, which replaces this and
+// `feathers_theme` once every screen has migrated.
 pub const GLASS: Color = Color::srgb(0.063, 0.086, 0.078);
 pub const GLASS_2: Color = Color::srgb(0.086, 0.118, 0.106);
 pub const FIELD: Color = Color::srgb(0.031, 0.047, 0.043);

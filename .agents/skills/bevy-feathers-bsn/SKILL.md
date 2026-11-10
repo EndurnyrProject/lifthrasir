@@ -7,7 +7,7 @@ description: "Use when building Bevy 0.20 UI with BSN scenes (the bsn!/bsn_list!
 
 The next-generation scene system (BSN) and the `bevy_feathers` widget toolkit as they ship in **Bevy 0.20**. This is the modern, declarative way to author `bevy_ui` — use it for new windows/panels/widgets instead of imperative `commands.spawn` trees.
 
-> Lifthrasir context: the windows under `crates/lifthrasir-client-ui/src/widgets/` are the worked examples (`guild_window/`, `shop_window/`, `storage_window/`, `trade_window/` are the largest), and `crates/lifthrasir-ui/src/theme/feathers_theme.rs` is the theme source of truth. For non-UI ecosystem crates see [[lifthrasir-bevy-plugins]]; for core ECS/rendering see [[bevy]].
+> Lifthrasir context: the windows under `crates/lifthrasir-client-ui/src/widgets/` are the worked examples (`guild_window/`, `shop_window/`, `storage_window/`, `trade_window/` are the largest), `crates/lifthrasir-ui/src/theme/ro_dark.rs` is the RO-dark palette + theme for new screens (legacy windows still use `feathers_theme.rs`), and `crates/lifthrasir-ui/src/widgets/primitives.rs` holds the RO-dark art primitives. For non-UI ecosystem crates see [[lifthrasir-bevy-plugins]]; for core ECS/rendering see [[bevy]].
 
 ## 0.20 syntax migration (this repo already migrated — don't reintroduce the old forms)
 
@@ -346,6 +346,31 @@ Component values are literals, variables, function calls, and chained method cal
 
 `template_value` is deprecated in 0.20; prefer deleting it. If a value genuinely needs the `Template`/`InsertTemplate` path, prefix with `~`: `~MyType { name: 1 }` or `~{ my_expr }`.
 
+### Components are patches: a bare `Pickable` does not reset anything
+
+Every component in a `bsn!` body is a **patch** applied in order. `Foo { x: 1 }` sets only `x`; a bare `Foo` sets nothing (it only guarantees the component exists, from `Default`). So an earlier include wins over a later bare literal:
+
+```rust
+// BROKEN: sliced() includes @ignore_picking(), which sets is_hoverable: false.
+// The bare `Pickable` after it is an empty patch, so the button is never hoverable:
+// no Hovered, no Pressed, no Activate.
+bsn! { Button Hovered @sliced("button.png", 40.0) Node { .. } Pickable }
+```
+
+Rules:
+
+- Never bake `@ignore_picking()` (or any `Pickable { .. }`) into a reusable scene that interactive nodes also include. Put it on the leaf that needs it (`glyph_icon`, `chrome_text`, dividers).
+- To override a field set by an earlier include, spell the field out again: `Pickable { should_block_lower: true, is_hoverable: true }`, not `Pickable`.
+- Verify over BRP when a click "does nothing": `world.query` the entity's `bevy_picking::Pickable`; `is_hoverable: false` is this bug.
+
+### Art-driven buttons and checkboxes (no Feathers)
+
+For custom chrome (the RO-dark primitives), use the headless widget plus a `Changed`-driven art swap, as in `examples/ui/images/ui_texture_slice.rs`:
+
+- `Button` (`bevy::ui_widgets`) + `Hovered` (`bevy::picking::hover`, required or hover is never tracked) + a component naming the normal/hover/pressed art. The widget inserts `bevy::ui::Pressed` and emits `Activate`; observe `On<Activate>`, not `PointerClick` (the widget stops its propagation).
+- Restyle when `Ref<Hovered>::is_changed()`, `Option<Ref<Pressed>>` is changed, **or** the entity is in `RemovedComponents<Pressed>`; removal is not reported by change detection.
+- A checkbox with no Feathers theme is just `Marker(bool)` + `Pickable` on the row, an `on(On<PointerClick>)` that flips it, and a `Changed<Marker>` system swapping the child `ImageNode`. Reference: `ArtCheckbox` in `crates/lifthrasir-ui/src/widgets/primitives.rs`; reuse `button`, `checkbox`, `sliced` from there instead of re-rolling them.
+
 ### Capturing child entity ids — `#Name` + `FromTemplate`
 
 A parent component holding child `Entity` ids is still the right pattern — name the children in the scene scope and reference them:
@@ -416,9 +441,11 @@ So: **structure + behavior in `bsn!`; live data in a system keyed on marker comp
 7. Inactive flex pages use `Display::None`; `Visibility::Hidden` alone is not a layout toggle.
 8. Editable fields carry `EditableText` **and** `TextInput`, plus `TabIndex`; `PointerFocusPlugin` + `TextInputPlugin` are installed.
 9. Fixed sizes are explicit (`FontSize::Px`), because the default is now `rem(1)`.
+10. Interactive nodes never include a scene that sets `Pickable`; a bare `Pickable` afterwards is an empty patch and will not restore hoverability.
+11. 9-sliced art: `visual_box: VisualBox::BorderBox`, and `max_corner_scale` = 1 / art scale (0.5 for 2x cuts). See the `bevy` skill, "UI images, atlases, 9-slice".
 
 ## Reference
 
-- Repo: `crates/lifthrasir-client-ui/src/widgets/{guild_window,shop_window,storage_window,trade_window}/scene.rs` (large declarative windows), `crates/lifthrasir-ui/src/theme/feathers_theme.rs` (`assign_token`, `norse_theme`), `crates/lifthrasir-ui/src/plugin.rs` (`UiPrimitivesPlugin`: `PointerFocusPlugin`, `register_required_components::<EditableText, TabIndex>`).
+- Repo: `crates/lifthrasir-client-ui/src/widgets/{guild_window,shop_window,storage_window,trade_window}/scene.rs` (large declarative windows), `crates/lifthrasir-ui/src/widgets/primitives.rs` (9-sliced art chrome, headless `Button` hover/press art, checkbox toggle; `PrimitivesPlugin` runs the art swaps), `crates/lifthrasir-client-ui/src/screens/login.rs` (a screen composed from them), `crates/lifthrasir-ui/src/theme/ro_dark.rs` (`ro_dark_theme`, palette), `crates/lifthrasir-ui/src/theme/feathers_theme.rs` (`assign_token`, legacy `norse_theme`), `crates/lifthrasir-ui/src/plugin.rs` (`UiPrimitivesPlugin`: `PointerFocusPlugin`, `register_required_components::<EditableText, TabIndex>`).
 - Official examples at tag `v0.20.0`: `examples/scene/bsn.rs`, `examples/ui/widgets/{feathers_gallery,feathers_number_input,headless_tabs,tab_navigation}.rs`, `examples/large_scenes/bevy_city/src/settings.rs`.
 - Crate docs: `bevy_scene_macros` (`bsn!` / `bsn_list!` syntax tables — the authoritative reference), `bevy_scene` (concepts, `Ready`, `SceneComponent`), `bevy_feathers` (`theme` for `ThemeProps`/`ThemeContext`, `controls` for per-widget props). On docs.rs these are `bevy::scene`, `bevy::feathers`; in a vendored/cargo-registry checkout they are `crates/bevy_scene/src/lib.rs` and `crates/bevy_feathers/src/{lib,theme}.rs`.

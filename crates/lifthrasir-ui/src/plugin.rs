@@ -1,4 +1,5 @@
 use crate::widgets::placeholder::PlaceholderPlugin;
+use crate::widgets::primitives::PrimitivesPlugin;
 use bevy::picking::cursor::OverrideCursor;
 use bevy::{
     input_focus::tab_navigation::TabIndex,
@@ -27,7 +28,10 @@ impl Plugin for UiPrimitivesPlugin {
         if !app.is_plugin_added::<PointerFocusPlugin>() {
             app.add_plugins(PointerFocusPlugin);
         }
-        app.init_resource::<OverrideCursor>()
-            .add_plugins((FeathersPlugins, PlaceholderPlugin));
+        app.init_resource::<OverrideCursor>().add_plugins((
+            FeathersPlugins,
+            PlaceholderPlugin,
+            PrimitivesPlugin,
+        ));
     }
 }

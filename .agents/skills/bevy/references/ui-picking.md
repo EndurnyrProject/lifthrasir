@@ -230,6 +230,15 @@ ImageNode { image, image_mode: NodeImageMode::Sliced(slicer), ..default() }
 `ImageNode.color` tints (usable for hover/press states). Atlas + slicing combine: `.with_mode(NodeImageMode::Sliced(...))` on an atlas image. Pixel art: `DefaultPlugins.set(ImagePlugin::default_nearest())`.
 `examples/ui/images/image_node.rs`, `ui_texture_atlas.rs`, `ui_texture_slice.rs`, `ui_texture_slice_flip_and_tile.rs`, `ui_texture_atlas_slice.rs`
 
+**Two 9-slice traps (0.20), both verified on the login screen:**
+
+- `ImageNode.visual_box` defaults to `VisualBox::ContentBox`, so the image is drawn **inside the node's padding/border**. A sliced frame on a padded container shrinks while its children do not, and the chrome ends up smaller than its content. For chrome that must cover the whole node set `visual_box: VisualBox::BorderBox` (`examples/testbed/ui.rs` shows all three boxes side by side).
+- Slicing runs in **logical px** against the texture's pixel size. `border` is in texture px, and corners render at `min(target / texture, max_corner_scale)` of their texture size. With a 2x (HiDPI) cut, a node narrower than the texture scales the corners by that ratio, so a 404px-wide window drawn from a 528px texture gets corners 1.5x the design. Set `max_corner_scale` to `1 / art_scale` (`0.5` for 2x art) and the corners stay at their 1x design size on any DPI; the texture still samples at full resolution. `examples/2d/sprite_slice.rs` ("With Corners Constrained").
+
+Measure border/padding from the art's source (the sheet generator or manifest), never from a screenshot: baked shadows mean the shape is inset from the image edge, and `border` must include that padding.
+
+`TextShadow { offset, color }` on a `Text` node gives the hard drop shadow that keeps a title legible on busy art; the default is a 4px 75% black offset.
+
 ## UiTransform (translate / rotate / scale)
 
 UI nodes ignore 3D `Transform`; visual transforms use `UiTransform` — post-layout, layout is unaffected:
