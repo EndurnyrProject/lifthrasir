@@ -1,8 +1,9 @@
-//! Item info modal content: renders an [`ItemInfoView`] through the shell chrome —
-//! header, card slots, compact metadata, and vellum description, plus a footer whose action the
-//! summoning surface chose (`ItemAction`). Optional sections (cards, meta,
-//! description, footer) are omitted entirely when their view field is empty, rather
-//! than spawned as empty wrappers.
+//! Item info modal content: an [`ItemInfoView`] drawn as the RO-dark "Item Info"
+//! window. A parchment plate with the collection illustration sits beside the type,
+//! name and description; the stats, card slots, random options and flags follow, and
+//! the footer holds the action the summoning surface chose (`ItemAction`). Sections
+//! whose view field is empty are omitted entirely, not spawned as empty wrappers.
+//! Sizes follow the `Inventory` artboard of the Lifthrasir Widgets design.
 //!
 //! Footer actions revalidate the item at the stored index against the `item_id`
 //! captured when the modal was built, since the inventory can change while the
@@ -11,20 +12,33 @@
 
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{FontSize, FontSourceTemplate};
-use bevy::ui::InteractionDisabled;
-use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::{ButtonVariant, FeathersButton};
-use bevy_feathers::theme::{ThemeBorderColor, ThemedText};
+use bevy::ui_widgets::{Activate, ControlOrientation, ScrollArea};
+use bevy_feathers::controls::FeathersScrollbar;
 
 use lifthrasir_client::domain::equipment::{EquipItemRequested, UnequipItemRequested};
 use lifthrasir_client::domain::inventory::{Inventory, UseItemRequested};
 
-use lifthrasir_ui::widgets::chrome::{glyph_icon, ignore_picking};
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    ButtonArt, WINDOW_SHADOW, close_button, diamond, display_text, inset, window_title_bar,
+    window_titled,
+};
 
-use crate::widgets::info_modal::shell::{self, HeaderView, PARCHMENT as ILLUSTRATION_PARCHMENT};
-use crate::widgets::info_modal::view::ItemInfoView;
+use crate::screens::shared::{flush_button, glow, usable};
+use crate::widgets::info_modal::description::slate_ink;
+use crate::widgets::info_modal::shell::{self, EdgeGrade, PARCHMENT};
+use crate::widgets::info_modal::view::{ColoredLine, ItemInfoView, decorated_name};
 use crate::widgets::info_modal::{InfoModalRoot, ItemAction, ItemActionKind};
+
+const WINDOW_WIDTH: f32 = 360.0;
+/// The sections scroll beyond this, so a long description never outgrows the screen.
+const BODY_MAX_HEIGHT: f32 = 520.0;
+/// The parchment plate, sized for RO's 75x100 collection art at 1.5x.
+const PLATE: Vec2 = Vec2::new(120.0, 160.0);
+const ILLUSTRATION: Vec2 = Vec2::new(112.0, 150.0);
+/// Width of the bronze ring and dark gap around the plate.
+const PLATE_RING: f32 = 3.0;
 
 fn action_label(kind: ItemActionKind) -> &'static str {
     match kind {
@@ -42,28 +56,18 @@ pub(super) struct FooterAction {
     index: u16,
     item_id: u32,
     kind: ItemActionKind,
-    disabled: bool,
 }
 
-/// Every field is always set explicitly at the `template_value` call site; this
-/// impl exists only so `FooterAction` satisfies `bsn!`'s `Template` bound.
+/// Every field is always set explicitly where the button is built; this impl exists
+/// only so `FooterAction` satisfies `bsn!`'s `Template` bound.
 impl Default for FooterAction {
     fn default() -> Self {
         Self {
             index: 0,
             item_id: 0,
             kind: ItemActionKind::Use,
-            disabled: false,
         }
     }
-}
-
-/// Marks the display-only favorite indicator in the item footer — `.im-act.ghost`
-/// (`.on` when lit). Carries the flag it renders so tests can assert lit state
-/// without inspecting colors; not a button, never targeted by an observer.
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct FavoriteStar {
-    pub lit: bool,
 }
 
 /// Marks the parchment plate holding the native RO collection illustration.
@@ -73,254 +77,425 @@ struct ItemIllustration;
 #[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct ItemIllustrationImage;
 
-fn item_illustration(path: String, edge: shell::EdgeGrade) -> impl Scene {
-    bsn! {
-        ItemIllustration
-        Node {
-            width: percent(100),
-            height: px(176),
-            flex_shrink: 0.0,
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: px(1),
-            border_radius: BorderRadius::all(px(12)),
-            overflow: Overflow::clip(),
-        }
-        BackgroundColor(ILLUSTRATION_PARCHMENT)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        @ignore_picking()
-        Children [
-            ItemIllustrationImage
-            ImageNode { image: {path}, color: {ILLUSTRATION_PARCHMENT} }
-            Node { width: px(75), height: px(100) }
-            @ignore_picking()
-            --
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(6), right: px(6), top: px(6), bottom: px(6),
-                border: px(1),
-                border_radius: BorderRadius::all(px(8)),
-            }
-            ThemeBorderColor({edge.token()})
-            @ignore_picking()
-        ]
+/// The item window, moved by [`drag_item_window`].
+#[derive(Component, Default, Clone)]
+pub(super) struct ItemInfoWindow;
+
+/// The title bar, which is the drag handle.
+#[derive(Component, Default, Clone)]
+struct ItemInfoTitlebar;
+
+/// How far the player has dragged the item window from the screen centre. It outlives
+/// the modal, so the next item opens where the last one was left.
+#[derive(Resource, Default)]
+pub(crate) struct ItemInfoOffset(pub Vec2);
+
+/// Drags the window by its title bar. `PointerDrag` bubbles up from the close button,
+/// so a drag whose target is not the bar itself is ignored. The pointer delta is in
+/// window pixels, so it is divided by the UI scale to keep the bar under the cursor.
+fn drag_item_window(
+    drag: On<PointerDrag>,
+    titlebars: Query<(), With<ItemInfoTitlebar>>,
+    mut windows: Query<&mut Node, With<ItemInfoWindow>>,
+    mut offset: ResMut<ItemInfoOffset>,
+    ui_scale: Res<UiScale>,
+) {
+    if titlebars.get(drag.entity).is_err() {
+        return;
+    }
+    offset.0 += drag.delta / ui_scale.0;
+    for mut node in &mut windows {
+        node.left = px(offset.0.x);
+        node.top = px(offset.0.y);
     }
 }
 
-/// The footer's favorite indicator — gold when `favorite`, dim otherwise. Rendered
-/// only for `Inventory` refs, since favorite is server item state with no command
-/// to toggle it here. `ignore_picking` (not a `FeathersButton`, no observer) keeps
-/// it a display-only ghost button per the mockup.
-fn favorite_star(favorite: bool) -> impl Scene {
-    let (bg, border, color) = if favorite {
-        (
-            Color::srgba(0.851, 0.643, 0.255, 0.1),
-            lifthrasir_ui::theme::GOLD_FAINT,
-            lifthrasir_ui::theme::GOLD,
-        )
-    } else {
-        (
-            Color::WHITE.with_alpha(0.03),
-            lifthrasir_ui::theme::STROKE,
-            lifthrasir_ui::theme::TEXT_DIM,
-        )
-    };
-    bsn! {
-        FavoriteStar { lit: favorite }
-        Node {
-            width: px(42),
-            height: px(40),
-            flex_shrink: 0.0,
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: px(1),
-            border_radius: BorderRadius::all(px(9)),
-        }
-        BackgroundColor(bg)
-        BorderColor::all(border)
-        @ignore_picking()
-        Children [ @glyph_icon("star", 15.0, color) ]
-    }
-}
-
-/// The item modal's whole content: header, then the scrollable section stack, then
-/// the footer with `action` (if any) and the favorite star (if the view carries one).
+/// The whole item window: title bar, the scrolling section stack, then the footer with
+/// `action` (if any). It stops clicks from reaching the backdrop, so clicking inside
+/// does not dismiss the modal. The caller offsets it with `left`/`top`.
 pub(super) fn scene(view: ItemInfoView, action: Option<ItemAction>) -> impl Scene {
-    let header = shell::header(HeaderView {
-        icon_path: view.icon_path.clone(),
-        refine: view.refine,
-        sockets_filled: view.sockets_filled,
-        sockets_total: view.sockets_total,
-        edge: view.edge,
-        name: view.name.clone(),
-        tags: view.tags.clone(),
-    });
-    let cards = (view.sockets_total > 0).then(|| EntityScene(card_slots_section(&view)));
-    let options = (!view.options.is_empty()).then(|| EntityScene(options_section(&view.options)));
-    let meta = (!view.meta.is_empty()).then(|| EntityScene(shell::metadata_row(view.meta.clone())));
-    let description = (!view.description.is_empty())
-        .then(|| EntityScene(super::description::scene(view.description.clone())));
-    let illustration = view
-        .illustration_path
-        .clone()
-        .map(|path| EntityScene(item_illustration(path, view.edge)));
-
-    let button = action.map(|action| action_button(&view, action));
-    let star = view.favorite.map(favorite_star);
-    let mut footer_children: Vec<Box<dyn Scene>> = button
-        .into_iter()
-        .map(|action| Box::new(action) as Box<dyn Scene>)
-        .collect();
-    footer_children.extend(star.map(|star| Box::new(star) as Box<dyn Scene>));
-    let footer =
-        (!footer_children.is_empty()).then(|| EntityScene(shell::footer_bar(footer_children)));
+    let mut sections: Vec<Box<dyn Scene>> = vec![Box::new(summary(&view))];
+    if !view.meta.is_empty() {
+        sections.push(Box::new(stats_panel(view.meta.clone())));
+    }
+    if view.sockets_total > 0 {
+        sections.push(Box::new(card_slots(&view)));
+    }
+    if !view.options.is_empty() {
+        sections.push(Box::new(random_options(view.options.clone())));
+    }
+    let flags = flags(&view);
+    if !flags.is_empty() {
+        sections.push(Box::new(flag_lines(flags)));
+    }
+    let footer = action.map(|action| EntityScene(footer(&view, action)));
 
     bsn! {
-        Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, min_height: px(0) }
-        @ignore_picking()
+        ItemInfoWindow
+        @window_titled()
+        Node {
+            width: px(WINDOW_WIDTH + 2.0 * WINDOW_SHADOW),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Stretch,
+        }
+        Pickable
+        on(|mut click: On<PointerClick>| click.propagate(false))
         Children [
-            @header --
-            @shell::scroll_body(bsn! {
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    flex_shrink: 0.0,
-                    row_gap: px(14),
-                    padding: {UiRect { left: px(20), right: px(20), top: px(0), bottom: px(6) }},
-                }
-                @ignore_picking()
-                Children [ {illustration} -- {cards} -- {options} -- {meta} -- {description} ]
-            }) --
+            ItemInfoTitlebar
+            @window_title_bar("Item Info", bsn! { @close_button() on(shell::close_modal) })
+            Pickable
+            on(drag_item_window)
+            --
+            @scroll_body(sections)
+            --
             {footer}
         ]
     }
 }
 
-/// The Card Slots section: a section label with the `filled/total` counter, and one
-/// row per socket — filled ones name the card, empty ones say so.
-fn card_slots_section(view: &ItemInfoView) -> impl Scene + use<> {
-    let counter = format!("{} / {}", view.cards.len(), view.sockets_total);
-    let slots: Vec<_> = (0..view.sockets_total)
-        .map(|i| card_slot(view.cards.get(i as usize).cloned()))
+/// The section stack, scrolling past [`BODY_MAX_HEIGHT`]. The scrollbar sits in the
+/// window's side padding and hides while everything fits.
+fn scroll_body(sections: Vec<Box<dyn Scene>>) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Relative,
+            margin: {UiRect::new(px(0), px(0), px(10), px(8))},
+        }
+        @ignore_picking()
+        Children [
+            #viewport
+            ScrollArea
+            Pickable
+            Node {
+                flex_grow: 1.0,
+                min_width: px(0),
+                max_height: px(BODY_MAX_HEIGHT),
+                flex_direction: FlexDirection::Column,
+                overflow: {Overflow::scroll_y()},
+            }
+            Children [
+                Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0, row_gap: px(12) }
+                @ignore_picking()
+                Children [ {sections} ]
+            ]
+            --
+            @FeathersScrollbar { @target: #viewport, @orientation: {ControlOrientation::Vertical} }
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(-14),
+                top: px(0),
+                bottom: px(0),
+                width: px(6),
+            }
+        ]
+    }
+}
+
+/// The plate beside the item's type line, name and description.
+fn summary(view: &ItemInfoView) -> impl Scene + use<> {
+    let rare = view.edge == EdgeGrade::Rare;
+    let plate = view
+        .illustration_path
+        .clone()
+        .map(|path| EntityScene(plate(path, view.identified, rare)));
+    let kind = view.tags.join(" \u{b7} ").to_uppercase();
+    let refine = view.refine.and_then(|r| u8::try_from(r).ok()).unwrap_or(0);
+    let name = decorated_name(&view.name, refine, view.sockets_total);
+    let name_color = if rare {
+        ro_dark::RARE_RING
+    } else {
+        ro_dark::STRONG
+    };
+    let description =
+        (!view.description.is_empty()).then(|| EntityScene(description(view.description.clone())));
+    bsn! {
+        Node { align_items: AlignItems::FlexStart, column_gap: px(16) }
+        @ignore_picking()
+        Children [
+            {plate}
+            --
+            Node {
+                flex_direction: FlexDirection::Column,
+                flex_grow: 1.0,
+                flex_basis: px(0),
+                min_width: px(0),
+            }
+            @ignore_picking()
+            Children [
+                @chrome_text(kind, 10.0, ro_dark::ACCENT)
+                --
+                @chrome_text(name, 15.0, name_color)
+                Node { margin: {UiRect::top(px(2))} }
+                --
+                @rule()
+                --
+                {description}
+            ]
+        ]
+    }
+}
+
+/// The parchment plate: a bronze ring (gold and glowing for a rare item) around the
+/// collection illustration, studded at the corners. The art is tinted with the
+/// parchment so it reads as printed on it, and an unidentified item's is faded behind
+/// a question mark.
+fn plate(path: String, identified: bool, rare: bool) -> impl Scene {
+    let (ring, halo) = if rare {
+        (
+            ro_dark::RARE_RING,
+            glow(ro_dark::RARE_GLOW.with_alpha(0.45)),
+        )
+    } else {
+        (ro_dark::TAB_STROKE, glow(Color::NONE))
+    };
+    let tint = if identified {
+        PARCHMENT
+    } else {
+        PARCHMENT.with_alpha(0.22)
+    };
+    let unknown = (!identified).then(|| {
+        EntityScene(overlay(display_text(
+            "?".into(),
+            56.0,
+            ro_dark::BRONZE_SHADOW,
+        )))
+    });
+    bsn! {
+        ItemIllustration
+        Node {
+            width: px(PLATE.x + 2.0 * PLATE_RING),
+            height: px(PLATE.y + 2.0 * PLATE_RING),
+            flex_shrink: 0.0,
+            padding: px(PLATE_RING - 1.0),
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(ro_dark::CORNER_DISC)
+        BorderColor::all(ring)
+        halo
+        @ignore_picking()
+        Children [
+            Node {
+                flex_grow: 1.0,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: px(1),
+                border_radius: BorderRadius::all(px(4)),
+                position_type: PositionType::Relative,
+            }
+            BackgroundColor(PARCHMENT)
+            BorderColor::all(ro_dark::BRONZE_SHADOW)
+            @ignore_picking()
+            Children [
+                ItemIllustrationImage
+                ImageNode { image: {path}, color: {tint} }
+                Node { width: px(ILLUSTRATION.x), height: px(ILLUSTRATION.y) }
+                @ignore_picking()
+                --
+                {unknown}
+                --
+                @stud(false, false) -- @stud(true, false) -- @stud(false, true) -- @stud(true, true)
+            ]
+        ]
+    }
+}
+
+/// `content` centred over its parent.
+fn overlay(content: impl Scene) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0), top: px(0), right: px(0), bottom: px(0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        @ignore_picking()
+        Children [ @content ]
+    }
+}
+
+/// A bronze stud in one corner of the plate.
+fn stud(right: bool, bottom: bool) -> impl Scene {
+    let inset = |far: bool| {
+        if far {
+            (Val::Auto, px(4))
+        } else {
+            (px(4), Val::Auto)
+        }
+    };
+    let ((left, right), (top, bottom)) = (inset(right), inset(bottom));
+    bsn! {
+        @diamond(5.0, ro_dark::BRONZE, ro_dark::BRONZE_SHADOW)
+        Node {
+            position_type: PositionType::Absolute,
+            left: {left},
+            right: {right},
+            top: {top},
+            bottom: {bottom},
+        }
+    }
+}
+
+/// The short diamond-and-line rule under the name.
+fn rule() -> impl Scene {
+    bsn! {
+        Node {
+            align_items: AlignItems::Center,
+            column_gap: px(6),
+            margin: {UiRect::new(px(0), px(0), px(10), px(8))},
+        }
+        @ignore_picking()
+        Children [
+            @diamond(5.0, ro_dark::DIVIDER, ro_dark::DIVIDER)
+            --
+            Node { flex_grow: 1.0, height: px(1) }
+            BackgroundColor({ro_dark::DIVIDER.with_alpha(0.6)})
+            @ignore_picking()
+        ]
+    }
+}
+
+/// The description lines, recoloured to stay readable on the window body.
+fn description(lines: Vec<ColoredLine>) -> impl Scene {
+    let lines = lines
+        .into_iter()
+        .map(|runs| {
+            runs.into_iter()
+                .map(|(color, text)| (slate_ink(color), text))
+                .collect()
+        })
+        .collect();
+    shell::description_section(lines)
+}
+
+/// The contextual `(label, value)` rows (weight, price, creator), two per line.
+fn stats_panel(entries: Vec<(String, String)>) -> impl Scene {
+    let cells: Vec<_> = entries
+        .into_iter()
+        .map(|(key, value)| stat(key, value))
+        .collect();
+    bsn! {
+        @inset()
+        Node {
+            flex_wrap: FlexWrap::Wrap,
+            justify_content: JustifyContent::SpaceBetween,
+            row_gap: px(2),
+            padding: {UiRect::axes(px(12), px(8))},
+        }
+        @ignore_picking()
+        Children [ {cells} ]
+    }
+}
+
+fn stat(key: String, value: String) -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(46),
+            justify_content: JustifyContent::SpaceBetween,
+            column_gap: px(8),
+        }
+        @ignore_picking()
+        Children [
+            @chrome_text(key, 12.0, ro_dark::MUTED)
+            --
+            @chrome_text(value, 12.0, ro_dark::STRONG)
+        ]
+    }
+}
+
+/// A labelled stack of rows.
+fn section<S: Scene>(label: &'static str, rows: Vec<S>) -> impl Scene {
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, row_gap: px(2) }
+        @ignore_picking()
+        Children [
+            @chrome_text(label.into(), 10.0, ro_dark::ACCENT)
+            Node { margin: {UiRect::bottom(px(2))} }
+            --
+            {rows}
+        ]
+    }
+}
+
+/// One row per card slot: filled ones name the card, empty ones say so.
+fn card_slots(view: &ItemInfoView) -> impl Scene + use<> {
+    let rows: Vec<_> = (0..usize::from(view.sockets_total))
+        .map(|slot| card_slot(view.cards.get(slot).cloned()))
+        .collect();
+    section("CARD SLOTS", rows)
+}
+
+fn card_slot(name: Option<String>) -> impl Scene {
+    let (fill, stroke, color) = if name.is_some() {
+        (ro_dark::FROST, ro_dark::FROST_GLOW, ro_dark::BODY)
+    } else {
+        (Color::NONE, ro_dark::MUTED, ro_dark::MUTED)
+    };
+    let label = name.unwrap_or_else(|| "Empty slot".to_string());
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(8) }
+        @ignore_picking()
+        Children [
+            @diamond(7.0, fill, stroke)
+            --
+            @chrome_text(label, 12.0, color)
+        ]
+    }
+}
+
+/// One frost line per crafted option, in slot order.
+fn random_options(options: Vec<String>) -> impl Scene {
+    let rows: Vec<_> = options
+        .into_iter()
+        .map(|option| chrome_text(option, 12.0, ro_dark::FROST))
+        .collect();
+    section("RANDOM OPTIONS", rows)
+}
+
+/// State lines under the sections. Favorite is the display-only server flag, which
+/// only a bag item's view carries.
+fn flags(view: &ItemInfoView) -> Vec<(&'static str, Color)> {
+    let mut flags = Vec::new();
+    if !view.identified {
+        flags.push(("Unidentified", ro_dark::STATUS_BUSY));
+    }
+    if view.favorite == Some(true) {
+        flags.push(("Favorite", ro_dark::ACCENT));
+    }
+    flags
+}
+
+fn flag_lines(flags: Vec<(&'static str, Color)>) -> impl Scene {
+    let lines: Vec<_> = flags
+        .into_iter()
+        .map(|(text, color)| chrome_text(text.into(), 12.0, color))
         .collect();
     bsn! {
         Node { flex_direction: FlexDirection::Column }
         @ignore_picking()
-        Children [
-            @shell::section_label("Card Slots".to_string(), Some(counter)) --
-            Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
-            @ignore_picking()
-            Children [ {slots} ]
-        ]
-    }
-}
-
-/// The Random Options section: one row per crafted option, in slot order.
-fn options_section(options: &[String]) -> impl Scene + use<> {
-    let rows: Vec<_> = options.iter().cloned().map(option_row).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Column }
-        @ignore_picking()
-        Children [
-            @shell::section_label("RANDOM OPTIONS".to_string(), None) --
-            Node { flex_direction: FlexDirection::Column, row_gap: px(7) }
-            @ignore_picking()
-            Children [ {rows} ]
-        ]
-    }
-}
-
-fn option_row(label: String) -> impl Scene {
-    bsn! {
-        Node {
-            padding: {UiRect::axes(px(11), px(9))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(9)),
-        }
-        BackgroundColor(Color::srgba(0.851, 0.643, 0.255, 0.06))
-        BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        @ignore_picking()
-        Children [
-            Text(label)
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(12.0)},
-            }
-            TextColor(lifthrasir_ui::theme::TEXT)
-            @ignore_picking()
-        ]
-    }
-}
-
-fn card_slot(name: Option<String>) -> impl Scene {
-    let filled = name.is_some();
-    let label = name.unwrap_or_else(|| "Empty Socket".to_string());
-    let (bg, border, color) = if filled {
-        (
-            Color::srgba(0.851, 0.643, 0.255, 0.06),
-            lifthrasir_ui::theme::GOLD_FAINT,
-            lifthrasir_ui::theme::TEXT,
-        )
-    } else {
-        (
-            Color::BLACK.with_alpha(0.22),
-            lifthrasir_ui::theme::STROKE,
-            lifthrasir_ui::theme::TEXT_FAINT,
-        )
-    };
-    bsn! {
-        Node {
-            padding: {UiRect::axes(px(11), px(9))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(9)),
-        }
-        BackgroundColor(bg)
-        BorderColor::all(border)
-        @ignore_picking()
-        Children [
-            Text(label)
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(12.0)},
-            }
-            TextColor(color)
-            @ignore_picking()
-        ]
+        Children [ {lines} ]
     }
 }
 
 /// The footer's primary button. Equip is disabled for an unidentified item, since
 /// the server refuses it; the other actions are always live.
-fn action_button(view: &ItemInfoView, action: ItemAction) -> impl Scene {
-    let disabled = action.kind == ItemActionKind::Equip && !view.identified;
+fn footer(view: &ItemInfoView, action: ItemAction) -> impl Scene + use<> {
+    let enabled = action.kind != ItemActionKind::Equip || view.identified;
     let template = FooterAction {
         index: action.index,
         item_id: view.item_id,
         kind: action.kind,
-        disabled,
     };
-    let label = action_label(action.kind).to_string();
+    let label = action_label(action.kind);
     bsn! {
-        template
-        @FeathersButton {
-            @caption: bsn! { Text(label) ThemedText },
-            @variant: ButtonVariant::Primary,
-        }
-        Node { flex_grow: 1.0, height: px(40), border_radius: BorderRadius::all(px(9)) }
-        on(on_footer_action_click)
-    }
-}
-
-/// Applies [`FooterAction::disabled`] as Feathers' `InteractionDisabled` once per
-/// spawned button — the modal rebuilds from scratch on every show, so `Added` fires
-/// exactly once per button and needs no steady-state upkeep.
-pub(super) fn apply_footer_disabled(
-    buttons: Query<(Entity, &FooterAction), Added<FooterAction>>,
-    mut commands: Commands,
-) {
-    for (entity, action) in &buttons {
-        if action.disabled {
-            commands.entity(entity).insert(InteractionDisabled);
-        }
+        Node { margin: {UiRect::new(px(0), px(0), px(6), px(8))} }
+        @ignore_picking()
+        Children [
+            template
+            @flush_button(ButtonArt::PRIMARY, label)
+            @usable(enabled, Color::WHITE)
+            on(on_footer_action_click)
+        ]
     }
 }
 
@@ -373,6 +548,7 @@ fn on_footer_action_click(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::color::Luminance;
     use bevy::scene::ScenePlugin;
     use lifthrasir_client::domain::inventory::Item;
 
@@ -439,6 +615,15 @@ mod tests {
             .collect()
     }
 
+    fn text_color(app: &mut App, wanted: &str) -> Color {
+        app.world_mut()
+            .query::<(&Text, &TextColor)>()
+            .iter(app.world())
+            .find(|(text, _)| text.0 == wanted)
+            .map(|(_, color)| color.0)
+            .unwrap_or_else(|| panic!("no text {wanted:?}"))
+    }
+
     fn footer_actions(app: &mut App) -> Vec<FooterAction> {
         app.world_mut()
             .query::<&FooterAction>()
@@ -447,16 +632,23 @@ mod tests {
             .collect()
     }
 
-    fn stars(app: &mut App) -> Vec<FavoriteStar> {
+    fn footer_is_hoverable(app: &mut App) -> bool {
         app.world_mut()
-            .query::<&FavoriteStar>()
+            .query_filtered::<&Pickable, With<FooterAction>>()
+            .single(app.world())
+            .expect("one footer button")
+            .is_hoverable
+    }
+
+    fn plates(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, With<ItemIllustration>>()
             .iter(app.world())
-            .copied()
-            .collect()
+            .count()
     }
 
     #[test]
-    fn full_view_renders_header_cards_meta_and_description() {
+    fn full_view_renders_summary_cards_stats_and_description() {
         let mut app = test_app();
         app.world_mut()
             .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
@@ -464,22 +656,24 @@ mod tests {
         app.update();
 
         let texts = texts(&mut app);
-        assert!(texts.contains(&"Red Potion".to_string()), "{texts:?}");
-        assert!(texts.contains(&"CARD SLOTS".to_string()), "{texts:?}");
-        assert!(texts.contains(&"1 / 2".to_string()), "{texts:?}");
-        assert!(texts.contains(&"Poring Card".to_string()), "{texts:?}");
-        assert!(texts.contains(&"Empty Socket".to_string()), "{texts:?}");
-        assert!(texts.contains(&"WEIGHT".to_string()), "{texts:?}");
-        assert!(texts.contains(&"10".to_string()), "{texts:?}");
-        assert!(texts.contains(&"Restores HP.".to_string()), "{texts:?}");
-        assert!(texts.contains(&"Use".to_string()), "{texts:?}");
-        assert_eq!(
-            app.world_mut()
-                .query_filtered::<Entity, With<ItemIllustration>>()
-                .iter(app.world())
-                .count(),
-            1
-        );
+        for expected in [
+            "Item Info",
+            "USABLE",
+            "+4 Red Potion [2]",
+            "CARD SLOTS",
+            "Poring Card",
+            "Empty slot",
+            "Weight",
+            "10",
+            "Restores HP.",
+            "Use",
+        ] {
+            assert!(
+                texts.iter().any(|t| t == expected),
+                "{expected:?} missing from {texts:?}"
+            );
+        }
+        assert_eq!(plates(&mut app), 1);
     }
 
     #[test]
@@ -511,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn weight_and_price_share_a_compact_wrapping_row() {
+    fn weight_and_price_share_one_wrapping_inset_panel() {
         let mut app = test_app();
         let mut view = empty_view();
         view.meta = vec![
@@ -525,35 +719,35 @@ mod tests {
             .world_mut()
             .query::<(&Text, &ChildOf)>()
             .iter(app.world())
-            .filter(|(text, _)| matches!(text.0.as_str(), "WEIGHT" | "PRICE"))
+            .filter(|(text, _)| matches!(text.0.as_str(), "Weight" | "Price"))
             .map(|(_, parent)| parent.parent())
             .collect();
         assert_eq!(cells.len(), 2);
-        let row = app.world().get::<ChildOf>(cells[0]).unwrap().parent();
-        for cell in cells {
-            assert_eq!(
-                app.world().get::<Node>(cell).unwrap().flex_direction,
-                FlexDirection::Row
-            );
-            assert_eq!(app.world().get::<ChildOf>(cell).unwrap().parent(), row);
-        }
-        let node = app.world().get::<Node>(row).unwrap();
-        assert_eq!(node.flex_direction, FlexDirection::Row);
-        assert_eq!(node.flex_wrap, FlexWrap::Wrap);
+        let panel = app.world().get::<ChildOf>(cells[0]).unwrap().parent();
+        assert_eq!(
+            app.world().get::<ChildOf>(cells[1]).unwrap().parent(),
+            panel
+        );
+        assert_eq!(
+            app.world().get::<Node>(panel).unwrap().flex_wrap,
+            FlexWrap::Wrap
+        );
+        assert_eq!(
+            app.world().get::<BackgroundColor>(panel).unwrap().0,
+            ro_dark::INSET
+        );
         let values = texts(&mut app);
         assert!(values.contains(&"10".to_string()));
         assert!(values.contains(&"50 z".to_string()));
     }
 
     #[test]
-    fn description_uses_vellum_with_readable_body_and_highlights() {
-        use bevy::color::Luminance;
-
+    fn description_stays_readable_on_the_window_body() {
         let mut app = test_app();
         let mut view = empty_view();
         view.description = vec![
             lifthrasir_ui::rich_text::parse_color_codes(
-                "Restores ^00ff00HP^000000.",
+                "Restores ^000088HP^000000.",
                 lifthrasir_ui::theme::TEXT_DIM,
             ),
             vec![(lifthrasir_ui::theme::TEXT_DIM, "Weight: 10".to_string())],
@@ -561,69 +755,93 @@ mod tests {
         app.world_mut().spawn_scene(scene(view, None)).unwrap();
         app.update();
 
-        let (body, body_color) = app
+        assert_eq!(text_color(&mut app, "Restores "), ro_dark::BODY);
+        assert_eq!(text_color(&mut app, "Weight: 10"), ro_dark::BODY);
+        let spans: Vec<Color> = app
             .world_mut()
-            .query::<(Entity, &Text, &TextColor)>()
+            .query::<(&TextSpan, &TextColor)>()
             .iter(app.world())
-            .find(|(_, text, _)| text.0 == "Restores ")
-            .map(|(entity, _, color)| (entity, color.0))
-            .unwrap();
-        let mut ancestor = body;
-        while let Some(parent) = app.world().get::<ChildOf>(ancestor) {
-            ancestor = parent.parent();
-            if app
-                .world()
-                .get::<BackgroundColor>(ancestor)
-                .is_some_and(|bg| bg.0 == ILLUSTRATION_PARCHMENT)
-            {
-                break;
-            }
-        }
-        assert_eq!(
-            app.world().get::<BackgroundColor>(ancestor).map(|bg| bg.0),
-            Some(ILLUSTRATION_PARCHMENT)
-        );
-
-        let mut colors = vec![body_color];
-        colors.extend(
-            app.world_mut()
-                .query::<(&TextSpan, &TextColor)>()
-                .iter(app.world())
-                .map(|(_, color)| color.0),
-        );
-        assert_eq!(colors.len(), 3);
-        for color in colors {
-            let contrast = (ILLUSTRATION_PARCHMENT.to_linear().luminance() + 0.05)
-                / (color.to_linear().luminance() + 0.05);
+            .map(|(_, color)| color.0)
+            .collect();
+        assert_eq!(spans.len(), 2);
+        let body = ro_dark::WINDOW_BODY.to_linear().luminance();
+        for color in spans {
+            let contrast = (color.to_linear().luminance() + 0.05) / (body + 0.05);
             assert!(contrast >= 4.5, "{color:?}: contrast {contrast}");
         }
-        assert!(texts(&mut app).contains(&"Weight: 10".to_string()));
     }
 
     #[test]
-    fn illustration_uses_parchment_plate_and_warm_tint() {
+    fn illustration_sits_on_a_ringed_parchment_plate() {
         let mut app = test_app();
         app.world_mut()
-            .spawn_scene(item_illustration(
+            .spawn_scene(plate(
                 "items/red_potion_illustration.png".to_string(),
-                shell::EdgeGrade::Fine,
+                true,
+                false,
             ))
             .expect("scene spawns");
         app.update();
 
         let mut plate_query = app
             .world_mut()
-            .query_filtered::<(&Node, &BackgroundColor), With<ItemIllustration>>();
-        let (plate, background) = plate_query.single(app.world()).expect("one plate");
-        assert_eq!(plate.width, percent(100));
-        assert_eq!(plate.height, px(176));
-        assert_eq!(background.0, ILLUSTRATION_PARCHMENT);
+            .query_filtered::<(&Node, &BorderColor), With<ItemIllustration>>();
+        let (frame, ring) = plate_query.single(app.world()).expect("one plate");
+        assert_eq!(frame.width, px(PLATE.x + 2.0 * PLATE_RING));
+        assert_eq!(frame.height, px(PLATE.y + 2.0 * PLATE_RING));
+        assert_eq!(*ring, BorderColor::all(ro_dark::TAB_STROKE));
 
         let mut image_query = app
             .world_mut()
-            .query_filtered::<&ImageNode, With<ItemIllustrationImage>>();
-        let image = image_query.single(app.world()).expect("one illustration");
-        assert_eq!(image.color, ILLUSTRATION_PARCHMENT);
+            .query_filtered::<(&ImageNode, &ChildOf), With<ItemIllustrationImage>>();
+        let (image, parchment) = image_query.single(app.world()).expect("one illustration");
+        assert_eq!(image.color, PARCHMENT);
+        assert_eq!(
+            app.world()
+                .get::<BackgroundColor>(parchment.parent())
+                .unwrap()
+                .0,
+            PARCHMENT
+        );
+    }
+
+    #[test]
+    fn rare_item_gets_a_gold_ring_and_name() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.edge = shell::EdgeGrade::Rare;
+        app.world_mut().spawn_scene(scene(view, None)).unwrap();
+        app.update();
+
+        assert_eq!(
+            text_color(&mut app, "+4 Red Potion [2]"),
+            ro_dark::RARE_RING
+        );
+        let ring = app
+            .world_mut()
+            .query_filtered::<&BorderColor, With<ItemIllustration>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(*ring, BorderColor::all(ro_dark::RARE_RING));
+    }
+
+    #[test]
+    fn unidentified_item_fades_its_art_and_says_so() {
+        let mut app = test_app();
+        let mut view = full_view();
+        view.identified = false;
+        app.world_mut().spawn_scene(scene(view, None)).unwrap();
+        app.update();
+
+        let image = app
+            .world_mut()
+            .query_filtered::<&ImageNode, With<ItemIllustrationImage>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(image.color, PARCHMENT.with_alpha(0.22));
+        let texts = texts(&mut app);
+        assert!(texts.contains(&"?".to_string()), "{texts:?}");
+        assert!(texts.contains(&"Unidentified".to_string()), "{texts:?}");
     }
 
     #[test]
@@ -636,17 +854,14 @@ mod tests {
 
         let texts = texts(&mut app);
         assert!(texts.contains(&"Junk".to_string()), "{texts:?}");
-        assert_eq!(
-            app.world_mut()
-                .query_filtered::<Entity, With<ItemIllustration>>()
-                .iter(app.world())
-                .count(),
-            0
-        );
+        assert_eq!(plates(&mut app), 0);
         for absent in [
             "CARD SLOTS",
-            "Empty Socket",
-            "WEIGHT",
+            "Empty slot",
+            "RANDOM OPTIONS",
+            "Weight",
+            "Unidentified",
+            "Favorite",
             "Use",
             "Equip",
             "Unequip",
@@ -657,7 +872,6 @@ mod tests {
             );
         }
         assert!(footer_actions(&mut app).is_empty());
-        assert!(stars(&mut app).is_empty());
     }
 
     #[test]
@@ -672,7 +886,7 @@ mod tests {
     }
 
     #[test]
-    fn equip_button_carries_disabled_state_when_unidentified() {
+    fn equip_button_is_disabled_when_unidentified() {
         let mut app = test_app();
         let mut view = full_view();
         view.identified = false;
@@ -686,7 +900,7 @@ mod tests {
         assert_eq!(actions[0].kind, ItemActionKind::Equip);
         assert_eq!(actions[0].item_id, 501);
         assert_eq!(actions[0].index, 1);
-        assert!(actions[0].disabled);
+        assert!(!footer_is_hoverable(&mut app));
     }
 
     #[test]
@@ -699,92 +913,77 @@ mod tests {
 
         let actions = footer_actions(&mut app);
         assert_eq!(actions.len(), 1);
-        assert!(!actions[0].disabled);
+        assert!(footer_is_hoverable(&mut app));
     }
 
     #[test]
-    fn apply_footer_disabled_inserts_interaction_disabled_only_when_flagged() {
+    fn favorite_flag_shows_only_for_a_favorited_item() {
+        for (favorite, shown) in [(Some(true), true), (Some(false), false), (None, false)] {
+            let mut app = test_app();
+            let mut view = full_view();
+            view.favorite = favorite;
+            app.world_mut()
+                .spawn_scene(scene(view, None))
+                .expect("scene spawns");
+            app.update();
+
+            assert_eq!(
+                texts(&mut app).contains(&"Favorite".to_string()),
+                shown,
+                "{favorite:?}"
+            );
+        }
+    }
+
+    fn drag_event(target: Entity, window: Entity, delta: Vec2) -> PointerDrag {
+        use bevy::camera::NormalizedRenderTarget;
+        use bevy::picking::pointer::{Location, PointerId};
+        use bevy::window::WindowRef;
+        PointerDrag {
+            entity: target,
+            pointer: Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            ),
+            button: PointerButton::Primary,
+            distance: Vec2::ZERO,
+            delta,
+        }
+    }
+
+    #[test]
+    fn dragging_the_title_bar_moves_the_window_and_remembers_the_offset() {
         let mut app = App::new();
-        app.add_systems(Update, apply_footer_disabled);
-        let disabled = app
+        app.insert_resource(UiScale(2.0));
+        app.init_resource::<ItemInfoOffset>();
+        let window = app
             .world_mut()
-            .spawn(FooterAction {
-                index: 1,
-                item_id: 1,
-                kind: ItemActionKind::Equip,
-                disabled: true,
-            })
+            .spawn((ItemInfoWindow, Node::default()))
             .id();
-        let enabled = app
+        let bar = app
             .world_mut()
-            .spawn(FooterAction {
-                index: 1,
-                item_id: 1,
-                kind: ItemActionKind::Use,
-                disabled: false,
-            })
+            .spawn(ItemInfoTitlebar)
+            .observe(drag_item_window)
             .id();
-        app.update();
+        let close = app.world_mut().spawn_empty().observe(drag_item_window).id();
+        let screen = app.world_mut().spawn_empty().id();
 
-        assert!(app.world().get::<InteractionDisabled>(disabled).is_some());
-        assert!(app.world().get::<InteractionDisabled>(enabled).is_none());
-    }
-
-    #[test]
-    fn favorite_star_renders_with_no_primary_action() {
-        let mut app = test_app();
-        let mut view = full_view();
-        view.favorite = Some(true);
         app.world_mut()
-            .spawn_scene(scene(view, None))
-            .expect("scene spawns");
-        app.update();
-
-        let stars = stars(&mut app);
-        assert_eq!(stars.len(), 1);
-        assert!(stars[0].lit);
-    }
-
-    #[test]
-    fn favorite_star_unlit_when_view_not_favorited() {
-        let mut app = test_app();
+            .trigger(drag_event(bar, screen, Vec2::new(30.0, -10.0)));
         app.world_mut()
-            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
-            .expect("scene spawns");
-        app.update();
+            .trigger(drag_event(close, screen, Vec2::new(500.0, 500.0)));
 
-        let stars = stars(&mut app);
-        assert_eq!(stars.len(), 1);
-        assert!(!stars[0].lit);
-    }
-
-    #[test]
-    fn favorite_star_absent_when_view_carries_no_flag() {
-        let mut app = test_app();
-        let mut view = full_view();
-        view.favorite = None;
-        app.world_mut()
-            .spawn_scene(scene(view, action(ItemActionKind::Unequip)))
-            .expect("scene spawns");
-        app.update();
-
-        assert!(stars(&mut app).is_empty());
-    }
-
-    #[test]
-    fn favorite_star_is_not_interactive() {
-        let mut app = test_app();
-        app.world_mut()
-            .spawn_scene(scene(full_view(), action(ItemActionKind::Use)))
-            .expect("scene spawns");
-        app.update();
-
-        let pickable = app
-            .world_mut()
-            .query_filtered::<&Pickable, With<FavoriteStar>>()
-            .single(app.world())
-            .expect("star entity has a Pickable component");
-        assert!(!pickable.is_hoverable);
+        let node = app.world().get::<Node>(window).unwrap();
+        assert_eq!((node.left, node.top), (px(15.0), px(-5.0)));
+        assert_eq!(
+            app.world().resource::<ItemInfoOffset>().0,
+            Vec2::new(15.0, -5.0)
+        );
     }
 
     fn revalidation_app() -> App {
@@ -814,7 +1013,6 @@ mod tests {
                 index: 5,
                 item_id: 501,
                 kind: ItemActionKind::Use,
-                disabled: false,
             })
             .observe(on_footer_action_click)
             .id();
@@ -850,7 +1048,6 @@ mod tests {
                 index: 5,
                 item_id: 501,
                 kind: ItemActionKind::Use,
-                disabled: false,
             })
             .observe(on_footer_action_click)
             .id();

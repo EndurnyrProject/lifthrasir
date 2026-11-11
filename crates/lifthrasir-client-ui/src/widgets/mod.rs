@@ -19,6 +19,7 @@ pub mod escape_menu;
 pub mod guild_window;
 pub mod hotbar;
 pub mod info_modal;
+pub mod inventory_window;
 pub mod minimap;
 pub mod mount;
 pub mod navigation;
@@ -59,6 +60,7 @@ impl Plugin for InGameHudPlugin {
             status_icons::StatusIconsPlugin,
             storage_window::StorageWindowPlugin,
         ));
+        app.add_plugins(inventory_window::InventoryWindowPlugin);
         app.add_plugins(trade_window::TradeWindowPlugin);
         app.add_plugins(vending_window::VendingWindowPlugin);
         app.add_plugins(card_compounding::CardCompoundingPlugin);
@@ -90,6 +92,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     emote::spawn_emote_picker(&mut commands, root);
     guild_window::scene::build(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
+    inventory_window::scene::build(&mut commands, root);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     navigation::panel::spawn_navigation_panel(
         &mut commands,

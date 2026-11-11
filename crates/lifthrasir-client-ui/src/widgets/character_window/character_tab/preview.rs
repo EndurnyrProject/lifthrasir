@@ -406,7 +406,7 @@ mod tests {
         }));
         assert!(!preview_active(&CharacterWindowState {
             open: true,
-            tab: CharacterTab::Bag,
+            tab: CharacterTab::Skills,
         }));
     }
 

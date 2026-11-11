@@ -3,7 +3,7 @@
 //!
 //! [`rebuild_character_body`] projects the tab's structure into the shell's
 //! [`CharacterTabBody`] container once, when that container is first mounted. Unlike
-//! the Bag tab, the Character body is NOT respawned on data change: its three parts all
+//! the Inventory window, the Character body is NOT respawned on data change: its three parts all
 //! update in place via marker-keyed systems — [`equip::sync_console_equipment_slots`]
 //! patches the slot wells, [`attributes::update_console_attributes`] patches the stat /
 //! combat text, and [`preview::manage_console_preview`] owns the render-to-texture rig.

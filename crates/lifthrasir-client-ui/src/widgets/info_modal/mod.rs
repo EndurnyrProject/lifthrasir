@@ -10,9 +10,10 @@
 //! [`system_dialog`](super::system_dialog), the backdrop itself closes the modal on
 //! click, in addition to the close button and Escape.
 //!
-//! This module only owns the shell and lifecycle; [`shell`] holds the shared chrome
-//! scenes, [`view`] the builders that turn domain payloads into view structs, and
-//! item/skill content lives in `item_scene`/`skill_scene`.
+//! This module only owns the backdrop and lifecycle; [`shell`] holds the skill card's
+//! chrome, [`view`] the builders that turn domain payloads into view structs, and
+//! item/skill content lives in `item_scene`/`skill_scene`. The item modal is the
+//! RO-dark "Item Info" window; the skill modal still uses the legacy card.
 
 use bevy::prelude::*;
 
@@ -35,12 +36,12 @@ pub struct InfoModalPlugin;
 impl Plugin for InfoModalPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<ShowInfoModal>();
+        app.init_resource::<item_scene::ItemInfoOffset>();
         app.add_systems(
             Update,
             (
                 show_info_modal,
                 close_on_escape,
-                item_scene::apply_footer_disabled.after(show_info_modal),
                 skill_scene::apply_raise_disabled.after(show_info_modal),
             ),
         );
@@ -119,6 +120,7 @@ pub struct InfoModalRoot;
 pub(crate) fn show_info_modal(
     mut requests: MessageReader<ShowInfoModal>,
     existing: Query<Entity, With<InfoModalRoot>>,
+    offset: Res<item_scene::ItemInfoOffset>,
     mut commands: Commands,
 ) {
     let Some(request) = requests.read().last() else {
@@ -127,10 +129,16 @@ pub(crate) fn show_info_modal(
     despawn_existing(&existing, &mut commands);
     match request.content.clone() {
         InfoContent::Skill { view, raise } => {
-            commands.spawn_scene(info_modal(view.edge, skill_scene::scene(view, raise)));
+            let edge = view.edge;
+            let body = skill_scene::scene(view, raise);
+            commands.spawn_scene(info_modal(shell::card(edge, body)));
         }
         InfoContent::Item { view, action } => {
-            commands.spawn_scene(info_modal(view.edge, item_scene::scene(view, action)));
+            let (left, top) = (px(offset.0.x), px(offset.0.y));
+            commands.spawn_scene(info_modal(bsn! {
+                @item_scene::scene(view, action)
+                Node { left: {left}, top: {top} }
+            }));
         }
     }
 }
@@ -171,8 +179,9 @@ fn close_on_backdrop_click(
     }
 }
 
-/// The whole modal as one scene: a dimmed, click-eating backdrop centering the card.
-fn info_modal(edge: shell::EdgeGrade, body: impl Scene) -> impl Scene {
+/// The whole modal as one scene: a dimmed, click-eating backdrop centering `card`,
+/// the skill card or the item window.
+fn info_modal(card: impl Scene) -> impl Scene {
     bsn! {
         InfoModalRoot
         Node {
@@ -186,7 +195,7 @@ fn info_modal(edge: shell::EdgeGrade, body: impl Scene) -> impl Scene {
         GlobalZIndex({INFO_MODAL_Z})
         Pickable
         on(close_on_backdrop_click)
-        Children [ @shell::card(edge, body) ]
+        Children [ @card ]
     }
 }
 
@@ -223,9 +232,46 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<item_scene::ItemInfoOffset>();
         app.add_message::<ShowInfoModal>();
         app.add_systems(Update, (show_info_modal, close_on_escape));
         app
+    }
+
+    #[test]
+    fn item_window_opens_where_it_was_last_dragged() {
+        let mut app = test_app();
+        app.insert_resource(item_scene::ItemInfoOffset(Vec2::new(40.0, -30.0)));
+        app.world_mut().write_message(ShowInfoModal {
+            content: InfoContent::Item {
+                view: view::ItemInfoView {
+                    item_id: 501,
+                    icon_path: None,
+                    illustration_path: None,
+                    edge: shell::EdgeGrade::Common,
+                    name: "Red Potion".to_string(),
+                    identified: true,
+                    favorite: None,
+                    tags: vec![],
+                    refine: None,
+                    sockets_filled: 0,
+                    sockets_total: 0,
+                    cards: vec![],
+                    options: vec![],
+                    description: vec![],
+                    meta: vec![],
+                },
+                action: None,
+            },
+        });
+        app.update();
+
+        let node = app
+            .world_mut()
+            .query_filtered::<&Node, With<item_scene::ItemInfoWindow>>()
+            .single(app.world())
+            .expect("one item window");
+        assert_eq!((node.left, node.top), (px(40.0), px(-30.0)));
     }
 
     fn roots(app: &mut App) -> Vec<Entity> {

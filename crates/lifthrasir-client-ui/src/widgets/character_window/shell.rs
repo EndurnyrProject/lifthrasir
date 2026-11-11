@@ -1,6 +1,6 @@
 //! The persistent Console chrome, authored as one `bsn!` tree: root, a draggable
 //! @titlebar(reusing [`chrome::titlebar`]), an inline tab strip, the identity-strip
-//! mount, and the three empty tab-body containers. Live content is projected into
+//! mount, and the two empty tab-body containers. Live content is projected into
 //! the mount and bodies by the per-tab rebuild systems (later tasks); this file only
 //! builds the furniture.
 
@@ -17,8 +17,8 @@ use lifthrasir_ui::widgets::chrome::{
 };
 
 use crate::widgets::character_window::{
-    BagTabBody, CharacterIdentityMount, CharacterTab, CharacterTabBody, CharacterTabButton,
-    CharacterTitlebar, CharacterWindowRoot, SkillsTabBody, on_close_click, on_tab_click,
+    CharacterIdentityMount, CharacterTab, CharacterTabBody, CharacterTabButton, CharacterTitlebar,
+    CharacterWindowRoot, SkillsTabBody, on_close_click, on_tab_click,
 };
 
 const WINDOW_LEFT: f32 = 300.0;
@@ -26,9 +26,8 @@ const WINDOW_TOP: f32 = 100.0;
 const WINDOW_WIDTH: f32 = 780.0;
 
 /// The tab strip, in strip order: label + the tab it selects.
-const TABS: [(&str, CharacterTab); 3] = [
+const TABS: [(&str, CharacterTab); 2] = [
     ("Character", CharacterTab::Character),
-    ("Bag", CharacterTab::Bag),
     ("Skills", CharacterTab::Skills),
 ];
 
@@ -141,7 +140,6 @@ fn content_region() -> impl Scene {
         @ignore_picking()
         Children [
             @body_container::<CharacterTabBody>(UiRect::axes(px(14), px(10))) --
-            @body_container::<BagTabBody>(UiRect::axes(px(14), px(10))) --
             @body_container::<SkillsTabBody>(UiRect::axes(px(14), px(10)))
         ]
     }

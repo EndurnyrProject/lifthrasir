@@ -1,9 +1,9 @@
 //! Unified character window (Console): one draggable BSN/Feathers window with an
-//! identity strip and three top tabs — Character, Bag, Skills — replacing the four
-//! separate in-game windows.
+//! identity strip and two top tabs, Character and Skills. The bag is its own window
+//! ([`crate::widgets::inventory_window`]).
 //!
 //! This module owns the open/tab state machine ([`CharacterWindowState`] +
-//! [`next_state`]), the four-chord toggle ([`toggle_character_window`]), and the
+//! [`next_state`]), the three-chord toggle ([`toggle_character_window`]), and the
 //! visibility projection ([`reflect_window_state`]). The persistent chrome is built
 //! in [`shell`]. [`CharacterWindowPlugin`] is registered by `InGameHudPlugin`, which
 //! also spawns the shell in `show_hud`; it replaced the four old in-game windows
@@ -17,7 +17,6 @@ use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 
-mod bag_tab;
 mod character_tab;
 mod identity;
 pub mod shell;
@@ -32,7 +31,6 @@ pub(crate) use crate::widgets::character_window::skills_tab::skill_name;
 pub enum CharacterTab {
     #[default]
     Character,
-    Bag,
     Skills,
 }
 
@@ -58,10 +56,6 @@ pub struct CharacterIdentityMount;
 /// The Character tab body; Task 5 fills its children.
 #[derive(Component, Default, Clone)]
 pub struct CharacterTabBody;
-
-/// The Bag tab body; Task 4 fills its children.
-#[derive(Component, Default, Clone)]
-pub struct BagTabBody;
 
 /// The Skills tab body; Task 6 fills its children.
 #[derive(Component, Default, Clone)]
@@ -97,22 +91,13 @@ pub struct CharacterWindowPlugin;
 impl Plugin for CharacterWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CharacterWindowState>();
-        app.init_resource::<bag_tab::BagUi>();
-        app.init_resource::<bag_tab::LastBagClick>();
         character_tab::register(app);
         app.add_systems(
             Update,
             toggle_character_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
         );
-        app.add_systems(
-            Update,
-            bag_tab::rebuild_bag_body.run_if(in_state(GameState::InGame)),
-        );
         skills_tab::register(app);
-        app.add_systems(
-            OnExit(GameState::InGame),
-            (bag_tab::reset, skills_tab::reset),
-        );
+        app.add_systems(OnExit(GameState::InGame), skills_tab::reset);
         app.add_systems(
             Update,
             reflect_window_state.run_if(in_state(GameState::InGame)),
@@ -125,14 +110,12 @@ impl Plugin for CharacterWindowPlugin {
     }
 }
 
-/// Maps a just-pressed chord to its tab: Status/Equipment → Character, Inventory →
-/// Bag, Skills → Skills. First match wins if several fire the same frame.
+/// Maps a just-pressed chord to its tab: Status/Equipment → Character, Skills →
+/// Skills. First match wins if several fire the same frame.
 fn chord_tab(actions: &ActionState<PlayerAction>) -> Option<CharacterTab> {
     if actions.just_pressed(&PlayerAction::Status) || actions.just_pressed(&PlayerAction::Equipment)
     {
         Some(CharacterTab::Character)
-    } else if actions.just_pressed(&PlayerAction::Inventory) {
-        Some(CharacterTab::Bag)
     } else if actions.just_pressed(&PlayerAction::Skills) {
         Some(CharacterTab::Skills)
     } else {
@@ -140,7 +123,7 @@ fn chord_tab(actions: &ActionState<PlayerAction>) -> Option<CharacterTab> {
     }
 }
 
-/// The four chords drive the Console open/tab state through [`next_state`].
+/// The three chords drive the Console open/tab state through [`next_state`].
 fn toggle_character_window(
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
     mut state: ResMut<CharacterWindowState>,
@@ -185,20 +168,10 @@ fn set_displayed<F: QueryFilter>(q: &mut Query<&mut Node, F>, shown: bool) {
 /// The root `Visibility` query (window open/close), kept disjoint from the tab-body
 /// `Node` queries below by component type.
 type RootVis<'w, 's> = Query<'w, 's, &'static mut Visibility, With<CharacterWindowRoot>>;
-/// The three disjoint tab-body `&mut Node` queries `reflect_window_state` drives;
-/// the `Without` filters keep them provably non-overlapping so the system builds.
-type CharBodyNode<'w, 's> = Query<
-    'w,
-    's,
-    &'static mut Node,
-    (
-        With<CharacterTabBody>,
-        Without<BagTabBody>,
-        Without<SkillsTabBody>,
-    ),
->;
-type BagBodyNode<'w, 's> =
-    Query<'w, 's, &'static mut Node, (With<BagTabBody>, Without<SkillsTabBody>)>;
+/// The two disjoint tab-body `&mut Node` queries `reflect_window_state` drives;
+/// the `Without` filter keeps them provably non-overlapping so the system builds.
+type CharBodyNode<'w, 's> =
+    Query<'w, 's, &'static mut Node, (With<CharacterTabBody>, Without<SkillsTabBody>)>;
 type SkillsBodyNode<'w, 's> = Query<'w, 's, &'static mut Node, With<SkillsTabBody>>;
 
 /// Projects [`CharacterWindowState`]: `open` → root `Visibility`, `tab` → the active
@@ -207,12 +180,10 @@ fn reflect_window_state(
     state: Res<CharacterWindowState>,
     mut root: RootVis,
     mut character: CharBodyNode,
-    mut bag: BagBodyNode,
     mut skills: SkillsBodyNode,
 ) {
     set_visible(&mut root, state.open);
     set_displayed(&mut character, state.tab == CharacterTab::Character);
-    set_displayed(&mut bag, state.tab == CharacterTab::Bag);
     set_displayed(&mut skills, state.tab == CharacterTab::Skills);
 }
 
@@ -243,10 +214,10 @@ mod tests {
     fn closed_opens_on_chord_tab() {
         let cur = CharacterWindowState::default();
         assert_eq!(
-            next_state(cur, CharacterTab::Bag),
+            next_state(cur, CharacterTab::Skills),
             CharacterWindowState {
                 open: true,
-                tab: CharacterTab::Bag,
+                tab: CharacterTab::Skills,
             }
         );
     }
@@ -271,14 +242,14 @@ mod tests {
         let mut app = App::new();
         app.insert_resource(CharacterWindowState {
             open: true,
-            tab: CharacterTab::Bag,
+            tab: CharacterTab::Skills,
         });
         let button = app.world_mut().spawn_empty().observe(on_close_click).id();
         app.world_mut().trigger(Activate { entity: button });
 
         let state = app.world().resource::<CharacterWindowState>();
         assert!(!state.open);
-        assert_eq!(state.tab, CharacterTab::Bag);
+        assert_eq!(state.tab, CharacterTab::Skills);
     }
 
     #[test]
@@ -288,10 +259,10 @@ mod tests {
             tab: CharacterTab::Character,
         };
         assert_eq!(
-            next_state(cur, CharacterTab::Bag),
+            next_state(cur, CharacterTab::Skills),
             CharacterWindowState {
                 open: true,
-                tab: CharacterTab::Bag,
+                tab: CharacterTab::Skills,
             }
         );
     }

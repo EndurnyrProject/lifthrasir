@@ -46,8 +46,16 @@ pub struct PrimitivesPlugin;
 
 impl Plugin for PrimitivesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (style_buttons, render_checkboxes));
+        app.add_systems(Update, (style_buttons, style_hover, render_checkboxes));
     }
+}
+
+/// The `(fill, stroke)` a flat control shows at rest and under the pointer. The node
+/// needs `Hovered` for the pointer to be tracked.
+#[derive(Component, Clone)]
+pub struct HoverColors {
+    pub rest: (Color, Color),
+    pub hover: (Color, Color),
 }
 
 /// The three art states of a [`button`], relative to [`PRIMITIVES_DIR`].
@@ -126,6 +134,72 @@ pub fn window_title(text: &'static str) -> impl Scene {
     }
 }
 
+/// The title row of a [`window_titled`] with `trailing` pushed to its right end, 14px
+/// in from the shape edge. The caller adds the drag marker and observer.
+pub fn window_title_bar(text: &'static str, trailing: impl Scene) -> impl Scene {
+    bsn! {
+        Node {
+            height: px(TITLE_BAR_HEIGHT),
+            align_items: AlignItems::Center,
+            column_gap: px(12),
+            padding: {UiRect::left(px(46.0 - CONTENT_INSET))},
+            margin: {UiRect { right: px(14.0 - CONTENT_INSET), bottom: px(6), ..default() }},
+        }
+        Children [
+            @title_text(text, 17.0)
+            Node { flex_grow: 1.0 }
+            --
+            @trailing
+        ]
+    }
+}
+
+/// The oxblood window close button. The caller attaches the `Activate` observer.
+pub fn close_button() -> impl Scene {
+    let colors = HoverColors {
+        rest: (ro_dark::CLOSE, ro_dark::TAB_STROKE),
+        hover: (ro_dark::CLOSE_HOVER, ro_dark::TAB_STROKE),
+    };
+    bsn! {
+        Button
+        Hovered
+        colors
+        Node {
+            width: px(20),
+            height: px(20),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: px(1),
+        }
+        BackgroundColor(ro_dark::CLOSE)
+        BorderColor::all(ro_dark::TAB_STROKE)
+        Pickable
+        Children [ @glyph_icon("close", 10.0, ro_dark::CLOSE_X) ]
+    }
+}
+
+/// The recessed panel look that grids, read-outs and value boxes sit in.
+pub fn inset() -> impl Scene {
+    bsn! {
+        Node { border: px(1), border_radius: BorderRadius::all(px(6)) }
+        BackgroundColor(ro_dark::INSET)
+        BorderColor::all(ro_dark::SLOT_STROKE)
+    }
+}
+
+/// A square turned 45 degrees: favourite marks, card pips and plate studs.
+pub fn diamond(size: f32, fill: Color, stroke: Color) -> impl Scene {
+    let tilt = UiTransform::from_rotation(Rot2::degrees(45.0));
+    bsn! {
+        Node { width: px(size), height: px(size), flex_shrink: 0.0, border: px(1) }
+        tilt
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        @ignore_picking()
+    }
+}
+
 /// Text in the title font and colour.
 pub fn title_text(text: &'static str, size: f32) -> impl Scene {
     bsn! {
@@ -183,7 +257,7 @@ pub fn icon_button(art: ButtonArt, icon: &'static str) -> impl Scene {
 /// A headless [`Button`] drawn with `art` around `content`, growing to share its row.
 /// `Hovered` is required for the button to track hover; the widget inserts `Pressed`
 /// and emits `Activate` on click.
-fn button_with(art: ButtonArt, content: impl Scene) -> impl Scene {
+pub fn button_with(art: ButtonArt, content: impl Scene) -> impl Scene {
     let normal = art.normal;
     bsn! {
         Button
@@ -325,6 +399,26 @@ fn style_buttons(
     }
 }
 
+type HoverState<'a> = (
+    &'a Hovered,
+    &'a HoverColors,
+    &'a mut BackgroundColor,
+    &'a mut BorderColor,
+);
+
+/// Applies [`HoverColors`] as the pointer enters and leaves.
+fn style_hover(mut controls: Query<HoverState, Changed<Hovered>>) {
+    for (hovered, colors, mut fill, mut stroke) in &mut controls {
+        let (background, border) = if hovered.get() {
+            colors.hover
+        } else {
+            colors.rest
+        };
+        fill.0 = background;
+        *stroke = BorderColor::all(border);
+    }
+}
+
 /// Swaps the checkbox art. `checkbox_on` bakes a 2px wider glow, so its node grows by
 /// that and pulls its margin in to keep the row in place.
 fn render_checkboxes(
@@ -380,6 +474,38 @@ mod tests {
             .unwrap();
         let path = image.image.path().unwrap().to_string();
         assert!(path.ends_with("control/checkbox_on.png"), "{path}");
+    }
+
+    #[test]
+    fn hover_swaps_fill_and_stroke() {
+        let mut app = App::new();
+        app.add_systems(Update, style_hover);
+        let colors = HoverColors {
+            rest: (ro_dark::SLOT, ro_dark::SLOT_STROKE),
+            hover: (ro_dark::SLOT_HOVER, ro_dark::BUTTON_STROKE),
+        };
+        let slot = app
+            .world_mut()
+            .spawn((
+                Hovered(false),
+                colors,
+                BackgroundColor(ro_dark::SLOT),
+                BorderColor::all(ro_dark::SLOT_STROKE),
+            ))
+            .id();
+        app.update();
+
+        app.world_mut().entity_mut(slot).insert(Hovered(true));
+        app.update();
+
+        assert_eq!(
+            app.world().get::<BackgroundColor>(slot).unwrap().0,
+            ro_dark::SLOT_HOVER
+        );
+        assert_eq!(
+            *app.world().get::<BorderColor>(slot).unwrap(),
+            BorderColor::all(ro_dark::BUTTON_STROKE)
+        );
     }
 
     #[test]

@@ -145,7 +145,11 @@ fn close_button() -> impl Scene {
     }
 }
 
-fn close_modal(_: On<Activate>, root: Query<Entity, With<InfoModalRoot>>, mut commands: Commands) {
+pub(super) fn close_modal(
+    _: On<Activate>,
+    root: Query<Entity, With<InfoModalRoot>>,
+    mut commands: Commands,
+) {
     if let Ok(root) = root.single() {
         commands.entity(root).despawn();
     }

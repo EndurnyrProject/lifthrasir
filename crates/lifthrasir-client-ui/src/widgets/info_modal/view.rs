@@ -291,7 +291,7 @@ fn equip_slot_label(slot: EquipmentSlot) -> &'static str {
 }
 
 /// Refine ≥ 7 → Rare, refine ≥ 4 or socketed → Fine, else Common.
-fn item_edge_grade(refine: u8, has_cards: bool) -> EdgeGrade {
+pub(crate) fn item_edge_grade(refine: u8, has_cards: bool) -> EdgeGrade {
     if refine >= 7 {
         EdgeGrade::Rare
     } else if refine >= 4 || has_cards {
@@ -299,6 +299,18 @@ fn item_edge_grade(refine: u8, has_cards: bool) -> EdgeGrade {
     } else {
         EdgeGrade::Common
     }
+}
+
+/// `name` with its refine prefix and slot-count suffix, as in `+7 Blade [3]`.
+pub fn decorated_name(name: &str, refine: u8, slots: u8) -> String {
+    let mut decorated = name.to_string();
+    if refine > 0 {
+        decorated = format!("+{refine} {decorated}");
+    }
+    if slots > 0 {
+        decorated = format!("{decorated} [{slots}]");
+    }
+    decorated
 }
 
 /// Card names for the filled sockets, in slot order, capped at `slot_count`.
@@ -728,6 +740,12 @@ mod tests {
             expire_time: 0,
             weight,
         }
+    }
+
+    #[test]
+    fn decorated_name_adds_refine_and_slots_only_when_present() {
+        assert_eq!(decorated_name("Blade", 7, 3), "+7 Blade [3]");
+        assert_eq!(decorated_name("Red Potion", 0, 0), "Red Potion");
     }
 
     #[test]
