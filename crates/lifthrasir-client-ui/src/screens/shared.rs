@@ -2,10 +2,10 @@
 //! and state helpers for the RO-dark art buttons.
 
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
+use bevy::text::{FontSize, FontSourceTemplate, LetterSpacing};
 use lifthrasir_ui::theme::{self, ro_dark};
-use lifthrasir_ui::widgets::chrome::chrome_text;
-use lifthrasir_ui::widgets::primitives::{BUTTON_SHADOW, ButtonArt, button};
+use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon};
+use lifthrasir_ui::widgets::primitives::{BUTTON_SHADOW, ButtonArt, button, button_with};
 
 /// Art tint of a button that cannot be used.
 pub const DISABLED_TINT: Color = Color::srgb(0.45, 0.45, 0.45);
@@ -69,6 +69,32 @@ pub fn flush_button(art: ButtonArt, label: &'static str) -> impl Scene {
     bsn! {
         @button(art, label)
         Node { margin: {UiRect::all(px(-BUTTON_SHADOW))} }
+    }
+}
+
+/// A square art button `size` px wide showing the `ui/icons/<icon>.svg` glyph, laid out
+/// by its shape like [`flush_button`]. The art's corners need `size` to be 16 or more.
+pub fn small_button(icon: &'static str, size: f32) -> impl Scene {
+    let glyph = (size * 0.42).round();
+    let size = size + 2.0 * BUTTON_SHADOW;
+    bsn! {
+        @button_with(ButtonArt::NORMAL, glyph_icon(icon, glyph, ro_dark::BUTTON_LABEL))
+        Node {
+            width: px(size),
+            height: px(size),
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            margin: {UiRect::all(px(-BUTTON_SHADOW))},
+        }
+    }
+}
+
+/// A small spaced-out caption over a value or a panel.
+pub fn overline(text: String, color: Color) -> impl Scene {
+    let spacing = LetterSpacing::Px(1.2);
+    bsn! {
+        @chrome_text(text, 10.0, color)
+        spacing
     }
 }
 

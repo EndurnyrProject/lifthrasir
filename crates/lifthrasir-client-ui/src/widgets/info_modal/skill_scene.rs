@@ -4,8 +4,8 @@
 //! the whole navigation model — there is no back stack.
 //!
 //! The footer Raise button stages `+1` in [`SkillPanelStaging`] — the same path the
-//! skills-tab stepper uses (`skills_tab.rs::on_stepper`) — and never writes
-//! `SkillLearnRequested` directly; the tab's own Apply flow is the only place that
+//! Skills window stepper uses (`skills_window::on_stepper`) — and never writes
+//! `SkillLearnRequested` directly; the window's own Apply flow is the only place that
 //! batches staged levels to the server.
 
 use bevy::prelude::*;
@@ -20,7 +20,7 @@ use lifthrasir_client::domain::entities::character::components::status::Characte
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::skill::SkillTreeState;
 
-use crate::widgets::character_window::SkillPanelStaging;
+use crate::widgets::skills_window::SkillPanelStaging;
 use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
 
 use crate::widgets::info_modal::shell::{self, EdgeGrade, HeaderView};

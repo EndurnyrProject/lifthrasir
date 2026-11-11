@@ -13,8 +13,8 @@ use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{
     BUTTON_SHADOW, ButtonArt, HoverColors, INPUT_SHADOW, WINDOW_SHADOW, button_with, close_button,
-    diamond, display_text, divider, divider_diamond, input_frame, inset, window_title_bar,
-    window_titled,
+    diamond, display_text, divider, divider_diamond, input_frame, inset, tab, tab_text,
+    window_title_bar, window_titled,
 };
 
 use crate::screens::shared::{DANGER_TINT, flush_button, glow, thousands, usable};
@@ -39,7 +39,7 @@ const SELECTION_ICON: f32 = 32.0;
 
 /// The outline of a slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Ring {
+pub(crate) enum Ring {
     None,
     Rare,
     Selected,
@@ -47,7 +47,7 @@ pub(super) enum Ring {
 
 impl Ring {
     /// Stroke colour, stroke width and halo.
-    fn style(self) -> (Color, f32, BoxShadow) {
+    pub(crate) fn style(self) -> (Color, f32, BoxShadow) {
         match self {
             Self::None => (ro_dark::SLOT_STROKE, 1.0, glow(Color::NONE)),
             Self::Rare => (
@@ -71,7 +71,7 @@ pub(super) struct TabView {
 }
 
 /// One filled slot. `pips` holds one entry per card slot, `true` when a card sits in it.
-pub(super) struct CellView {
+pub(crate) struct CellView {
     pub index: u16,
     pub icon: Option<String>,
     pub amount: u16,
@@ -272,61 +272,20 @@ fn tab_strip(tabs: [TabView; 5]) -> impl Scene {
     }
 }
 
-/// A tab with its item count. The active one drops its bottom stroke so it joins the
-/// grid panel below.
+/// A tab with its item count.
 fn tab_button(view: TabView) -> impl Scene {
-    let tab = view.tab;
-    let (fill, stroke, label, count, bottom) = if view.active {
-        (
-            ro_dark::TAB_ACTIVE,
-            ro_dark::TAB_STROKE,
-            ro_dark::BUTTON_LABEL,
-            ro_dark::ACCENT,
-            0.0,
-        )
-    } else {
-        (
-            ro_dark::TAB_INACTIVE,
-            ro_dark::SLOT_STROKE,
-            ro_dark::MUTED,
-            ro_dark::MUTED,
-            1.0,
-        )
-    };
-    let hover = if view.active {
-        (fill, stroke)
-    } else {
-        (ro_dark::TAB_HOVER, ro_dark::MUTED_BRONZE)
-    };
-    let colors = HoverColors {
-        rest: (fill, stroke),
-        hover,
-    };
-    let mark = (tab == InventoryTab::Favorites)
+    let (category, active) = (view.tab, view.active);
+    let (label, count) = tab_text(active);
+    let mark = (category == InventoryTab::Favorites)
         .then(|| EntityScene(diamond(7.0, ro_dark::BRONZE_LIGHT, ro_dark::BRONZE_LIGHT)));
     bsn! {
-        InventoryTabButton(tab)
-        Hovered
-        colors
-        Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
-            min_width: px(0),
-            height: px(28),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            column_gap: px(6),
-            border: {UiRect::new(px(1), px(1), px(1), px(bottom))},
-            border_radius: {BorderRadius::top(px(5))},
-        }
-        BackgroundColor(fill)
-        BorderColor::all(stroke)
-        Pickable
+        InventoryTabButton(category)
+        @tab(active)
         on(pick_tab)
         Children [
             {mark}
             --
-            @chrome_text(tab.label().into(), 13.0, label)
+            @chrome_text(category.label().into(), 13.0, label)
             --
             @chrome_text(view.count.to_string(), 11.0, count)
         ]
@@ -411,7 +370,7 @@ fn slot(cell: Option<CellView>) -> Box<dyn Scene> {
 }
 
 /// The square every slot is drawn in, centring its icon.
-fn slot_frame(size: f32, ring: Ring) -> impl Scene {
+pub(crate) fn slot_frame(size: f32, ring: Ring) -> impl Scene {
     let (stroke, width, halo) = ring.style();
     bsn! {
         Node {
@@ -485,7 +444,7 @@ pub(super) fn slot_tooltip(name: String) -> impl Scene {
 
 /// What a slot draws over its frame: the icon and the unidentified mark, plus the
 /// damage wash and the refine, amount, card and favourite `badges` of a grid slot.
-fn slot_marks(view: &CellView, icon: f32, badges: bool) -> Vec<Box<dyn Scene>> {
+pub(crate) fn slot_marks(view: &CellView, icon: f32, badges: bool) -> Vec<Box<dyn Scene>> {
     let mut marks: Vec<Box<dyn Scene>> = Vec::new();
     if let Some(path) = view.icon.clone() {
         marks.push(Box::new(slot_icon(path, icon, view.identified)));

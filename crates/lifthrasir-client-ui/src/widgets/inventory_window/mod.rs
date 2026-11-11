@@ -370,7 +370,7 @@ fn bag(inventory: &Inventory) -> impl Iterator<Item = &Item> {
 }
 
 /// The item's name as the window shows and searches it, as in `+7 Blade [3]`.
-fn item_name(item: &Item, item_db: Option<&ItemDb>) -> String {
+pub(crate) fn item_name(item: &Item, item_db: Option<&ItemDb>) -> String {
     let name = item_db
         .and_then(|db| db.name(item.item_id, item.identified))
         .map(str::to_string)
@@ -426,7 +426,8 @@ fn slot_total(shown: usize, ui: &InventoryUi) -> usize {
     shown.next_multiple_of(COLUMNS).max(MIN_SLOTS)
 }
 
-fn cell_view(item: &Item, item_db: Option<&ItemDb>, selected: Option<u16>) -> CellView {
+/// What a slot holding `item` draws. `selected` is the index the selection ring goes on.
+pub(crate) fn cell_view(item: &Item, item_db: Option<&ItemDb>, selected: Option<u16>) -> CellView {
     let slots = usize::from(card_slots(item, item_db));
     let ring = if selected == Some(item.index) {
         Ring::Selected

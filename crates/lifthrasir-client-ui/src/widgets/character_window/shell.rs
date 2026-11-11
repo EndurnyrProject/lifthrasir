@@ -1,38 +1,25 @@
-//! The persistent Console chrome, authored as one `bsn!` tree: root, a draggable
-//! @titlebar(reusing [`chrome::titlebar`]), an inline tab strip, the identity-strip
-//! mount, and the two empty tab-body containers. Live content is projected into
-//! the mount and bodies by the per-tab rebuild systems (later tasks); this file only
-//! builds the furniture.
+//! The Character window frame, authored as one `bsn!` tree: the title bar, the header
+//! mount, and the equipment and stats columns. Live content is projected into the
+//! mounts and marked texts by the systems of the sibling modules.
 
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
-
-use bevy_feathers::controls::FeathersButton;
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
-use lifthrasir_ui::theme::feathers_theme::{
-    TOKEN_TEXT, TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
-};
-use lifthrasir_ui::widgets::chrome::{
-    body_container, chrome_text, drag_window, glyph_icon, ignore_picking,
+use lifthrasir_ui::widgets::chrome::{drag_window, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    WINDOW_SHADOW, close_button, divider, divider_diamond, window_title_bar, window_titled,
 };
 
 use crate::widgets::character_window::{
-    CharacterIdentityMount, CharacterTab, CharacterTabBody, CharacterTabButton, CharacterTitlebar,
-    CharacterWindowRoot, SkillsTabBody, on_close_click, on_tab_click,
+    CharacterIdentityMount, CharacterTitlebar, CharacterWindowRoot, attributes, equip,
+    on_close_click,
 };
 
-const WINDOW_LEFT: f32 = 300.0;
-const WINDOW_TOP: f32 = 100.0;
-const WINDOW_WIDTH: f32 = 780.0;
+const WINDOW_LEFT: f32 = 170.0;
+const WINDOW_TOP: f32 = 30.0;
+const WINDOW_WIDTH: f32 = 940.0;
+const EQUIP_COLUMN: f32 = 612.0;
+const STATS_COLUMN: f32 = 260.0;
 
-/// The tab strip, in strip order: label + the tab it selects.
-const TABS: [(&str, CharacterTab); 2] = [
-    ("Character", CharacterTab::Character),
-    ("Skills", CharacterTab::Skills),
-];
-
-/// Spawn the whole Console as one scene and parent it under `parent` with a single
-/// insert (the `inventory_window` idiom).
+/// Spawn the window, hidden, under `parent`.
 pub fn build(commands: &mut Commands, parent: Entity) {
     commands.spawn_scene(window()).insert(ChildOf(parent));
 }
@@ -40,107 +27,52 @@ pub fn build(commands: &mut Commands, parent: Entity) {
 fn window() -> impl Scene {
     bsn! {
         CharacterWindowRoot
+        @window_titled()
         Node {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
+            width: px(WINDOW_WIDTH + 2.0 * WINDOW_SHADOW),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
-            border: px(1),
-            border_radius: BorderRadius::all(px(13)),
         }
-        ThemeBackgroundColor({TOKEN_WINDOW_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         Pickable
         Children [
-            @titlebar_row() --
-            @tab_strip() --
-            @body_container::<CharacterIdentityMount>(UiRect::axes(px(14), px(8))) --
-            @content_region()
-        ]
-    }
-}
-
-/// The Console titlebar: a `CharacterTitlebar` drag handle (reusing
-/// `chrome::drag_window`) with a close button that clears `CharacterWindowState.open`
-/// via [`on_close_click`] — the Console keeps the resource as the sole visibility
-/// source, so it cannot reuse `chrome::titlebar`'s direct-hide close button.
-fn titlebar_row() -> impl Scene {
-    bsn! {
-        CharacterTitlebar
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::axes(px(14), px(11))},
-            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-        }
-        ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        Pickable
-        on(drag_window::<CharacterTitlebar, CharacterWindowRoot>)
-        Children [
-            @glyph_icon("user", 16.0, lifthrasir_ui::theme::GOLD) --
-            Text({"Character".to_string()})
-            TextFont {
-                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                font_size: {FontSize::Px(15.0)},
-            }
-            ThemeTextColor({TOKEN_TEXT})
-            Node { flex_grow: 1.0 }
+            @title_bar()
+            --
+            CharacterIdentityMount
+            Node { flex_direction: FlexDirection::Column, margin: {UiRect::top(px(10))} }
             @ignore_picking()
             --
-            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            Node { width: px(22), height: px(22) }
+            @divider(divider_diamond())
+            Node { margin: {UiRect::vertical(px(10))} }
+            --
+            Node {
+                column_gap: px(20),
+                align_items: AlignItems::FlexStart,
+                margin: {UiRect::bottom(px(8))},
+            }
+            @ignore_picking()
+            Children [
+                @equip::equipment_column()
+                Node { width: px(EQUIP_COLUMN), flex_shrink: 0.0 }
+                --
+                @attributes::stats_column()
+                Node { width: px(STATS_COLUMN), flex_shrink: 0.0 }
+            ]
+        ]
+    }
+}
+
+fn title_bar() -> impl Scene {
+    bsn! {
+        CharacterTitlebar
+        @window_title_bar("Character", bsn! {
+            @close_button()
             on(on_close_click)
-        ]
-    }
-}
-
-fn tab_strip() -> impl Scene {
-    let buttons: Vec<_> = TABS
-        .iter()
-        .map(|(label, tab)| tab_button(label, *tab))
-        .collect();
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: px(6),
-            padding: {UiRect::axes(px(14), px(6))},
-        }
-        @ignore_picking()
-        Children [ {buttons} ]
-    }
-}
-
-fn tab_button(label: &'static str, tab: CharacterTab) -> impl Scene {
-    bsn! {
-        CharacterTabButton(tab)
-        Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            height: px(28),
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
+        })
         Pickable
-        on(on_tab_click)
-        Children [ @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
-    }
-}
-
-/// The stacked tab bodies; the active one is shown by `reflect_window_state`.
-fn content_region() -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, flex_grow: 1.0 }
-        @ignore_picking()
-        Children [
-            @body_container::<CharacterTabBody>(UiRect::axes(px(14), px(10))) --
-            @body_container::<SkillsTabBody>(UiRect::axes(px(14), px(10)))
-        ]
+        on(drag_window::<CharacterTitlebar, CharacterWindowRoot>)
     }
 }

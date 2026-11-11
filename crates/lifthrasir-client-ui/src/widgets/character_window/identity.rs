@@ -1,29 +1,28 @@
-//! The Console identity strip: avatar, name, class, Base/Job level, Zeny, Weight,
-//! and HP/SP meters (always) plus an AP meter (only for 4th-job characters with a
-//! non-zero `max_ap`). It is a pure projection of the `LocalPlayer`'s
+//! The Character window header: name, class and levels beside the HP, SP, Base and
+//! Job bars, the weight and zeny read-out, plus an AP bar for 4th-job characters with
+//! a non-zero `max_ap`. It is a pure projection of the `LocalPlayer`'s
 //! `EntityName`/`CharacterData`/`CharacterStatus` into the shell's
-//! [`CharacterIdentityMount`], respawned by [`rebuild_identity`] on any change —
-//! the same change-gating `character_info` uses, into the mount instead of the HUD
-//! frame (and adding AP).
+//! [`CharacterIdentityMount`], respawned by [`rebuild_identity`] on any change.
 
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{FontSize, FontSourceTemplate};
 use lifthrasir_assets::catalogs::job::player_jobs::is_fourth_job;
 use lifthrasir_assets::catalogs::job::registry::JobSpriteRegistry;
 use lifthrasir_client::domain::entities::character::components::core::CharacterData;
 use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
 use lifthrasir_client::domain::entities::components::EntityName;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
-
+use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::primitives::display_text;
 
+use crate::screens::shared::thousands;
 use crate::widgets::character_window::CharacterIdentityMount;
-use lifthrasir_ui::widgets::meter::meter;
 
-const AVATAR_BG: Color = Color::srgb_u8(0x1f, 0x2b, 0x25);
+const NAME_BLOCK: f32 = 232.0;
+const BAR_HEIGHT: f32 = 16.0;
 
-/// Marks the AP meter's row so it is distinguishable from HP/SP; present only when
+/// Marks the AP bar's row so it is distinguishable from HP/SP; present only when
 /// the local player is a 4th job with `max_ap > 0`.
 #[derive(Component, Default, Clone)]
 pub struct ApMeter;
@@ -37,10 +36,10 @@ fn fraction(cur: u32, max: u32) -> f32 {
     }
 }
 
-/// The identity strip's owned view-model, prepared before the `bsn!` block (scenes
-/// own their data). `ap` is `Some` only when the AP meter should render.
+/// The header's owned view-model, prepared before the `bsn!` block (scenes own their
+/// data). `ap` is `Some` only when the AP bar should render; the exp fields are
+/// `0.0..=1.0` fractions of the next level.
 struct IdentityView {
-    avatar: String,
     name: String,
     class: String,
     base_level: u32,
@@ -53,6 +52,8 @@ struct IdentityView {
     sp: u32,
     max_sp: u32,
     ap: Option<(u32, u32)>,
+    base_exp: f32,
+    job_exp: f32,
 }
 
 impl IdentityView {
@@ -69,16 +70,9 @@ impl IdentityView {
             .and_then(|registry| registry.get_display_name(data.job_id as u32))
             .unwrap_or("Unknown")
             .to_string();
-        let avatar = class
-            .chars()
-            .next()
-            .unwrap_or('?')
-            .to_uppercase()
-            .to_string();
         let ap = (is_fourth_job(data.job_id as u32) && status.max_ap > 0)
             .then_some((status.ap, status.max_ap));
         Self {
-            avatar,
             name,
             class,
             base_level: status.base_level,
@@ -91,6 +85,8 @@ impl IdentityView {
             sp: status.sp,
             max_sp: status.max_sp,
             ap,
+            base_exp: fraction(status.base_exp, status.next_base_exp),
+            job_exp: fraction(status.job_exp, status.next_job_exp),
         }
     }
 }
@@ -106,8 +102,7 @@ type ChangedIdentity = (
 
 /// Gates [`rebuild_identity`]: run only when the local player's status, data, or
 /// name change, when the job registry loads (so "Unknown" resolves to a real job
-/// name), or when the identity mount is freshly spawned. Mirrors
-/// `character_info`'s `character_info_changed`.
+/// name), or when the identity mount is freshly spawned.
 pub fn identity_changed(
     player: Query<(), ChangedIdentity>,
     job_registry: Option<Res<JobSpriteRegistry>>,
@@ -146,145 +141,158 @@ pub fn rebuild_identity(
         .insert(ChildOf(mount));
 }
 
-fn identity_content(view: IdentityView) -> impl Scene {
-    let ap = view
-        .ap
-        .map(|(ap, max_ap)| EntityScene(ap_line(fraction(ap, max_ap), format!("{ap} / {max_ap}"))));
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(9) }
-        @ignore_picking()
-        Children [
-            @header_row(view.avatar, view.name, view.class, view.base_level, view.job_level) --
-            @resources_row(view.zeny, view.weight, view.max_weight) --
-            @meter_line("HP", fraction(view.hp, view.max_hp), lifthrasir_ui::theme::EMERALD_BRI, format!("{} / {}", view.hp, view.max_hp)) --
-            @meter_line("SP", fraction(view.sp, view.max_sp), lifthrasir_ui::theme::MANA_BLUE, format!("{} / {}", view.sp, view.max_sp)) --
-            {ap}
-        ]
-    }
+/// `cur / max` with thousands separators.
+fn out_of(cur: u32, max: u32) -> String {
+    format!("{} / {}", thousands(cur.into()), thousands(max.into()))
 }
 
-fn header_row(
-    avatar: String,
-    name: String,
-    class: String,
-    base_level: u32,
-    job_level: u32,
-) -> impl Scene {
+fn percent_label(ratio: f32) -> String {
+    format!("{:.1}%", ratio * 100.0)
+}
+
+fn identity_content(view: IdentityView) -> impl Scene {
+    let ap = view.ap.map(|(ap, max_ap)| {
+        EntityScene(bsn! {
+            ApMeter
+            @bar("AP", fraction(ap, max_ap), ro_dark::BASE_EXP, out_of(ap, max_ap))
+        })
+    });
     bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(11) }
+        Node { height: px(60), align_items: AlignItems::Center, column_gap: px(28) }
         @ignore_picking()
         Children [
-            @avatar_box(avatar) --
-            Node { flex_direction: FlexDirection::Column, row_gap: px(3), flex_grow: 1.0, min_width: px(0) }
+            @name_block(view.name, view.class, view.base_level, view.job_level)
+            --
+            Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0), column_gap: px(24) }
             @ignore_picking()
             Children [
-                @name_text(name) --
-                @chrome_text(class, 11.5, lifthrasir_ui::theme::GOLD)
+                @bar_column()
+                Children [
+                    @bar("HP", fraction(view.hp, view.max_hp), ro_dark::HP, out_of(view.hp, view.max_hp))
+                    --
+                    @bar("SP", fraction(view.sp, view.max_sp), ro_dark::SP, out_of(view.sp, view.max_sp))
+                    --
+                    {ap}
+                ]
+                --
+                @bar_column()
+                Children [
+                    @bar("Base", view.base_exp, ro_dark::BASE_EXP, percent_label(view.base_exp))
+                    --
+                    @bar("Job", view.job_exp, ro_dark::JOB_EXP, percent_label(view.job_exp))
+                    --
+                    @purse(view.weight, view.max_weight, view.zeny)
+                ]
             ]
-            --
-            @level_chip("Base", base_level) --
-            @level_chip("Job", job_level)
         ]
     }
 }
 
-fn avatar_box(letter: String) -> impl Scene {
+/// The hero's name over the class and levels line.
+fn name_block(name: String, class: String, base_level: u32, job_level: u32) -> impl Scene {
+    let levels = format!("\u{b7} Base Lv {base_level} \u{b7} Job Lv {job_level}");
     bsn! {
         Node {
-            width: px(40),
-            height: px(40),
+            width: px(NAME_BLOCK),
             flex_shrink: 0.0,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border: px(1),
-            border_radius: BorderRadius::all(px(10)),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(4),
+            overflow: {Overflow::clip()},
         }
-        BackgroundColor(AVATAR_BG)
-        BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
         @ignore_picking()
         Children [
-            Text(letter)
-            TextFont {
-                font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-                font_size: {FontSize::Px(18.0)},
-            }
-            TextColor(lifthrasir_ui::theme::GOLD)
-            @ignore_picking()
-        ]
-    }
-}
-
-fn name_text(name: String) -> impl Scene {
-    bsn! {
-        Text(name)
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-            font_size: {FontSize::Px(16.0)},
-        }
-        TextColor(lifthrasir_ui::theme::EMERALD_BRI)
-        @ignore_picking()
-    }
-}
-
-fn level_chip(label: &str, level: u32) -> impl Scene + use<> {
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center }
-        @ignore_picking()
-        Children [
-            @chrome_text(label.to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) --
-            @chrome_text(level.to_string(), 12.0, lifthrasir_ui::theme::TEXT)
-        ]
-    }
-}
-
-fn resources_row(zeny: u32, weight: u32, max_weight: u32) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
-        @ignore_picking()
-        Children [
-            @stat_pair("Zeny", zeny.to_string()) --
-            @stat_pair("Weight", format!("{weight} / {max_weight}"))
-        ]
-    }
-}
-
-fn stat_pair(label: &str, value: String) -> impl Scene + use<> {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, column_gap: px(6), align_items: AlignItems::Center }
-        @ignore_picking()
-        Children [
-            @chrome_text(label.to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) --
-            @chrome_text(value, 11.5, lifthrasir_ui::theme::TEXT)
-        ]
-    }
-}
-
-/// One labeled meter line: a fixed-width tag ("HP"/"SP") + the [`meter`] bar.
-fn meter_line(tag: &str, ratio: f32, fill: Color, label: String) -> impl Scene + use<> {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(9) }
-        @ignore_picking()
-        Children [
-            Text({tag.to_string()})
-            TextFont {
-                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                font_size: {FontSize::Px(10.5)},
-            }
-            TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-            Node { width: px(22) }
-            @ignore_picking()
+            @display_text(name, 28.0, ro_dark::HERO)
+            TextLayout { linebreak: LineBreak::NoWrap }
             --
-            @meter(ratio, fill, label)
+            Node { column_gap: px(4) }
+            @ignore_picking()
+            Children [
+                @chrome_text(class, 12.0, ro_dark::BRONZE_LIGHT)
+                --
+                @chrome_text(levels, 12.0, ro_dark::MUTED)
+            ]
         ]
     }
 }
 
-/// The AP meter line: the shared [`meter_line`] with [`ApMeter`] attached directly
-/// to its entity so its presence is queryable, no wrapper node.
-fn ap_line(ratio: f32, label: String) -> impl Scene {
+/// One of the two stacks of bars beside the name.
+fn bar_column() -> impl Scene {
     bsn! {
-        ApMeter
-        @meter_line("AP", ratio, lifthrasir_ui::theme::GOLD, label)
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
+        }
+        @ignore_picking()
+    }
+}
+
+/// A tagged bar: the trough holds a `fill` sized to `ratio` with `value` centred over
+/// it.
+fn bar(tag: &'static str, ratio: f32, fill: Color, value: String) -> impl Scene {
+    let width = Val::Percent(ratio.clamp(0.0, 1.0) * 100.0);
+    bsn! {
+        Node { height: px(BAR_HEIGHT), align_items: AlignItems::Center, column_gap: px(10) }
+        @ignore_picking()
+        Children [
+            @chrome_text(tag.into(), 12.0, ro_dark::LABEL)
+            Node { width: px(34), flex_shrink: 0.0 }
+            --
+            Node {
+                flex_grow: 1.0,
+                flex_basis: px(0),
+                height: px(BAR_HEIGHT),
+                padding: px(1),
+                border: px(1),
+                border_radius: BorderRadius::all(px(8)),
+                position_type: PositionType::Relative,
+            }
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::BAR_FRAME)
+            @ignore_picking()
+            Children [
+                Node {
+                    width: {width},
+                    height: percent(100),
+                    border_radius: BorderRadius::all(px(6)),
+                }
+                BackgroundColor(fill)
+                @ignore_picking()
+                --
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                }
+                @ignore_picking()
+                Children [
+                    @chrome_text(value, 10.5, ro_dark::VALUE)
+                    TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
+                ]
+            ]
+        ]
+    }
+}
+
+/// Carried weight and zeny, in the bars' last row.
+fn purse(weight: u32, max_weight: u32, zeny: u32) -> impl Scene {
+    let zeny = format!("{} z", thousands(zeny.into()));
+    bsn! {
+        Node { height: px(BAR_HEIGHT), align_items: AlignItems::Center, column_gap: px(6) }
+        @ignore_picking()
+        Children [
+            @chrome_text("Weight".into(), 12.0, ro_dark::LABEL)
+            --
+            @chrome_text(out_of(weight, max_weight), 12.0, ro_dark::STRONG)
+            Node { flex_grow: 1.0 }
+            --
+            @chrome_text("Zeny".into(), 12.0, ro_dark::ACCENT)
+            --
+            @chrome_text(zeny, 12.0, ro_dark::BRONZE_LIGHT)
+        ]
     }
 }
 

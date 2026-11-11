@@ -188,6 +188,53 @@ pub fn inset() -> impl Scene {
     }
 }
 
+/// The frame of one tab in a strip over an [`inset`] panel. The active tab drops its
+/// bottom stroke so it joins the panel below. The caller adds its marker, the click
+/// observer and the children, coloured by [`tab_text`].
+pub fn tab(active: bool) -> impl Scene {
+    let (fill, stroke, bottom) = if active {
+        (ro_dark::TAB_ACTIVE, ro_dark::TAB_STROKE, 0.0)
+    } else {
+        (ro_dark::TAB_INACTIVE, ro_dark::SLOT_STROKE, 1.0)
+    };
+    let hover = if active {
+        (fill, stroke)
+    } else {
+        (ro_dark::TAB_HOVER, ro_dark::MUTED_BRONZE)
+    };
+    let colors = HoverColors {
+        rest: (fill, stroke),
+        hover,
+    };
+    bsn! {
+        Hovered
+        colors
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            height: px(28),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            column_gap: px(6),
+            border: {UiRect::new(px(1), px(1), px(1), px(bottom))},
+            border_radius: {BorderRadius::top(px(5))},
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        Pickable
+    }
+}
+
+/// The label and count colours of a [`tab`].
+pub fn tab_text(active: bool) -> (Color, Color) {
+    if active {
+        (ro_dark::BUTTON_LABEL, ro_dark::ACCENT)
+    } else {
+        (ro_dark::MUTED, ro_dark::MUTED)
+    }
+}
+
 /// A square turned 45 degrees: favourite marks, card pips and plate studs.
 pub fn diamond(size: f32, fill: Color, stroke: Color) -> impl Scene {
     let tilt = UiTransform::from_rotation(Rot2::degrees(45.0));

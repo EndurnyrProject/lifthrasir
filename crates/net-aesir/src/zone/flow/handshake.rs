@@ -13,8 +13,9 @@ use super::super::{QuicZoneState, ZonePhase, ZoneSpawn};
 use crate::channels::CONTROL;
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
-use crate::proto::aesir::net::{Hello, SessionAuth, TimeSync};
+use crate::proto::aesir::net::{GameMode as WireGameMode, Hello, SessionAuth, TimeSync};
 use net_contract::events::{ServerClockSynced, ZoneDisconnected, ZoneEntered};
+use net_contract::state::GameMode;
 
 /// Time-sync doubles as a liveness probe so an abruptly stopped UDP server is noticed promptly.
 const TIME_SYNC_INTERVAL: Duration = Duration::from_secs(5);
@@ -30,6 +31,15 @@ fn hello_ack_next(phase: ZonePhase, accepted: bool) -> Option<ZonePhase> {
     } else {
         ZonePhase::Failed
     })
+}
+
+/// The ruleset a `HelloAck` reports. An unknown value reads as renewal, the wire default.
+fn game_mode(wire: i32) -> GameMode {
+    if wire == WireGameMode::PreRenewal as i32 {
+        GameMode::PreRenewal
+    } else {
+        GameMode::Renewal
+    }
 }
 
 /// Pure outcome of receiving an `EnterAck`: the next phase, or `None` when out of phase.
@@ -71,6 +81,7 @@ pub fn zone_send_hello(
     config(run_if = client_connected)
 )]
 pub fn zone_drain_control(
+    mut commands: Commands,
     mut incoming: MessageReader<IncomingMessage>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicZoneState>,
@@ -92,6 +103,7 @@ pub fn zone_drain_control(
                     state.phase = ZonePhase::Failed;
                     continue;
                 }
+                commands.insert_resource(game_mode(ack.mode));
                 let auth = Body::SessionAuth(SessionAuth {
                     account_id: state.auth.account_id,
                     login_id1: state.auth.login_id1,
@@ -261,6 +273,16 @@ mod tests {
     fn hello_ack_out_of_phase_is_ignored() {
         assert_eq!(hello_ack_next(ZonePhase::Connecting, true), None);
         assert_eq!(hello_ack_next(ZonePhase::AuthSent, true), None);
+    }
+
+    #[test]
+    fn hello_ack_mode_maps_to_the_contract_and_defaults_to_renewal() {
+        assert_eq!(
+            game_mode(WireGameMode::PreRenewal as i32),
+            GameMode::PreRenewal
+        );
+        assert_eq!(game_mode(WireGameMode::Renewal as i32), GameMode::Renewal);
+        assert_eq!(game_mode(99), GameMode::Renewal);
     }
 
     #[test]

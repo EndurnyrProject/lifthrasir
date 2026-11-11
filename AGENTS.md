@@ -57,7 +57,7 @@ lifthrasir/
 │   ├── lifthrasir-pak/          # Bevy-free archive reader/writer
 │   ├── lifthrasir-assets/       # ro:// source, loaders, catalogs, processing
 │   ├── lifthrasir-runtime/      # Content actors/effects/audio/world capabilities
-│   ├── lifthrasir-ui/           # Generic Feathers/chrome/text/meter primitives
+│   ├── lifthrasir-ui/           # Generic Feathers/chrome/text primitives
 │   ├── lifthrasir-tooling/      # Bevy-free offline import/conversion/pack inputs
 │   ├── lifthrasir-client/       # Client state, settings, gameplay and adapters
 │   ├── lifthrasir-client-ui/    # Login/HUD/screens and gameplay UI

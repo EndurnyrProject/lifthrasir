@@ -10,7 +10,17 @@ pub const EQP_SHOES: u32 = 0x000040;
 pub const EQP_LEFT_ACCESSORY: u32 = 0x000080;
 pub const EQP_HEAD_TOP: u32 = 0x000100;
 pub const EQP_HEAD_MID: u32 = 0x000200;
+pub const EQP_COSTUME_HEAD_TOP: u32 = 0x000400;
+pub const EQP_COSTUME_HEAD_MID: u32 = 0x000800;
+pub const EQP_COSTUME_HEAD_LOW: u32 = 0x001000;
+pub const EQP_COSTUME_GARMENT: u32 = 0x002000;
 pub const EQP_AMMO: u32 = 0x008000;
+pub const EQP_SHADOW_ARMOR: u32 = 0x010000;
+pub const EQP_SHADOW_WEAPON: u32 = 0x020000;
+pub const EQP_SHADOW_SHIELD: u32 = 0x040000;
+pub const EQP_SHADOW_SHOES: u32 = 0x080000;
+pub const EQP_SHADOW_RIGHT_ACCESSORY: u32 = 0x100000;
+pub const EQP_SHADOW_LEFT_ACCESSORY: u32 = 0x200000;
 
 const SLOT_BITS: [(u32, EquipmentSlot); 10] = [
     (EQP_HEAD_LOW, EquipmentSlot::HeadBottom),

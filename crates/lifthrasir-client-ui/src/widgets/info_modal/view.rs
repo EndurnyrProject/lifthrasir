@@ -25,7 +25,7 @@ use net_contract::dto::{
     CartItem, GuildSkillInfo, StorageItem, VendingCreatorKind, VendingListing,
 };
 
-use crate::widgets::character_window::{SkillPanelStaging, skill_name};
+use crate::widgets::skills_window::{SkillPanelStaging, skill_name};
 use lifthrasir_ui::rich_text::parse_color_codes;
 
 use crate::widgets::info_modal::shell::EdgeGrade;

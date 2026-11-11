@@ -1,15 +1,13 @@
-//! Unified character window (Console): one draggable BSN/Feathers window with an
-//! identity strip and two top tabs, Character and Skills. The bag is its own window
-//! ([`crate::widgets::inventory_window`]).
+//! The Character window: the hero's header (name, class, levels and meters), the
+//! equipment sets either side of the live preview, and the stat allocation and combat
+//! read-outs. Sizes follow the `Character` artboard of the Lifthrasir Widgets design.
 //!
-//! This module owns the open/tab state machine ([`CharacterWindowState`] +
-//! [`next_state`]), the three-chord toggle ([`toggle_character_window`]), and the
-//! visibility projection ([`reflect_window_state`]). The persistent chrome is built
-//! in [`shell`]. [`CharacterWindowPlugin`] is registered by `InGameHudPlugin`, which
-//! also spawns the shell in `show_hud`; it replaced the four old in-game windows
-//! (architecture §5.5).
+//! [`shell`] spawns the frame once. [`identity`] and [`equip`] respawn their mounts
+//! from view-models on change, [`attributes`] patches its marked texts in place and
+//! [`preview`] owns the render-to-texture rig. Skills live in their own window
+//! ([`crate::widgets::skills_window`]), the bag in
+//! [`crate::widgets::inventory_window`].
 
-use bevy::ecs::query::QueryFilter;
 use bevy::prelude::*;
 use bevy::ui_widgets::Activate;
 use leafwing_input_manager::prelude::ActionState;
@@ -17,113 +15,51 @@ use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 
-mod character_tab;
+mod attributes;
+mod equip;
 mod identity;
+mod preview;
 pub mod shell;
-mod skills_tab;
 
-pub use crate::widgets::character_window::skills_tab::SkillPanelStaging;
-pub(crate) use crate::widgets::character_window::skills_tab::skill_name;
-
-/// Which tab the Console shows. The active chord always selects the tab, so this is
-/// never "remembered" independently of the last chord.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum CharacterTab {
-    #[default]
-    Character,
-    Skills,
-}
-
-/// Console open/tab state. Default: closed, on the Character tab.
+/// Whether the window is shown. The single source of truth [`reflect_window_state`]
+/// projects onto the root.
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct CharacterWindowState {
     pub open: bool,
-    pub tab: CharacterTab,
 }
 
-/// The Console root; the toggle/reflect/drag/close systems find the window by it.
 #[derive(Component, Default, Clone)]
 pub struct CharacterWindowRoot;
 
-/// The draggable titlebar drag handle.
+/// The title bar, which is the drag handle.
 #[derive(Component, Default, Clone)]
 pub struct CharacterTitlebar;
 
-/// The identity-strip mount; Task 3 fills its children.
+/// Mount of the header: name, class, levels and meters.
 #[derive(Component, Default, Clone)]
 pub struct CharacterIdentityMount;
-
-/// The Character tab body; Task 5 fills its children.
-#[derive(Component, Default, Clone)]
-pub struct CharacterTabBody;
-
-/// The Skills tab body; Task 6 fills its children.
-#[derive(Component, Default, Clone)]
-pub struct SkillsTabBody;
-
-/// Marks a tab-strip button with the tab it selects.
-#[derive(Component, Clone, Copy, Default)]
-pub struct CharacterTabButton(pub CharacterTab);
-
-/// Pure toggle state machine: a chord opens the Console on its tab; the same chord
-/// while open on that tab closes it; a different chord switches tab and stays open.
-pub fn next_state(cur: CharacterWindowState, chord_tab: CharacterTab) -> CharacterWindowState {
-    if !cur.open {
-        CharacterWindowState {
-            open: true,
-            tab: chord_tab,
-        }
-    } else if cur.tab == chord_tab {
-        CharacterWindowState {
-            open: false,
-            tab: cur.tab,
-        }
-    } else {
-        CharacterWindowState {
-            open: true,
-            tab: chord_tab,
-        }
-    }
-}
 
 pub struct CharacterWindowPlugin;
 
 impl Plugin for CharacterWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CharacterWindowState>();
-        character_tab::register(app);
+        attributes::register(app);
+        equip::register(app);
+        preview::register(app);
         app.add_systems(
             Update,
-            toggle_character_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
-        );
-        skills_tab::register(app);
-        app.add_systems(OnExit(GameState::InGame), skills_tab::reset);
-        app.add_systems(
-            Update,
-            reflect_window_state.run_if(in_state(GameState::InGame)),
-        );
-        app.add_systems(
-            Update,
-            identity::rebuild_identity
-                .run_if(in_state(GameState::InGame).and_then(identity::identity_changed)),
+            (
+                toggle_character_window.run_if(ui_unfocused),
+                reflect_window_state,
+                identity::rebuild_identity.run_if(identity::identity_changed),
+            )
+                .run_if(in_state(GameState::InGame)),
         );
     }
 }
 
-/// Maps a just-pressed chord to its tab: Status/Equipment → Character, Skills →
-/// Skills. First match wins if several fire the same frame.
-fn chord_tab(actions: &ActionState<PlayerAction>) -> Option<CharacterTab> {
-    if actions.just_pressed(&PlayerAction::Status) || actions.just_pressed(&PlayerAction::Equipment)
-    {
-        Some(CharacterTab::Character)
-    } else if actions.just_pressed(&PlayerAction::Skills) {
-        Some(CharacterTab::Skills)
-    } else {
-        None
-    }
-}
-
-/// The three chords drive the Console open/tab state through [`next_state`].
+/// The Status and Equipment chords both show or hide the window.
 fn toggle_character_window(
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
     mut state: ResMut<CharacterWindowState>,
@@ -131,77 +67,28 @@ fn toggle_character_window(
     let Ok(actions) = player.single() else {
         return;
     };
-    let Some(tab) = chord_tab(actions) else {
-        return;
-    };
-    *state = next_state(*state, tab);
+    if actions.just_pressed(&PlayerAction::Status) || actions.just_pressed(&PlayerAction::Equipment)
+    {
+        state.open = !state.open;
+    }
 }
 
-/// Shows/hides the whole window via the root's `Visibility`, writing only on change.
-fn set_visible<F: QueryFilter>(q: &mut Query<&mut Visibility, F>, visible: bool) {
-    let Ok(mut vis) = q.single_mut() else {
-        return;
-    };
-    let want = if visible {
+fn reflect_window_state(
+    state: Res<CharacterWindowState>,
+    mut roots: Query<&mut Visibility, With<CharacterWindowRoot>>,
+) {
+    let want = if state.open {
         Visibility::Visible
     } else {
         Visibility::Hidden
     };
-    if *vis != want {
-        *vis = want;
+    for mut visibility in &mut roots {
+        visibility.set_if_neq(want);
     }
 }
 
-/// Shows/hides a tab body via `Node.display`, writing only on change. Tabs must
-/// toggle `Display`, not `Visibility`: a `Visibility::Hidden` node still occupies
-/// flex layout, so the inactive tabs would stack behind the active one.
-fn set_displayed<F: QueryFilter>(q: &mut Query<&mut Node, F>, shown: bool) {
-    let Ok(mut node) = q.single_mut() else {
-        return;
-    };
-    let want = if shown { Display::Flex } else { Display::None };
-    if node.display != want {
-        node.display = want;
-    }
-}
-
-/// The root `Visibility` query (window open/close), kept disjoint from the tab-body
-/// `Node` queries below by component type.
-type RootVis<'w, 's> = Query<'w, 's, &'static mut Visibility, With<CharacterWindowRoot>>;
-/// The two disjoint tab-body `&mut Node` queries `reflect_window_state` drives;
-/// the `Without` filter keeps them provably non-overlapping so the system builds.
-type CharBodyNode<'w, 's> =
-    Query<'w, 's, &'static mut Node, (With<CharacterTabBody>, Without<SkillsTabBody>)>;
-type SkillsBodyNode<'w, 's> = Query<'w, 's, &'static mut Node, With<SkillsTabBody>>;
-
-/// Projects [`CharacterWindowState`]: `open` → root `Visibility`, `tab` → the active
-/// tab body's `Node.display` (inactive tabs are `Display::None` so they leave layout).
-fn reflect_window_state(
-    state: Res<CharacterWindowState>,
-    mut root: RootVis,
-    mut character: CharBodyNode,
-    mut skills: SkillsBodyNode,
-) {
-    set_visible(&mut root, state.open);
-    set_displayed(&mut character, state.tab == CharacterTab::Character);
-    set_displayed(&mut skills, state.tab == CharacterTab::Skills);
-}
-
-/// A tab-strip button click sets the active tab (never toggles closed).
-fn on_tab_click(
-    click: On<PointerClick>,
-    buttons: Query<&CharacterTabButton>,
-    mut state: ResMut<CharacterWindowState>,
-) {
-    let Ok(button) = buttons.get(click.entity) else {
-        return;
-    };
-    state.tab = button.0;
-}
-
-/// The titlebar close button clears `open` on the resource — the single source of
-/// truth `reflect_window_state` reads. Hiding root `Visibility` directly would be
-/// undone the next frame, so the Console does not use `chrome::close_window`.
+/// The close button clears `open` on the resource. Hiding the root directly would be
+/// undone by [`reflect_window_state`] the next frame.
 fn on_close_click(_: On<Activate>, mut state: ResMut<CharacterWindowState>) {
     state.open = false;
 }
@@ -211,59 +98,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn closed_opens_on_chord_tab() {
-        let cur = CharacterWindowState::default();
-        assert_eq!(
-            next_state(cur, CharacterTab::Skills),
-            CharacterWindowState {
-                open: true,
-                tab: CharacterTab::Skills,
-            }
-        );
-    }
-
-    #[test]
-    fn open_same_tab_closes() {
-        let cur = CharacterWindowState {
-            open: true,
-            tab: CharacterTab::Skills,
-        };
-        assert_eq!(
-            next_state(cur, CharacterTab::Skills),
-            CharacterWindowState {
-                open: false,
-                tab: CharacterTab::Skills,
-            }
-        );
-    }
-
-    #[test]
     fn close_button_clears_open_on_the_resource() {
         let mut app = App::new();
-        app.insert_resource(CharacterWindowState {
-            open: true,
-            tab: CharacterTab::Skills,
-        });
+        app.insert_resource(CharacterWindowState { open: true });
         let button = app.world_mut().spawn_empty().observe(on_close_click).id();
         app.world_mut().trigger(Activate { entity: button });
 
-        let state = app.world().resource::<CharacterWindowState>();
-        assert!(!state.open);
-        assert_eq!(state.tab, CharacterTab::Skills);
+        assert!(!app.world().resource::<CharacterWindowState>().open);
     }
 
     #[test]
-    fn open_different_tab_switches_and_stays_open() {
-        let cur = CharacterWindowState {
-            open: true,
-            tab: CharacterTab::Character,
-        };
+    fn open_state_drives_the_root_visibility() {
+        let mut app = App::new();
+        app.insert_resource(CharacterWindowState { open: true });
+        app.add_systems(Update, reflect_window_state);
+        let root = app
+            .world_mut()
+            .spawn((CharacterWindowRoot, Visibility::Hidden))
+            .id();
+        app.update();
         assert_eq!(
-            next_state(cur, CharacterTab::Skills),
-            CharacterWindowState {
-                open: true,
-                tab: CharacterTab::Skills,
-            }
+            app.world().get::<Visibility>(root),
+            Some(&Visibility::Visible)
+        );
+
+        app.world_mut().resource_mut::<CharacterWindowState>().open = false;
+        app.update();
+        assert_eq!(
+            app.world().get::<Visibility>(root),
+            Some(&Visibility::Hidden)
         );
     }
 }

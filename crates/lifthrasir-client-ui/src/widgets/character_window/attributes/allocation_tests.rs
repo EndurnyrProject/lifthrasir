@@ -1,28 +1,9 @@
-use crate::widgets::character_window::character_tab::attributes::*;
+use crate::widgets::character_window::attributes::*;
 use net_contract::events::StatRaised;
 
-fn click(target: Entity) -> PointerClick {
-    use bevy::camera::NormalizedRenderTarget;
-    use bevy::picking::backend::HitData;
-    use bevy::picking::pointer::{Location, PointerId};
-    use bevy::window::WindowRef;
-
-    PointerClick {
-        entity: target,
-        pointer: Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(target)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-        ),
-        button: PointerButton::Primary,
-        hit: HitData::new(target, 0.0, None, None),
-        duration: std::time::Duration::ZERO,
-        count: 1,
-    }
+/// The art buttons are headless `Button`s, which report a click as `Activate`.
+fn click(target: Entity) -> Activate {
+    Activate { entity: target }
 }
 
 fn allocation_app() -> (App, Entity, Entity) {
@@ -44,10 +25,7 @@ fn allocation_app() -> (App, Entity, Entity) {
     let save = app.world_mut().spawn_empty().observe(on_char_save).id();
     let raise = app
         .world_mut()
-        .spawn(CharStepper {
-            stat: StatusParameter::Str,
-            raise: true,
-        })
+        .spawn(CharStepper(StatusParameter::Str))
         .observe(on_char_stepper)
         .id();
     (app, save, raise)
@@ -176,15 +154,19 @@ fn leaving_gameplay_clears_pending_allocations_before_the_next_session() {
 }
 
 #[test]
-fn pending_allocations_dim_the_locked_stepper() {
+fn pending_allocations_disable_the_locked_stepper() {
     let (mut app, save, raise) = allocation_app();
     app.world_mut()
         .entity_mut(raise)
-        .insert(BackgroundColor(lifthrasir_ui::theme::FIELD));
+        .insert((ImageNode::default(), Pickable::default()));
     app.world_mut().trigger(click(raise));
     app.world_mut().trigger(click(save));
     app.update();
-    assert!(app.world().get::<BackgroundColor>(raise).unwrap().0.alpha() < 1.0);
+    assert_ne!(
+        app.world().get::<ImageNode>(raise).unwrap().color,
+        Color::WHITE
+    );
+    assert!(!app.world().get::<Pickable>(raise).unwrap().is_hoverable);
 }
 
 #[test]

@@ -1,25 +1,19 @@
-//! Live, rotatable character preview for the Console's Character tab.
+//! Live, rotatable character preview on the Character window's stage.
 //!
-//! Ported from the old `equipment_window/preview.rs`. The render-to-texture pipeline
-//! is unchanged: the local player's real sprite + equipped headgear is rendered into
-//! the tab's preview frame via an off-screen orthographic `Camera3d`, isolated from
-//! the world camera by a dedicated [`RenderLayers`].
+//! The local player's real sprite + equipped headgear is rendered into the stage via
+//! an off-screen orthographic `Camera3d`, isolated from the world camera by a
+//! dedicated [`RenderLayers`].
 //!
-//! Type ownership: the UI-local markers/resources are renamed so the old window can be
-//! deleted whole in the integration task — [`ConsolePreviewCharacter`],
-//! [`ConsolePreviewState`], [`ConsoleLocalHeadgear`], [`CharPreviewFrame`]. But the
-//! camera + billboard markers [`EquipmentPreviewCamera`] and [`PreviewBillboard`] are
-//! **game-engine DOMAIN types**, not UI types: ~8 engine systems exclude
+//! The camera + billboard markers [`EquipmentPreviewCamera`] and [`PreviewBillboard`]
+//! are **game-engine DOMAIN types**, not UI types: ~8 engine systems exclude
 //! `EquipmentPreviewCamera` when resolving "the" world `Camera3d`, and
 //! `preview_billboard_rotation_system` orients `PreviewBillboard` entities at it.
 //! Inventing a new camera marker would make the world `billboard_rotation_system`'s
-//! `single()` see two cameras and bail, breaking world billboard facing. So these two
-//! are reused exactly like `CharacterDirection` / `EquipmentSet`.
+//! `single()` see two cameras and bail, breaking world billboard facing.
 //!
-//! Activation differs from the old window: the camera + character are spawned only
-//! while [`CharacterWindowState`] is `open` on the Character tab, and despawned when
-//! leaving that tab / closing / on `OnExit(InGame)`. The render-target `Image` and its
-//! `ImageNode` binding persist across tab switches (never recreated, camera never
+//! The camera + character are spawned only while [`CharacterWindowState`] is `open`,
+//! and despawned on close and on `OnExit(InGame)`. The render-target `Image` and its
+//! `ImageNode` binding persist across reopens (never recreated, camera never
 //! double-spawned).
 
 use std::collections::HashMap;
@@ -29,11 +23,10 @@ use bevy::camera::{
     ClearColorConfig, OrthographicProjection, Projection, RenderTarget, ScalingMode,
 };
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::FeathersButton;
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemeTextColor};
+use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::character::SpawnCharacterSpriteEvent;
+use lifthrasir_client::domain::entities::character::events::forward_character_sprite_events;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_runtime::actors::sprites::legacy::{CharacterDirection, CharacterSprite, Direction};
 use lifthrasir_runtime::actors::sprites::systems::events::EquipmentChangeEvent;
@@ -47,16 +40,25 @@ use {
     lifthrasir_runtime::actors::EquipmentSlot,
 };
 
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+
 use crate::screens::character_preview::create_render_target;
-use lifthrasir_ui::theme::feathers_theme::{TOKEN_PANEL_BG, TOKEN_TEXT_DIM, TOKEN_WINDOW_BORDER};
-use lifthrasir_ui::widgets::chrome::glyph_icon;
+use crate::screens::shared::small_button;
+use crate::widgets::character_window::CharacterWindowState;
 
-use crate::widgets::character_window::{CharacterTab, CharacterWindowState};
-
-/// Render-target dimensions; 2x the preview frame's box so the character supersamples
-/// down crisply.
-const PREVIEW_W: u32 = 180;
-const PREVIEW_H: u32 = 240;
+/// The stage the hero stands on, between the two slot columns.
+const STAGE: Vec2 = Vec2::new(200.0, 350.0);
+/// Displayed size of the render target. The camera frames a standing hero to fill it
+/// with the feet near its bottom edge.
+const FIGURE: Vec2 = Vec2::new(186.0, 248.0);
+/// Where the pedestal's centre sits below the stage's top edge.
+const PEDESTAL_Y: f32 = 288.0;
+/// How far above the figure's bottom edge its feet are drawn.
+const FOOT_INSET: f32 = 3.0;
+/// Render-target dimensions; 2x [`FIGURE`] so the character supersamples down crisply.
+const PREVIEW_W: u32 = 372;
+const PREVIEW_H: u32 = 496;
 /// World-space vertical extent the orthographic camera frames.
 const VIEWPORT_HEIGHT: f32 = 42.0;
 /// Vertical aim offset so the camera frames the body, not the feet at the origin.
@@ -74,9 +76,13 @@ const PREVIEW_LAYER: usize = 1;
 #[derive(Component)]
 pub struct ConsolePreviewCharacter;
 
-/// Center preview-frame mount; the `ImageNode` binding rides this.
+/// The figure's mount on the stage; the `ImageNode` binding rides this.
 #[derive(Component, Default, Clone)]
 pub struct CharPreviewFrame;
+
+/// The text under the hero naming the way they face.
+#[derive(Component, Default, Clone)]
+pub struct FacingLabel;
 
 /// Holds the preview render target so it is created once per in-game session.
 #[derive(Resource, Default)]
@@ -89,68 +95,164 @@ pub struct ConsolePreviewState {
 #[derive(Resource, Default)]
 pub struct ConsoleLocalHeadgear(HashMap<EquipmentSlot, u16>);
 
-/// Whether the preview rig should be alive: the Console open on the Character tab.
+/// Register the preview's resources and systems into `CharacterWindowPlugin`.
+pub fn register(app: &mut App) {
+    app.init_resource::<ConsolePreviewState>()
+        .init_resource::<ConsoleLocalHeadgear>()
+        .add_systems(
+            Update,
+            (
+                cache_local_headgear,
+                manage_console_preview.after(forward_character_sprite_events),
+                forward_preview_headgear,
+                tag_preview_billboards,
+                sync_facing_label,
+            )
+                .run_if(in_state(GameState::InGame)),
+        )
+        .add_systems(OnExit(GameState::InGame), cleanup_preview);
+}
+
+/// Whether the preview rig should be alive: the window is open.
 fn preview_active(state: &CharacterWindowState) -> bool {
-    state.open && state.tab == CharacterTab::Character
+    state.open
 }
 
 // ---------------------------------------------------------------------------
-// Scene: preview frame + rotate row.
+// Scene: the stage with its pedestal and rotate row.
 // ---------------------------------------------------------------------------
 
-/// The center column: the render-target frame over a Rotate row.
-pub fn preview_frame() -> impl Scene {
+/// The lit stage: a frost glow from above, the pedestal rings, the hero and the
+/// rotate controls along the bottom.
+pub fn stage() -> impl Scene {
+    let backdrop = BackgroundGradient::from(LinearGradient::to_bottom(vec![
+        ColorStop::new(ro_dark::INSET, percent(0)),
+        ColorStop::new(ro_dark::BAR_TROUGH, percent(100)),
+    ]));
+    let figure_top = PEDESTAL_Y + FOOT_INSET - FIGURE.y;
     bsn! {
         Node {
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(6),
-            padding: {UiRect::horizontal(px(4))},
+            width: px(STAGE.x),
+            height: px(STAGE.y),
+            flex_shrink: 0.0,
+            position_type: PositionType::Relative,
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+            overflow: {Overflow::clip()},
         }
-        @lifthrasir_ui::widgets::chrome::ignore_picking()
+        backdrop
+        BorderColor::all(ro_dark::SLOT_STROKE)
+        @ignore_picking()
         Children [
+            @glow(Vec2::new(224.0, 270.0), 105.0, 0.13)
+            --
+            @glow(Vec2::new(172.0, 44.0), PEDESTAL_Y, 0.35)
+            --
+            @ring(Vec2::new(140.0, 30.0), 0.55)
+            --
+            @ring(Vec2::new(116.0, 22.0), 0.4)
+            --
             CharPreviewFrame
-            Node {
-                width: px(165),
-                height: px(220),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: px(1),
-                border_radius: BorderRadius::all(px(8)),
-            }
-            ThemeBackgroundColor({TOKEN_PANEL_BG})
-            ThemeBorderColor({TOKEN_WINDOW_BORDER})
+            @centered(FIGURE, figure_top)
             --
             @rotate_row()
         ]
     }
 }
 
+/// A node `size` large, centred on the stage's width with its top edge `top` px down.
+fn centered(size: Vec2, top: f32) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px((STAGE.x - size.x) / 2.0),
+            top: px(top),
+            width: px(size.x),
+            height: px(size.y),
+        }
+        @ignore_picking()
+    }
+}
+
+/// A frost light fading out from its centre, `centre_y` px down the stage.
+fn glow(size: Vec2, centre_y: f32, alpha: f32) -> impl Scene {
+    let light = BackgroundGradient::from(RadialGradient {
+        shape: RadialGradientShape::Ellipse(percent(50), percent(50)),
+        stops: vec![
+            ColorStop::new(ro_dark::FROST_GLOW.with_alpha(alpha), percent(0)),
+            ColorStop::new(ro_dark::FROST_GLOW.with_alpha(0.0), percent(100)),
+        ],
+        ..default()
+    });
+    bsn! {
+        @centered(size, centre_y - size.y / 2.0)
+        light
+    }
+}
+
+/// One of the pedestal's rings, drawn as the outline of a flat ellipse.
+fn ring(size: Vec2, alpha: f32) -> impl Scene {
+    let stroke = ro_dark::FROST.with_alpha(alpha);
+    bsn! {
+        @centered(size, PEDESTAL_Y - size.y / 2.0)
+        Node { border: px(1), border_radius: BorderRadius::MAX_ELLIPTICAL }
+        BorderColor::all(stroke)
+    }
+}
+
 fn rotate_row() -> impl Scene {
     bsn! {
         Node {
-            flex_direction: FlexDirection::Row,
+            position_type: PositionType::Absolute,
+            left: px(0),
+            right: px(0),
+            bottom: px(12),
             align_items: AlignItems::Center,
-            column_gap: px(8),
+            justify_content: JustifyContent::Center,
+            column_gap: px(10),
         }
-        @lifthrasir_ui::widgets::chrome::ignore_picking()
+        @ignore_picking()
         Children [
-            @FeathersButton { @caption: bsn! { @glyph_icon("rotl", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            Node { width: px(24), height: px(20) }
+            @small_button("chevl", 24.0)
             on(on_rotate_left)
             --
-            Text({"Rotate".to_string()})
-            TextFont {
-                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                font_size: {FontSize::Px(10.0)},
-            }
-            ThemeTextColor({TOKEN_TEXT_DIM})
-            @lifthrasir_ui::widgets::chrome::ignore_picking()
+            FacingLabel
+            @chrome_text(facing_label(Direction::South).into(), 11.0, ro_dark::MUTED)
+            Node { width: px(80) }
+            TextLayout { justify: Justify::Center, linebreak: LineBreak::NoWrap }
             --
-            @FeathersButton { @caption: bsn! { @glyph_icon("rotr", 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            Node { width: px(24), height: px(20) }
+            @small_button("chevr", 24.0)
             on(on_rotate_right)
         ]
+    }
+}
+
+fn facing_label(facing: Direction) -> &'static str {
+    match facing {
+        Direction::South => "Facing south",
+        Direction::SouthWest => "Facing southwest",
+        Direction::West => "Facing west",
+        Direction::NorthWest => "Facing northwest",
+        Direction::North => "Facing north",
+        Direction::NorthEast => "Facing northeast",
+        Direction::East => "Facing east",
+        Direction::SouthEast => "Facing southeast",
+    }
+}
+
+/// Names the way the preview hero faces whenever it turns or is respawned.
+fn sync_facing_label(
+    preview: Query<
+        &CharacterDirection,
+        (With<ConsolePreviewCharacter>, Changed<CharacterDirection>),
+    >,
+    mut labels: Query<&mut Text, With<FacingLabel>>,
+) {
+    let Ok(direction) = preview.single() else {
+        return;
+    };
+    for mut text in &mut labels {
+        text.0 = facing_label(direction.facing).to_string();
     }
 }
 
@@ -201,10 +303,10 @@ pub fn cache_local_headgear(
     }
 }
 
-/// Drives the whole preview rig off [`CharacterWindowState`]: while the Console is open
-/// on the Character tab, ensure the render target + `ImageNode` (once per session), the
-/// camera, and the preview character all exist; otherwise despawn the camera +
-/// character while keeping the `Image` so a later re-open reuses it.
+/// Drives the whole preview rig off [`CharacterWindowState`]: while the window is
+/// open, ensure the render target + `ImageNode` (once per session), the camera, and
+/// the preview character all exist; otherwise despawn the camera + character while
+/// keeping the `Image` so a later re-open reuses it.
 #[allow(clippy::too_many_arguments)]
 pub fn manage_console_preview(
     mut commands: Commands,
@@ -395,19 +497,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preview_active_only_when_open_on_character_tab() {
-        assert!(preview_active(&CharacterWindowState {
-            open: true,
-            tab: CharacterTab::Character,
-        }));
-        assert!(!preview_active(&CharacterWindowState {
-            open: false,
-            tab: CharacterTab::Character,
-        }));
-        assert!(!preview_active(&CharacterWindowState {
-            open: true,
-            tab: CharacterTab::Skills,
-        }));
+    fn preview_active_only_while_the_window_is_open() {
+        assert!(preview_active(&CharacterWindowState { open: true }));
+        assert!(!preview_active(&CharacterWindowState { open: false }));
+    }
+
+    #[test]
+    fn the_figure_stands_on_the_pedestal_inside_the_stage() {
+        let figure_bottom = PEDESTAL_Y + FOOT_INSET;
+        assert!(figure_bottom - FIGURE.y >= 0.0);
+        assert!(figure_bottom <= STAGE.y);
+        assert_eq!(PREVIEW_W as f32 / PREVIEW_H as f32, FIGURE.x / FIGURE.y);
     }
 
     #[test]

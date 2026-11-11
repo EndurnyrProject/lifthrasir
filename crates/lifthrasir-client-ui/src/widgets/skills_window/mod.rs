@@ -1,4 +1,5 @@
-//! The Console's Skills tab state, staging rules, and interactions.
+//! The Skills window: state, staging rules, and interactions. [`shell`] owns the frame
+//! and its toggle chord.
 //!
 //! [`scene`] owns the declarative all-job horizontal canvas and its live projection.
 //! Static entities rebuild only when topology or presentation metadata changes.
@@ -22,10 +23,11 @@ use lifthrasir_client::domain::vending::{VENDING_SKILL_ID, VendingIntent};
 use crate::widgets::hotbar::HotbarDrag;
 use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
 
-use crate::widgets::character_window::SkillsTabBody;
+use crate::widgets::skills_window::shell::SkillsBody;
 
 pub(crate) mod layout;
 mod scene;
+pub mod shell;
 
 const DOUBLE_CLICK: Duration = Duration::from_millis(300);
 
@@ -434,7 +436,7 @@ fn rebuild_skills_body(
     tree: Res<SkillTreeState>,
     catalog: Option<Res<SkillCatalog>>,
     registry: Option<Res<JobSpriteRegistry>>,
-    bodies: Query<(Entity, Option<&Children>, Ref<SkillsTabBody>)>,
+    bodies: Query<(Entity, Option<&Children>, Ref<SkillsBody>)>,
     mut fingerprint: ResMut<SkillStructureFingerprint>,
 ) {
     let Ok((body_entity, children, body_ref)) = bodies.single() else {
@@ -457,9 +459,24 @@ fn rebuild_skills_body(
         .insert(ChildOf(body_entity));
 }
 
-/// Register the Skills tab's resources and ordered update pipeline into
-/// [`CharacterWindowPlugin`](super::CharacterWindowPlugin).
-pub(super) fn register(app: &mut App) {
+pub struct SkillsWindowPlugin;
+
+impl Plugin for SkillsWindowPlugin {
+    fn build(&self, app: &mut App) {
+        register(app);
+        app.add_systems(
+            Update,
+            shell::toggle_skills_window.run_if(
+                in_state(GameState::InGame)
+                    .and_then(lifthrasir_client::domain::input::ui_unfocused),
+            ),
+        );
+        app.add_systems(OnExit(GameState::InGame), reset);
+    }
+}
+
+/// Register the window's resources and ordered update pipeline.
+fn register(app: &mut App) {
     app.init_resource::<SkillPanelUi>();
     app.init_resource::<SkillPanelStaging>();
     app.init_resource::<LastSkillPanelClick>();
@@ -1036,7 +1053,7 @@ mod tests {
             },
             LocalPlayer,
         ));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         app.world_mut().resource_mut::<SkillPanelUi>().selected = Some(2);
 
@@ -1120,7 +1137,7 @@ mod tests {
     fn selecting_a_skill_spawns_no_inline_info_panel() {
         let mut app = skills_app();
         app.insert_resource(tree(&[(1, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         let unselected = node_count(&mut app);
 
@@ -1145,7 +1162,7 @@ mod tests {
             },
             LocalPlayer,
         ));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         app.world_mut()
             .resource_mut::<SkillPanelStaging>()
@@ -1211,7 +1228,7 @@ mod tests {
             .spawn((CharacterStatus::default(), LocalPlayer))
             .id();
         app.insert_resource(tree(&[(1, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         assert_eq!(app.world().resource::<GateChangeCount>().0, 1);
         assert_eq!(app.world().resource::<ProjectionRunCount>().0, 1);
@@ -1265,7 +1282,7 @@ mod tests {
             },
             LocalPlayer,
         ));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
 
         let viewport = app
@@ -1315,7 +1332,7 @@ mod tests {
             },
             LocalPlayer,
         ));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         let viewport = app
             .world_mut()
@@ -1445,7 +1462,7 @@ mod tests {
             },
             LocalPlayer,
         ));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         let viewport = app
             .world_mut()
@@ -1562,7 +1579,7 @@ mod tests {
     fn level_only_authority_refresh_preserves_viewport_and_clears_stale_plan() {
         let mut app = skills_app();
         app.insert_resource(tree(&[(1, node(0, 5, 7)), (2, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         let viewport = app
             .world_mut()
@@ -1607,7 +1624,7 @@ mod tests {
     fn topology_changes_replace_viewport_and_clear_only_disappeared_selection() {
         let mut app = skills_app();
         app.insert_resource(tree(&[(1, node(0, 5, 7)), (2, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         let first = app
             .world_mut()
@@ -1665,7 +1682,7 @@ mod tests {
         app.insert_resource(JobSpriteRegistry::from_job_data(jobs));
         app.insert_resource(catalog("SM_BASH", "Bash"));
         app.insert_resource(tree(&[(1, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         let first = app
             .world_mut()
@@ -1711,7 +1728,7 @@ mod tests {
             (2, node(0, 5, 7)),
             (3, node(0, 5, 9)),
         ]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
 
         app.update();
 
@@ -1736,7 +1753,7 @@ mod tests {
             (2, with_requires(node(0, 5, 7), vec![(1, 2)])),
             (3, with_requires(node(0, 5, 9), vec![(2, 1)])),
         ]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
 
         app.update();
 
@@ -1771,7 +1788,7 @@ mod tests {
             (1, node(0, 5, 7)),
             (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
         ]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
 
         let connector_style = |app: &mut App| {
@@ -1811,7 +1828,7 @@ mod tests {
         let mut app = skills_app();
         let missing = tree(&[(2, with_requires(node(0, 5, 7), vec![(999, 1)]))]);
         app.insert_resource(missing);
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
 
         app.update();
 
@@ -1837,7 +1854,7 @@ mod tests {
             (1, with_requires(node(0, 5, 7), vec![(2, 1)])),
             (2, with_requires(node(0, 5, 7), vec![(1, 1)])),
         ]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
 
         app.update();
 
@@ -1874,7 +1891,7 @@ mod tests {
 
         let mut app = skills_app();
         app.insert_resource(tree(&[(1, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
 
         let world = app.world_mut();
@@ -1912,7 +1929,7 @@ mod tests {
     fn empty_tree_and_missing_metadata_use_stable_fallbacks() {
         let mut empty_app = skills_app();
         empty_app.insert_resource(SkillTreeState::default());
-        empty_app.world_mut().spawn(SkillsTabBody);
+        empty_app.world_mut().spawn(SkillsBody);
         empty_app.update();
         let empty_world = empty_app.world_mut();
         assert_eq!(
@@ -1931,7 +1948,7 @@ mod tests {
 
         let mut fallback_app = skills_app();
         fallback_app.insert_resource(tree(&[(77, node(0, 5, 42))]));
-        fallback_app.world_mut().spawn(SkillsTabBody);
+        fallback_app.world_mut().spawn(SkillsBody);
         fallback_app.update();
         let fallback_world = fallback_app.world_mut();
         let texts: HashSet<_> = fallback_world
@@ -1957,7 +1974,7 @@ mod tests {
         jobs.display_names.insert(7, "Knight".to_string());
         app.insert_resource(JobSpriteRegistry::from_job_data(jobs));
         app.insert_resource(tree(&[(1, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
 
         let world = app.world_mut();
@@ -2031,7 +2048,7 @@ mod tests {
         app.init_resource::<Time>();
         app.init_resource::<HotbarDrag>();
         app.insert_resource(tree(&[(42, node(1, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         let window = app.world_mut().spawn(Window::default()).id();
         app.update();
 
@@ -2078,7 +2095,7 @@ mod tests {
     fn rendered_reset_plan_discards_staging_without_a_request() {
         let mut app = skills_app();
         app.insert_resource(tree(&[(1, node(0, 5, 7))]));
-        app.world_mut().spawn(SkillsTabBody);
+        app.world_mut().spawn(SkillsBody);
         app.update();
         app.world_mut().resource_mut::<SkillPanelStaging>().pending = HashMap::from([(1, 1)]);
 

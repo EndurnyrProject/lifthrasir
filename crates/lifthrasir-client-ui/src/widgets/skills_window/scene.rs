@@ -8,8 +8,8 @@ use lifthrasir_client::domain::skill::SkillTreeState;
 
 use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
 
-use crate::widgets::character_window::skills_tab::layout::{JobBand, Segment, TreeLayout};
-use crate::widgets::character_window::skills_tab::{
+use crate::widgets::skills_window::layout::{JobBand, Segment, TreeLayout};
+use crate::widgets::skills_window::{
     SkillGateSnapshot, SkillPanelBank, SkillPanelCell, SkillPanelCommitButton, SkillPanelStaging,
     SkillPanelStepper, SkillPanelUi, cell_icon_color, format_level, on_apply, on_cell_click,
     on_cell_drag_start, on_reset, on_stepper, skill_name,

@@ -15,6 +15,17 @@ pub struct ZoneSession {
     pub map_name: String,
 }
 
+/// The ruleset the connected zone server runs. Some values read differently per
+/// ruleset, such as the two parts of the status window's MATK. Defaults to renewal
+/// until a server reports otherwise.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[auto_init_resource(plugin = crate::NetContractPlugin)]
+pub enum GameMode {
+    #[default]
+    Renewal,
+    PreRenewal,
+}
+
 /// Monotonic identity of the current zone/character session.
 #[derive(Resource, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[auto_init_resource(plugin = crate::NetContractPlugin)]
