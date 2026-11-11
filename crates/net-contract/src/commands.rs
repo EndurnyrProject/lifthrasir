@@ -222,6 +222,11 @@ pub struct ConnectZone {
     pub map_name: String,
 }
 
+/// Request to end the account session: close every server connection.
+#[derive(Message, Debug, Clone)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct Logout;
+
 /// Request to abandon the active zone session (e.g. on return to the login screen).
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

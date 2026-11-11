@@ -43,6 +43,34 @@ pub struct ServerInfo {
     pub users: u16,
     pub server_type: ServerType,
     pub new_server: u16,
+    /// Player capacity; 0 when the server reports none.
+    pub max_users: u16,
+    /// Display region, empty when unset.
+    pub region: String,
+    /// One-line description, empty when unset.
+    pub description: String,
+    /// The account's characters on this server, in slot order.
+    pub heroes: Vec<HeroSummary>,
+    /// Experience and drop rates; `None` when the server reports none.
+    pub rates: Option<ServerRates>,
+}
+
+/// A character listed under its server on the server select screen.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HeroSummary {
+    pub name: String,
+    pub class: u16,
+    pub base_level: u16,
+    /// Unix time (seconds, UTC) the character was last played; 0 when never.
+    pub last_login: u64,
+}
+
+/// A server's rate multipliers as percentages (100 = 1x).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ServerRates {
+    pub base_exp: u16,
+    pub job_exp: u16,
+    pub drop: u16,
 }
 
 impl ServerInfo {
@@ -75,6 +103,11 @@ mod tests {
             users: 0,
             server_type: ServerType::Normal,
             new_server: 0,
+            max_users: 0,
+            region: String::new(),
+            description: String::new(),
+            heroes: Vec::new(),
+            rates: None,
         };
         assert_eq!(info.ip_string(), "127.0.0.1");
     }

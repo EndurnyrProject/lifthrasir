@@ -86,10 +86,10 @@ fn toggle_on_transition(
         return;
     };
     let (sharp_visibility, blurred_visibility) = match entered {
-        GameState::Login | GameState::ServerSelection => (Visibility::Visible, Visibility::Hidden),
-        GameState::CharacterSelection | GameState::CharacterCreation => {
-            (Visibility::Hidden, Visibility::Visible)
-        }
+        GameState::Login => (Visibility::Visible, Visibility::Hidden),
+        GameState::ServerSelection
+        | GameState::CharacterSelection
+        | GameState::CharacterCreation => (Visibility::Hidden, Visibility::Visible),
         _ => (Visibility::Hidden, Visibility::Hidden),
     };
     **sharp = sharp_visibility;

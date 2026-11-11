@@ -39,6 +39,20 @@ pub struct UserSession {
     pub server_list: Vec<ServerInfo>,
     pub selected_server: Option<ServerInfo>,
     pub auth_token: String,
+    /// Server clock at login, Unix time in seconds (UTC); 0 when not reported.
+    pub server_time: u64,
+}
+
+impl UserSession {
+    /// The server's clock now (Unix seconds, UTC): its time at login plus the time
+    /// since. `None` when the server reported no time.
+    pub fn server_now(&self) -> Option<u64> {
+        if self.server_time == 0 {
+            return None;
+        }
+        let since_login = self.login_timestamp.elapsed().unwrap_or_default();
+        Some(self.server_time + since_login.as_secs())
+    }
 }
 
 impl From<&LoginAccepted> for UserSession {
@@ -57,6 +71,7 @@ impl From<&LoginAccepted> for UserSession {
             server_list: event.server_list.clone(),
             selected_server: None,
             auth_token: event.auth_token.clone(),
+            server_time: event.server_time,
         }
     }
 }
@@ -74,6 +89,11 @@ mod tests {
             users: 3,
             server_type: ServerType::Normal,
             new_server: 0,
+            max_users: 0,
+            region: String::new(),
+            description: String::new(),
+            heroes: Vec::new(),
+            rates: None,
         }
     }
 
@@ -87,6 +107,7 @@ mod tests {
             server_list: vec![sample_server()],
             username: "hero".to_string(),
             auth_token: "deadbeefcafef00d".to_string(),
+            server_time: 0,
         };
 
         let session = UserSession::from(&event);
@@ -113,10 +134,31 @@ mod tests {
             server_list: vec![],
             username: "nobody".to_string(),
             auth_token: String::new(),
+            server_time: 0,
         };
 
         let session = UserSession::from(&event);
 
         assert!(session.tokens.character_server_info.is_none());
+    }
+
+    #[test]
+    fn server_now_advances_from_the_login_time() {
+        let mut session = UserSession::from(&LoginAccepted {
+            account_id: 1,
+            login_id1: 0,
+            login_id2: 0,
+            sex: 0,
+            server_list: vec![],
+            username: "hero".to_string(),
+            auth_token: String::new(),
+            server_time: 1_000,
+        });
+        session.login_timestamp -= std::time::Duration::from_secs(90);
+
+        assert_eq!(session.server_now(), Some(1_090));
+
+        session.server_time = 0;
+        assert_eq!(session.server_now(), None);
     }
 }

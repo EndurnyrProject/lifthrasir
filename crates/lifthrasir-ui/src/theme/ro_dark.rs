@@ -86,7 +86,19 @@ pub const SP: Color = Color::srgb_u8(0x3f, 0x78, 0xb4);
 pub const BASE_EXP: Color = Color::srgb_u8(0xc9, 0x9a, 0x45);
 pub const JOB_EXP: Color = Color::srgb_u8(0x6f, 0x9a, 0x5c);
 
+// Server status.
+pub const STATUS_ONLINE: Color = Color::srgb_u8(0x8f, 0xbf, 0x7a);
+pub const STATUS_BUSY: Color = Color::srgb_u8(0xd9, 0xb2, 0x65);
+pub const STATUS_FULL: Color = Color::srgb_u8(0xd0, 0x67, 0x5c);
+pub const STATUS_OFFLINE: Color = Color::srgb_u8(0x7d, 0x84, 0x8e);
+
+/// Hairline around rows and troughs inside an [`INSET`] panel.
+pub const INSET_RULE: Color = Color::srgb_u8(0x2c, 0x32, 0x3b);
+
 // Text.
+pub const HERO: Color = Color::srgb_u8(0xf0, 0xe4, 0xc4);
+pub const STRONG: Color = Color::srgb_u8(0xf4, 0xf6, 0xf8);
+pub const FAINT: Color = Color::srgb_u8(0x80, 0x87, 0x8f);
 pub const TITLE: Color = Color::srgb_u8(0xe8, 0xd8, 0xb0);
 pub const VALUE: Color = Color::srgb_u8(0xf1, 0xed, 0xe4);
 pub const BUTTON_LABEL: Color = Color::srgb_u8(0xe9, 0xe2, 0xd0);

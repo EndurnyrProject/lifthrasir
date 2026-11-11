@@ -3,14 +3,14 @@ use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::{QuinnetClient, client_connected};
 use net_contract::commands::{
     ConnectCharServer, ConnectLogin, ConnectZone, LeaveZone, LocalMapLoaded, LocalPlayerReady,
-    RespawnRequested,
+    Logout, RespawnRequested,
 };
 use net_contract::events::{LoginRefused, MapChangeRequested, ZoneDisconnected};
 
 use crate::channels::{CONTROL, GAMEPLAY};
-use crate::character::{self, PendingAuth, QuicCharState};
+use crate::character::{self, CharPhase, PendingAuth, QuicCharState};
 use crate::envelope::Body;
-use crate::login::{self, Pending, QuicLoginState};
+use crate::login::{self, LoginPhase, Pending, QuicLoginState};
 use crate::proto::aesir::net::{MapLoaded, Respawn};
 use crate::zone::{self, QuicZoneState, ZoneAuth, ZonePhase};
 
@@ -179,6 +179,23 @@ pub fn handle_leave_zone(mut events: MessageReader<LeaveZone>, mut state: ResMut
         state.map_loaded_signal = false;
         state.player_ready_signal = false;
     }
+}
+
+/// End the account session: close every connection and disarm the login and char
+/// handshakes, so the close is not reported as a lost connection.
+#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
+pub fn handle_logout(
+    mut events: MessageReader<Logout>,
+    mut client: ResMut<QuinnetClient>,
+    mut login_state: ResMut<QuicLoginState>,
+    mut char_state: ResMut<QuicCharState>,
+) {
+    if events.read().count() == 0 {
+        return;
+    }
+    client.close_all_connections();
+    login_state.phase = LoginPhase::Disconnected;
+    char_state.phase = CharPhase::Disconnected;
 }
 
 /// Re-arm the map-load handshake on a server warp.

@@ -923,7 +923,7 @@ pub struct LoginRequest {
     pub client_version: u32,
 }
 /// One available character server, included in a successful LoginResponse.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CharServerInfo {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -937,6 +937,40 @@ pub struct CharServerInfo {
     pub server_type: u32,
     #[prost(bool, tag = "6")]
     pub is_new: bool,
+    /// Player capacity of the server; 0 when unknown.
+    #[prost(uint32, tag = "7")]
+    pub max_users: u32,
+    /// Display region (e.g. "EU West"); empty when the server sets none.
+    #[prost(string, tag = "8")]
+    pub region: ::prost::alloc::string::String,
+    /// One-line description shown on server select; empty when the server sets none.
+    #[prost(string, tag = "9")]
+    pub description: ::prost::alloc::string::String,
+    /// The logging-in account's characters on this server, in slot order.
+    #[prost(message, repeated, tag = "10")]
+    pub heroes: ::prost::alloc::vec::Vec<CharServerHero>,
+    /// Base EXP, job EXP and common item drop rates as percentages (100 = 1x);
+    /// all 0 when no zone server of the cluster is online to report them.
+    #[prost(uint32, tag = "11")]
+    pub base_exp_rate: u32,
+    #[prost(uint32, tag = "12")]
+    pub job_exp_rate: u32,
+    #[prost(uint32, tag = "13")]
+    pub drop_rate: u32,
+}
+/// A character summary listed under its server on the server select screen.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CharServerHero {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    /// Job (class) id.
+    #[prost(uint32, tag = "2")]
+    pub job: u32,
+    #[prost(uint32, tag = "3")]
+    pub base_level: u32,
+    /// Unix time (seconds, UTC) the character was last selected to play; 0 when never.
+    #[prost(uint64, tag = "4")]
+    pub last_login: u64,
 }
 /// Server -> client, successful login (replaces RO AC_ACCEPT_LOGIN).
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -953,6 +987,9 @@ pub struct LoginResponse {
     pub auth_token: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "6")]
     pub char_servers: ::prost::alloc::vec::Vec<CharServerInfo>,
+    /// Server clock at login, Unix time in seconds (UTC).
+    #[prost(uint64, tag = "7")]
+    pub server_time: u64,
 }
 /// Server -> client, rejected login (replaces RO AC_REFUSE_LOGIN).
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

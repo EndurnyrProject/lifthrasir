@@ -69,7 +69,9 @@ mod tests {
                 user_count: 5,
                 server_type: 0,
                 is_new: false,
+                ..Default::default()
             }],
+            ..Default::default()
         });
         let env = roundtrip(7, body.clone());
         assert_eq!(env.seq, 7);

@@ -13,6 +13,8 @@ pub struct LoginAccepted {
     pub server_list: Vec<ServerInfo>,
     pub username: String,
     pub auth_token: String,
+    /// Server clock at login, Unix time in seconds (UTC); 0 when not reported.
+    pub server_time: u64,
 }
 
 /// Event emitted when login is refused

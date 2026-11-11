@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
-use net_contract::commands::{ConnectCharServer, ConnectLogin};
+use net_contract::commands::{ConnectCharServer, ConnectLogin, Logout};
 use secrecy::ExposeSecret;
 
 use crate::domain::authentication::{events::*, models::*};
@@ -128,6 +128,18 @@ pub fn handle_login_refused(
     }
 }
 
+/// Ends the account session whenever the client returns to the login screen (log
+/// out, back from server select, a disconnect): drops the stale `UserSession` and
+/// asks the adapter to close its connections.
+#[auto_add_system(
+    plugin = crate::domain::authentication::plugin::AuthenticationPlugin,
+    schedule = OnEnter(GameState::Login)
+)]
+pub fn end_session(mut commands: Commands, mut logout: MessageWriter<Logout>) {
+    commands.remove_resource::<UserSession>();
+    logout.write(Logout);
+}
+
 // ============================================================================
 // Configuration and Client Initialization Systems
 // ============================================================================
@@ -246,5 +258,32 @@ pub fn handle_server_selection(
             login_id2: session.tokens.login_id2,
             sex: session.sex as u32,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn end_session_drops_the_session_and_requests_logout() {
+        let mut app = App::new();
+        app.add_message::<Logout>();
+        app.insert_resource(UserSession::from(&LoginAccepted {
+            account_id: 1,
+            login_id1: 0,
+            login_id2: 0,
+            sex: 0,
+            server_list: vec![],
+            username: "hero".to_string(),
+            auth_token: String::new(),
+            server_time: 0,
+        }));
+        app.add_systems(Update, end_session);
+
+        app.update();
+
+        assert!(!app.world().contains_resource::<UserSession>());
+        assert_eq!(app.world().resource::<Messages<Logout>>().len(), 1);
     }
 }
