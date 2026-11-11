@@ -82,8 +82,10 @@ impl RoAnimationProcessor {
         }
     }
 
-    /// Convert a sprite frame to a Bevy Image.
-    fn frame_to_image(
+    /// Convert a sprite frame to a Bevy Image. `custom_palette` replaces the sprite's
+    /// own `palette` (hair colours). The image is upscaled in pixels only: its logical
+    /// size stays the frame's.
+    pub fn frame_to_image(
         frame: &SpriteFrame,
         palette: Option<&Palette>,
         custom_palette: Option<&RoPaletteAsset>,

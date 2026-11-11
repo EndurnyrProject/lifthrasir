@@ -1,12 +1,11 @@
 //! BSN scenes of the server selection screen: the static frame, the runtime rows,
 //! the details card and the connecting modal. Behaviour lives in the parent module.
 
-use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::ScrollArea;
-use lifthrasir_ui::theme;
-use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::chrome::chrome_text;
 use lifthrasir_ui::widgets::primitives::{
-    BUTTON_SHADOW, ButtonArt, WINDOW_SHADOW, button, title_text, window_title, window_titled,
+    BUTTON_SHADOW, ButtonArt, WINDOW_SHADOW, button, display_text, title_text, window_title,
+    window_titled,
 };
 
 use super::*;
@@ -91,7 +90,7 @@ fn window(online: u32) -> impl Scene {
             @window_title("Choose a World")
             Node { column_gap: px(12) }
             Children [
-                @chrome_text(format!("{} heroes online", thousands(online)), 12.0, ro_dark::MUTED)
+                @chrome_text(format!("{} heroes online", thousands(online.into())), 12.0, ro_dark::MUTED)
             ]
             --
             Node { height: px(BODY_HEIGHT), column_gap: px(18) }
@@ -329,19 +328,6 @@ fn initial_badge(initial: String, color: Color) -> impl Scene {
 
 fn diamond_tilt() -> UiTransform {
     UiTransform::from_rotation(Rot2::degrees(45.0))
-}
-
-/// Runtime text in the title font; `title_text` only takes static strings.
-fn display_text(text: String, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle(theme::FONT_TITLE),
-            font_size: {FontSize::Px(size)},
-        }
-        TextColor(color)
-        @ignore_picking()
-    }
 }
 
 /// The details card for the selected world: identity, description, notes, stats, the

@@ -26,6 +26,7 @@ use lifthrasir_ui::theme::ro_dark;
 use net_contract::dto::{HeroSummary, ServerInfo, ServerRates, ServerType};
 use net_contract::state::UserSession;
 
+use crate::screens::shared::thousands;
 use crate::widgets::system_dialog::SystemDialogRoot;
 
 /// How long the char server may stay silent before the attempt is reported as failed.
@@ -133,19 +134,6 @@ fn type_chip(server_type: ServerType) -> (&'static str, Color) {
         ServerType::PK => ("PK", ro_dark::DANGER_GLOW),
         ServerType::Special(_) => ("SPECIAL", ro_dark::SELECT_RING),
     }
-}
-
-/// `n` with `,` between thousands groups.
-fn thousands(n: u32) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (i, digit) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(digit);
-    }
-    out
 }
 
 /// "3× · 1.5× · 2×" for the base EXP, job EXP and drop rates (percentages, 100 = 1×).

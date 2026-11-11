@@ -9,7 +9,7 @@ use bevy::text::EditableText;
 
 /// A hint overlay for the [`EditableText`] field stored in `.0`. Shown while that
 /// field is empty, hidden once it has content.
-#[derive(Component)]
+#[derive(Component, FromTemplate)]
 pub struct Placeholder(pub Entity);
 
 pub struct PlaceholderPlugin;

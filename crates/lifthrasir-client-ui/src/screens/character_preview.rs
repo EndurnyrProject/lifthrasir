@@ -37,6 +37,9 @@ use lifthrasir_runtime::actors::sprites::legacy::{CharacterDirection, CharacterS
 pub const COLUMN_PX: u32 = 144;
 /// Pixel height of the render target, and the display height of each card preview.
 pub const ROW_PX: u32 = 224;
+/// Render scale of the selection roster, so the featured hero is shown 1:1 at
+/// 1.5x its column size instead of being stretched.
+pub const SELECT_SCALE: f32 = 1.5;
 /// World-space vertical extent the orthographic preview camera shows. Tuned (via
 /// live BRP) so a standing character fills the column; horizontal extent derives
 /// from the target aspect ratio (`viewport_height * width / height`).
@@ -240,14 +243,18 @@ fn rebuild_diorama(
             spawn_position: position,
         });
 
-        diorama.columns.insert(*slot, column_rect(col));
+        let column = column_rect(col);
+        diorama.columns.insert(
+            *slot,
+            Rect::from_corners(column.min * SELECT_SCALE, column.max * SELECT_SCALE),
+        );
     }
 
     diorama.target = Some(spawn_preview_diorama(
         &mut commands,
         &mut images,
         count,
-        1.0,
+        SELECT_SCALE,
     ));
 }
 

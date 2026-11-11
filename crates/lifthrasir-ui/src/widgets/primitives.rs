@@ -1,4 +1,5 @@
-//! RO-dark art primitives: 9-sliced windows, inputs, buttons, checkboxes and dividers.
+//! RO-dark art primitives: 9-sliced windows, inputs, buttons, checkboxes and dividers,
+//! plus the scrolling grid windows lay their options out in.
 //!
 //! The art is the 2x cut of `lifthrasir-ui-ro/primitives`, shipped under
 //! `ro://ui/primitives/<category>/` with the same layout. Shadows and glows are baked
@@ -16,7 +17,8 @@ use bevy::sprite::{BorderRect, TextureSlicer};
 use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui::widget::NodeImageMode;
 use bevy::ui::{Pressed, VisualBox};
-use bevy::ui_widgets::Button;
+use bevy::ui_widgets::{Button, ControlOrientation, ScrollArea};
+use bevy_feathers::controls::FeathersScrollbar;
 
 use crate::theme::{self, ro_dark};
 use crate::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
@@ -34,6 +36,11 @@ pub const CONTENT_INSET: f32 = 24.0;
 const TITLE_BAR_HEIGHT: f32 = 40.0;
 const INPUT_HEIGHT: f32 = 28.0;
 const BUTTON_HEIGHT: f32 = 32.0;
+/// Inner padding of a [`scroll_grid`], so a selected cell's glow is not clipped.
+const GRID_PAD: f32 = 3.0;
+/// Width a [`scroll_grid`] keeps free for its scrollbar: its cells get the container's
+/// width minus this.
+pub const SCROLL_GRID_GUTTER: f32 = 11.0;
 
 pub struct PrimitivesPlugin;
 
@@ -132,6 +139,19 @@ pub fn title_text(text: &'static str, size: f32) -> impl Scene {
     }
 }
 
+/// Runtime text in the title font; [`title_text`] only takes static strings.
+pub fn display_text(text: String, size: f32, color: Color) -> impl Scene {
+    bsn! {
+        Text(text)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_TITLE),
+            font_size: {FontSize::Px(size)},
+        }
+        TextColor(color)
+        @ignore_picking()
+    }
+}
+
 /// A text-input frame with a hidden focus [`Outline`] on the shape edge. The owner
 /// adds picking, fills the child text and colours the outline on focus.
 pub fn input_frame() -> impl Scene {
@@ -199,6 +219,50 @@ pub fn checkbox(label: &'static str) -> impl Scene {
             @ignore_picking()
             --
             @chrome_text(label.into(), 12.0, ro_dark::BODY)
+        ]
+    }
+}
+
+/// A wrapping grid that shows `rows` rows of `cell`-high items, `gap` apart, and scrolls
+/// beyond that, so a growing list never grows its window. The scrollbar hides while
+/// everything fits. The negative margin keeps the first column on the container's edge
+/// despite the padding.
+pub fn scroll_grid<S: Scene>(items: Vec<S>, cell: f32, rows: f32, gap: f32) -> impl Scene {
+    let max_height = rows * cell + (rows - 1.0) * gap + 2.0 * GRID_PAD;
+    bsn! {
+        Node {
+            position_type: PositionType::Relative,
+            margin: {UiRect::all(px(-GRID_PAD))},
+        }
+        Children [
+            #grid
+            ScrollArea
+            Pickable
+            Node {
+                flex_grow: 1.0,
+                max_height: px(max_height),
+                flex_wrap: FlexWrap::Wrap,
+                align_content: AlignContent::FlexStart,
+                column_gap: px(gap),
+                row_gap: px(gap),
+                padding: {UiRect::new(
+                    px(GRID_PAD),
+                    px(GRID_PAD + SCROLL_GRID_GUTTER),
+                    px(GRID_PAD),
+                    px(GRID_PAD),
+                )},
+                overflow: {Overflow::scroll_y()},
+            }
+            Children [ {items} ]
+            --
+            @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(GRID_PAD),
+                top: px(GRID_PAD),
+                bottom: px(GRID_PAD),
+                width: px(6),
+            }
         ]
     }
 }
@@ -316,5 +380,31 @@ mod tests {
             .unwrap();
         let path = image.image.path().unwrap().to_string();
         assert!(path.ends_with("control/checkbox_on.png"), "{path}");
+    }
+
+    #[test]
+    fn scroll_grid_holds_every_item_under_a_height_cap() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            bevy::scene::ScenePlugin,
+        ));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        let cells: Vec<_> = (0..5).map(|_| divider_diamond()).collect();
+        app.world_mut()
+            .commands()
+            .spawn_scene(scroll_grid(cells, 10.0, 2.0, 4.0));
+        app.update();
+
+        let world = app.world_mut();
+        let (node, children) = world
+            .query_filtered::<(&Node, &Children), With<ScrollArea>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(node.max_height, px(2.0 * 10.0 + 4.0 + 2.0 * GRID_PAD));
+        assert_eq!(node.overflow, Overflow::scroll_y());
+        assert_eq!(children.len(), 5);
     }
 }
