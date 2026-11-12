@@ -15,7 +15,7 @@ use bevy::ui_widgets::TextInput;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::character::chat::ChatSendRequested;
 use lifthrasir_client::domain::emote::EmoteRequested;
-use net_contract::commands::{MemoRequested, MountPeco};
+use net_contract::commands::{HomunculusRequested, MemoRequested, MountPeco};
 use net_contract::events::ChatHeard;
 
 use crate::widgets::emote::slash::parse_emote_slash;
@@ -62,6 +62,7 @@ pub(crate) struct ChatInputWriters<'w> {
     navi: MessageWriter<'w, NaviSlash>,
     guild: MessageWriter<'w, GuildSlashSubmitted>,
     memo: MessageWriter<'w, MemoRequested>,
+    homunculus: MessageWriter<'w, HomunculusRequested>,
     feedback: MessageWriter<'w, ChatHeard>,
 }
 
@@ -75,6 +76,8 @@ impl Plugin for ChatBoxPlugin {
                 append_incoming_chat,
                 chat_input_control,
                 crate::widgets::mount::ingest_mount_feedback,
+                crate::widgets::homunculus::show_result,
+                crate::widgets::homunculus::update_status,
             )
                 .run_if(in_state(GameState::InGame)),
         );
@@ -455,6 +458,7 @@ pub(crate) fn chat_input_control(
     mut chat_input: Query<(Entity, &mut EditableText), With<ChatInput>>,
     mut writers: ChatInputWriters,
     mut input_focus: ResMut<InputFocus>,
+    mut homunculus_request_id: Local<u64>,
 ) {
     let Ok((entity, mut field)) = chat_input.single_mut() else {
         return;
@@ -489,6 +493,19 @@ pub(crate) fn chat_input_control(
                 writers.navi.write(slash);
             } else if let Some(slash) = parse_guild_slash(message) {
                 writers.guild.write(slash);
+            } else if message.split_whitespace().next() == Some("/homun") {
+                match crate::widgets::homunculus::parse_command(message) {
+                    Some(command) => {
+                        *homunculus_request_id = homunculus_request_id.wrapping_add(1);
+                        writers.homunculus.write(HomunculusRequested {
+                            request_id: *homunculus_request_id,
+                            command,
+                        });
+                    }
+                    None => {
+                        writers.feedback.write(ChatHeard { gid: 0, message: "Usage: /homun inspect|feed|follow|standby|rest|rename <name>|move <x> <y>|attack <id>|learn <skill>|cast <skill> <level> <id|self>".into() });
+                    }
+                }
             } else if message.split_whitespace().next() == Some("/memo") {
                 if message == "/memo" {
                     writers.memo.write(MemoRequested);
@@ -586,6 +603,7 @@ mod tests {
         app.add_message::<GuildSlashSubmitted>();
         app.add_message::<EmoteRequested>();
         app.add_message::<MountPeco>();
+        app.add_message::<HomunculusRequested>();
         app.add_message::<crate::widgets::navigation::slash::NaviSlash>();
         app.add_systems(Update, chat_input_control);
         let chat = app
