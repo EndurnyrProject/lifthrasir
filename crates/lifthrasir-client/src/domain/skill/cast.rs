@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_auto_plugin::prelude::{auto_add_message, auto_add_system};
+use bevy_auto_plugin::prelude::{auto_add_message, auto_add_system, auto_init_resource};
 use net_contract::commands::{GroundSkillCastRequested, SkillCastRequested as SkillCastCommand};
 use net_contract::state::ZoneSession;
 
@@ -13,6 +16,46 @@ use crate::domain::skill::{Form, SkillCooldownTracker, SkillTreeState, Target, f
 #[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
 pub struct SkillCastRequested {
     pub skill_id: u32,
+}
+
+/// The level each skill is cast at when the player picked one below the learned level.
+/// Kept for the session only.
+#[derive(Resource, Default)]
+#[auto_init_resource(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
+pub struct SkillCastLevels {
+    chosen: HashMap<u32, u32>,
+}
+
+impl SkillCastLevels {
+    /// The level `skill_id` casts at: the chosen one within `1..=learned`, else `learned`.
+    pub fn level(&self, skill_id: u32, learned: u32) -> u32 {
+        self.chosen
+            .get(&skill_id)
+            .map_or(learned, |&level| level.clamp(1, learned.max(1)))
+    }
+
+    /// Cast `skill_id` at `level`. Picking the learned level forgets the choice, so the
+    /// cast level follows the skill as it is raised.
+    pub fn set(&mut self, skill_id: u32, level: u32, learned: u32) {
+        if level >= learned {
+            self.chosen.remove(&skill_id);
+            return;
+        }
+        self.chosen.insert(skill_id, level.max(1));
+    }
+
+    pub fn clear(&mut self) {
+        self.chosen.clear();
+    }
+}
+
+/// What a cast request is checked against: the learned skills, their cooldowns and the
+/// levels they are cast at.
+#[derive(SystemParam)]
+pub struct SkillBook<'w> {
+    tree: Res<'w, SkillTreeState>,
+    cooldowns: Res<'w, SkillCooldownTracker>,
+    cast_levels: Res<'w, SkillCastLevels>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -76,14 +119,13 @@ pub fn resolve_skill_cast(
     mut resolved: MessageWriter<SkillCastResolved>,
     mut chat: MessageWriter<ChatHeard>,
     mut targeting: ResMut<TargetingMode>,
-    tree: Res<SkillTreeState>,
-    cooldowns: Res<SkillCooldownTracker>,
+    book: SkillBook,
     session: Res<ZoneSession>,
 ) {
     for request in requests.read() {
         let skill_id = request.skill_id;
 
-        let Some(node) = tree.skills.get(&skill_id) else {
+        let Some(node) = book.tree.skills.get(&skill_id) else {
             reject(&mut chat, "You haven't learned that skill");
             continue;
         };
@@ -98,12 +140,12 @@ pub fn resolve_skill_cast(
             continue;
         }
 
-        if cooldowns.is_on_cooldown(skill_id) {
+        if book.cooldowns.is_on_cooldown(skill_id) {
             reject(&mut chat, "Skill not ready");
             continue;
         }
 
-        let level = node.level;
+        let level = book.cast_levels.level(skill_id, node.level);
         match target(node.inf_type) {
             Target::SelfTarget | Target::None => {
                 resolved.write(SkillCastResolved {
@@ -156,6 +198,7 @@ mod tests {
             .init_resource::<crate::domain::vending::VendingState>()
             .init_resource::<SkillTreeState>()
             .init_resource::<SkillCooldownTracker>()
+            .init_resource::<SkillCastLevels>()
             .init_resource::<TargetingMode>()
             .insert_resource(ZoneSession {
                 char_id: OWN_GID,
@@ -215,6 +258,25 @@ mod tests {
         assert_eq!(gid, OWN_GID);
         assert_eq!(mode(&app), TargetingMode::Idle);
         assert!(chats(&app).is_empty());
+    }
+
+    #[test]
+    fn chosen_cast_level_is_used_and_never_exceeds_the_learned_level() {
+        let mut app = resolve_app();
+        seed(&mut app, node(5, 4));
+        app.world_mut()
+            .resource_mut::<SkillCastLevels>()
+            .set(SKILL_ID, 2, 5);
+        request(&mut app);
+        assert_eq!(resolved_msgs(&app)[0].level, 2);
+
+        seed(&mut app, node(1, 4));
+        request(&mut app);
+        assert_eq!(resolved_msgs(&app)[0].level, 1);
+
+        let mut levels = SkillCastLevels::default();
+        levels.set(SKILL_ID, 5, 5);
+        assert_eq!(levels.level(SKILL_ID, 6), 6);
     }
 
     #[test]

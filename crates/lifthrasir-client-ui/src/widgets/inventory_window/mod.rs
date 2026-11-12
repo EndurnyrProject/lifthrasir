@@ -27,13 +27,13 @@ use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 use lifthrasir_client::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
 use lifthrasir_ui::theme::ro_dark;
 
-use crate::screens::shared::thousands;
+use crate::screens::shared::{Ring, thousands};
 use crate::widgets::hotbar::HotbarDrag;
 use crate::widgets::info_modal::shell::EdgeGrade;
 use crate::widgets::info_modal::view::{decorated_name, inventory_item_view, item_edge_grade};
 use crate::widgets::info_modal::{InfoContent, ItemAction, ItemActionKind, ShowInfoModal};
 use crate::widgets::inventory_window::scene::{
-    BodyView, CellView, FooterView, Ring, SelectionView, TabView,
+    BodyView, CellView, FooterView, SelectionView, TabView,
 };
 
 pub mod scene;

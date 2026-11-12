@@ -1,15 +1,15 @@
 //! Shared modal vellum descriptions and skill-specific prose cleanup.
 //! Item stat lines stay authored; neither renderer changes dark chat text.
 
-use bevy::color::{Luminance, Mix};
+use bevy::color::Luminance;
 use bevy::prelude::*;
 
 use lifthrasir_ui::rich_text::parse_color_codes;
-use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::ignore_picking;
 
-use super::shell::{self, PARCHMENT as VELLUM};
+use super::shell::PARCHMENT as VELLUM;
 use super::view::ColoredLine;
+use crate::screens::shared::colored_lines;
 
 const INK: Color = Color::srgb_u8(0x30, 0x2b, 0x23);
 
@@ -34,7 +34,7 @@ pub(super) fn scene(lines: Vec<ColoredLine>) -> impl Scene {
         BackgroundColor(VELLUM)
         BorderColor::all(lifthrasir_ui::theme::STROKE)
         @ignore_picking()
-        Children [ @shell::description_section(lines) ]
+        Children [ @colored_lines(lines) ]
     }
 }
 
@@ -53,27 +53,9 @@ fn vellum_ink(color: Color) -> Color {
     linear.with_luminance(max_luminance).into()
 }
 
-/// The counterpart of [`vellum_ink`] for text on the RO-dark window body: RO colour
-/// codes were authored for a white window, so dark hues are mixed towards white until
-/// they reach 4.5:1 contrast.
-pub(super) fn slate_ink(color: Color) -> Color {
-    if color == lifthrasir_ui::theme::TEXT_DIM {
-        return ro_dark::BODY;
-    }
-    let body = ro_dark::WINDOW_BODY.to_linear().luminance();
-    let min_luminance = (body + 0.05) * 4.6 - 0.05;
-    let linear = color.to_linear();
-    let luminance = linear.luminance();
-    if luminance >= min_luminance {
-        return color;
-    }
-    let lift = (min_luminance - luminance) / (1.0 - luminance);
-    linear.mix(&LinearRgba::WHITE, lift).into()
-}
-
 /// Drops redundant headings and joins the catalog's hard-wrapped description prose.
 /// Requirement metadata and per-level rows keep their authored boundaries.
-pub(super) fn parse(lines: &[String], name: &str) -> Vec<ColoredLine> {
+pub(crate) fn parse(lines: &[String], name: &str) -> Vec<ColoredLine> {
     let mut rows: Vec<ColoredLine> = Vec::new();
     let mut in_description = false;
     for line in lines {
@@ -144,24 +126,6 @@ mod tests {
         for color in colors {
             let contrast = (background + 0.05) / (color.to_linear().luminance() + 0.05);
             assert!(contrast >= 4.5, "{color:?}: contrast {contrast}");
-        }
-    }
-
-    #[test]
-    fn slate_ink_lifts_dark_hues_and_keeps_bright_ones() {
-        let body = ro_dark::WINDOW_BODY.to_linear().luminance();
-        let bright = Color::srgb_u8(0xff, 0xff, 0x00);
-        assert_eq!(slate_ink(bright), bright);
-        assert_eq!(slate_ink(lifthrasir_ui::theme::TEXT_DIM), ro_dark::BODY);
-        for dark in [
-            Color::srgb_u8(0x00, 0x00, 0x88),
-            Color::srgb_u8(0xcc, 0x00, 0x00),
-            Color::srgb_u8(0x77, 0x77, 0x77),
-            Color::BLACK,
-        ] {
-            let ink = slate_ink(dark).to_linear().luminance();
-            let contrast = (ink + 0.05) / (body + 0.05);
-            assert!(contrast >= 4.5, "{dark:?}: contrast {contrast}");
         }
     }
 

@@ -1,915 +1,721 @@
+//! The job tabs and the tree canvas of the Skills window. [`body`] is respawned when
+//! the open job, the filter or the tree's shape changes; the `paint_*` systems keep
+//! levels, rings, lines and steppers current on the spawned nodes from
+//! [`SkillLooks`]. Sizes follow the `Skills` artboard of the Lifthrasir Widgets design.
+
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
-use lifthrasir_assets::catalogs::skill::registry::SkillCatalog;
-use lifthrasir_client::domain::skill::SkillTreeState;
-
+use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{inset, round_button, segment, tab, tab_text};
 
-use crate::widgets::skills_window::layout::{JobBand, Segment, TreeLayout};
+use crate::screens::shared::{Ring, glow, shown_if, slot_frame};
+use crate::widgets::skills_window::layout::{Link, Placement};
+use crate::widgets::skills_window::looks::{Dim, Edge, Look, SkillLooks};
 use crate::widgets::skills_window::{
-    SkillGateSnapshot, SkillPanelBank, SkillPanelCell, SkillPanelCommitButton, SkillPanelStaging,
-    SkillPanelStepper, SkillPanelUi, cell_icon_color, format_level, on_apply, on_cell_click,
-    on_cell_drag_start, on_reset, on_stepper, skill_name,
+    SkillFilter, SkillFilterButton, SkillJobTab, SkillPanelCell, SkillPanelStepper, on_cell_click,
+    on_cell_drag_start, on_stepper, pick_filter, pick_job,
 };
 
-const PANE_HEIGHT: f32 = 300.0;
+const CANVAS_HEIGHT: f32 = 492.0;
+/// Height the filter row keeps clear above the scrolling tree.
+const TOOLBAR_HEIGHT: f32 = 44.0;
+const PAD_X: f32 = 22.0;
+const PAD_Y: f32 = 8.0;
+const PITCH_X: f32 = 100.0;
+const PITCH_Y: f32 = 112.0;
+const NODE: f32 = 92.0;
+const SLOT: f32 = 50.0;
+const SLOT_LEFT: f32 = (NODE - SLOT) / 2.0;
+const ICON: f32 = 36.0;
+const DASH: f32 = 3.0;
 
+/// The tree's scroll viewport.
 #[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillJobBand;
-
-#[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillJobPointText(pub u32);
+pub(super) struct SkillCanvasViewport;
 
 #[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillNodeFrame(pub u32);
 
 #[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillNodeName(pub u32);
+pub(super) struct SkillNodeIcon(pub u32);
 
 #[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillNodeLevel(pub u32);
 
 #[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillNodeName(pub u32);
+
+/// The wash over a skill that is out of focus.
+#[derive(Component, Clone, Copy, Default)]
 pub(super) struct SkillNodeDimmer(pub u32);
 
+/// One level of a skill's level meter, counted from 0.
 #[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillNodeControls(pub u32);
-
-#[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillPanelStagedCount;
-
-#[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillStepperGlyph {
-    skill_id: u32,
-    raise: bool,
+pub(super) struct SkillPip {
+    pub skill_id: u32,
+    pub index: u32,
 }
 
-#[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillCanvasFrame;
-
-#[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillCanvasViewport;
-
-#[derive(Component, Clone, Copy, Default)]
-pub(super) struct SkillEmptyMessage;
-
-#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct SkillConnector {
+/// The solid stroke of one requirement line segment. It hides to show the dashes
+/// under it while the requirement is unmet.
+#[derive(Component, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(super) struct SkillLine {
     pub source: u32,
     pub target: u32,
     pub minimum_level: u32,
-    pub backlink: bool,
-    pub segment: u8,
-    pub dash: u16,
-    pub horizontal: bool,
 }
 
-struct CellView {
-    skill_id: u32,
-    bounds: super::layout::Bounds,
-    icon: Option<String>,
-    name: String,
+/// The mark of a job tab that holds planned levels.
+#[derive(Component, Clone, Copy, Default)]
+pub(super) struct SkillTabDot(pub u32);
+
+pub(super) struct TabView {
+    pub job_id: u32,
+    pub label: String,
+    pub active: bool,
 }
 
-struct ConnectorView {
-    marker: SkillConnector,
-    left: f32,
-    top: f32,
+pub(super) struct NodeView {
+    pub placement: Placement,
+    pub icon: Option<String>,
+    pub name: String,
+    pub max_level: u32,
+}
+
+/// Everything [`body`] draws. `scroll` is the offset the new tree starts at.
+pub(super) struct TreeView {
+    pub tabs: Vec<TabView>,
+    pub filter: SkillFilter,
+    pub nodes: Vec<NodeView>,
+    pub links: Vec<Link>,
+    pub rows: u32,
+    pub scroll: Vec2,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Bar {
+    x: f32,
+    y: f32,
     width: f32,
     height: f32,
-    color: Color,
 }
 
-pub(super) fn body(layout: TreeLayout, catalog: Option<&SkillCatalog>) -> impl Scene + use<> {
-    let cells = cell_views(&layout, catalog);
-    let connectors = connector_views(&layout);
-
+pub(super) fn body(view: TreeView) -> impl Scene {
+    let TreeView {
+        tabs,
+        filter,
+        nodes,
+        links,
+        rows,
+        scroll,
+    } = view;
+    let tabs: Vec<_> = tabs.into_iter().map(tab_button).collect();
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(10) }
+        Node { flex_direction: FlexDirection::Column }
         @ignore_picking()
-        Children [ @toolbar() -- @canvas(layout, cells, connectors) -- @footer() ]
+        Children [
+            Node { column_gap: px(4) }
+            @ignore_picking()
+            Children [ {tabs} ]
+            --
+            @canvas(filter, nodes, links, rows, scroll)
+        ]
     }
 }
 
-fn cell_views(layout: &TreeLayout, catalog: Option<&SkillCatalog>) -> Vec<CellView> {
-    layout
-        .nodes
+fn tab_button(view: TabView) -> impl Scene {
+    let (job_id, active) = (view.job_id, view.active);
+    let (label, _) = tab_text(active);
+    bsn! {
+        SkillJobTab(job_id)
+        @tab(active)
+        Node { overflow: {Overflow::clip()} }
+        on(pick_job)
+        Children [
+            @chrome_text(view.label, 13.0, label)
+            TextLayout { linebreak: LineBreak::NoWrap }
+            --
+            SkillTabDot(job_id)
+            Node {
+                width: px(6),
+                height: px(6),
+                flex_shrink: 0.0,
+                border_radius: BorderRadius::MAX,
+                display: Display::None,
+            }
+            BackgroundColor(ro_dark::FROST_GLOW)
+            @ignore_picking()
+        ]
+    }
+}
+
+/// The panel under the tabs: the filter row pinned over a vertically scrolling tree.
+fn canvas(
+    filter: SkillFilter,
+    nodes: Vec<NodeView>,
+    links: Vec<Link>,
+    rows: u32,
+    scroll: Vec2,
+) -> impl Scene {
+    let cells: HashMap<u32, (f32, f32)> = nodes
         .iter()
-        .map(|placement| CellView {
-            skill_id: placement.skill_id,
-            bounds: placement.bounds,
-            icon: catalog.and_then(|catalog| catalog.icon_path(placement.skill_id)),
-            name: skill_name(placement.skill_id, catalog),
+        .map(|node| (node.placement.skill_id, origin(node.placement)))
+        .collect();
+    let mut dashes = Vec::new();
+    let mut lines = Vec::new();
+    for link in links {
+        for bar in link_bars(cells[&link.source], cells[&link.target]) {
+            dashes.extend(dash_bars(bar).into_iter().map(dash));
+            lines.push(line(link, bar));
+        }
+    }
+    let empty = nodes.is_empty().then(|| EntityScene(empty_message()));
+    let nodes: Vec<_> = nodes.into_iter().map(skill_node).collect();
+    let height = PAD_Y + rows.saturating_sub(1) as f32 * PITCH_Y + NODE + PAD_Y;
+    bsn! {
+        @inset()
+        Node {
+            height: px(CANVAS_HEIGHT),
+            position_type: PositionType::Relative,
+            border_radius: {BorderRadius::all(px(6)).with_top_left(px(0))},
+        }
+        @ignore_picking()
+        Children [
+            #tree
+            SkillCanvasViewport
+            ScrollArea
+            ScrollPosition(scroll)
+            Pickable
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), top: px(TOOLBAR_HEIGHT), right: px(0), bottom: px(0),
+                overflow: {Overflow::scroll_y()},
+            }
+            Children [
+                Node {
+                    position_type: PositionType::Relative,
+                    width: percent(100),
+                    height: px(height),
+                    flex_shrink: 0.0,
+                }
+                @ignore_picking()
+                Children [ {dashes} -- {lines} -- {nodes} -- {empty} ]
+            ]
+            --
+            @FeathersScrollbar { @target: #tree, @orientation: {ControlOrientation::Vertical} }
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(6),
+                top: px(TOOLBAR_HEIGHT + 4.0),
+                bottom: px(8),
+                width: px(8),
+            }
+            --
+            @toolbar(filter)
+        ]
+    }
+}
+
+fn empty_message() -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0), right: px(0), top: px(160),
+            justify_content: JustifyContent::Center,
+        }
+        @ignore_picking()
+        Children [ @chrome_text("No skills.".into(), 13.0, ro_dark::MUTED) ]
+    }
+}
+
+/// The filter buttons and the line legend.
+fn toolbar(filter: SkillFilter) -> impl Scene {
+    let segments: Vec<_> = SkillFilter::ALL
+        .into_iter()
+        .map(|option| filter_button(option, option == filter))
+        .collect();
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(14), top: px(12), right: px(14),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+        }
+        @ignore_picking()
+        Children [
+            Node { column_gap: px(4) }
+            @ignore_picking()
+            Children [ {segments} ]
+            --
+            Node { column_gap: px(14) }
+            @ignore_picking()
+            Children [
+                @legend("Unlocked", bsn! { @swatch(14.0, ro_dark::DIVIDER) })
+                --
+                @legend("Locked", bsn! {
+                    Node { column_gap: px(DASH) }
+                    @ignore_picking()
+                    Children [
+                        @swatch(DASH, ro_dark::MUTED_BRONZE)
+                        --
+                        @swatch(DASH, ro_dark::MUTED_BRONZE)
+                        --
+                        @swatch(DASH, ro_dark::MUTED_BRONZE)
+                    ]
+                })
+                --
+                @legend("Path", bsn! { @swatch(14.0, ro_dark::FROST_GLOW) })
+            ]
+        ]
+    }
+}
+
+fn filter_button(filter: SkillFilter, active: bool) -> impl Scene {
+    let (label, _) = tab_text(active);
+    bsn! {
+        SkillFilterButton(filter)
+        @segment(active)
+        on(pick_filter)
+        Children [ @chrome_text(filter.label().into(), 12.0, label) ]
+    }
+}
+
+fn legend(label: &'static str, mark: impl Scene) -> impl Scene {
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(6) }
+        @ignore_picking()
+        Children [ @mark -- @chrome_text(label.into(), 11.0, ro_dark::MUTED) ]
+    }
+}
+
+fn swatch(width: f32, color: Color) -> impl Scene {
+    bsn! {
+        Node { width: px(width), height: px(2) }
+        BackgroundColor(color)
+        @ignore_picking()
+    }
+}
+
+/// Top-left corner of a skill's cell inside the tree.
+fn origin(placement: Placement) -> (f32, f32) {
+    (
+        PAD_X + placement.column as f32 * PITCH_X,
+        PAD_Y + placement.row as f32 * PITCH_Y,
+    )
+}
+
+/// The segments of the line from under the cell at `source` to the top of the one at
+/// `target`: straight down when they share a column, otherwise an elbow that turns
+/// 10px under the source.
+fn link_bars(source: (f32, f32), target: (f32, f32)) -> Vec<Bar> {
+    let (from_x, from_y) = (source.0 + NODE / 2.0, source.1 + NODE);
+    let (to_x, to_y) = (target.0 + NODE / 2.0, target.1);
+    if from_x == to_x {
+        return vec![Bar {
+            x: from_x - 1.0,
+            y: from_y - 2.0,
+            width: 2.0,
+            height: to_y - from_y + 2.0,
+        }];
+    }
+    let turn = from_y + 10.0;
+    vec![
+        Bar {
+            x: from_x - 1.0,
+            y: from_y - 2.0,
+            width: 2.0,
+            height: turn - from_y + 3.0,
+        },
+        Bar {
+            x: from_x.min(to_x) - 1.0,
+            y: turn - 1.0,
+            width: (to_x - from_x).abs() + 2.0,
+            height: 2.0,
+        },
+        Bar {
+            x: to_x - 1.0,
+            y: turn,
+            width: 2.0,
+            height: to_y - turn,
+        },
+    ]
+}
+
+/// `bar` cut along its long side into [`DASH`]-long pieces with gaps of the same size.
+fn dash_bars(bar: Bar) -> Vec<Bar> {
+    let horizontal = bar.width > bar.height;
+    let length = if horizontal { bar.width } else { bar.height };
+    let count = (length / (2.0 * DASH)).ceil() as u32;
+    (0..count)
+        .map(|index| {
+            let at = index as f32 * 2.0 * DASH;
+            let piece = DASH.min(length - at);
+            if horizontal {
+                Bar {
+                    x: bar.x + at,
+                    width: piece,
+                    ..bar
+                }
+            } else {
+                Bar {
+                    y: bar.y + at,
+                    height: piece,
+                    ..bar
+                }
+            }
         })
         .collect()
 }
 
-fn connector_views(layout: &TreeLayout) -> Vec<ConnectorView> {
-    let mut views = Vec::new();
-    for connector in &layout.connectors {
-        let thickness = 1.0;
-        let color = if connector.backlink {
-            lifthrasir_ui::theme::TEXT_FAINT.with_alpha(0.38)
-        } else {
-            lifthrasir_ui::theme::GOLD_FAINT
-        };
-        for (segment, geometry) in connector.segments.iter().enumerate() {
-            for (dash, (left, top, width, height)) in
-                line_pieces(*geometry, thickness, connector.backlink)
-                    .into_iter()
-                    .enumerate()
-            {
-                views.push(ConnectorView {
-                    marker: SkillConnector {
-                        source: connector.source,
-                        target: connector.target,
-                        minimum_level: connector.minimum_level,
-                        backlink: connector.backlink,
-                        segment: segment as u8,
-                        dash: dash as u16,
-                        horizontal: geometry.start.y == geometry.end.y,
-                    },
-                    left,
-                    top,
-                    width,
-                    height,
-                    color,
-                });
-            }
-        }
-    }
-    views
-}
-
-fn line_pieces(segment: Segment, thickness: f32, dashed: bool) -> Vec<(f32, f32, f32, f32)> {
-    if !dashed {
-        return vec![line_bounds(segment, thickness)];
-    }
-    const DASH: f32 = 6.0;
-    const GAP: f32 = 4.0;
-    let horizontal =
-        (segment.start.x - segment.end.x).abs() >= (segment.start.y - segment.end.y).abs();
-    let length = if horizontal {
-        (segment.start.x - segment.end.x).abs()
-    } else {
-        (segment.start.y - segment.end.y).abs()
-    };
-    if length == 0.0 {
-        return vec![line_bounds(segment, thickness)];
-    }
-    let mut pieces = Vec::new();
-    let mut offset = 0.0;
-    while offset < length {
-        let dash = DASH.min(length - offset);
-        if horizontal {
-            pieces.push((
-                segment.start.x.min(segment.end.x) + offset,
-                segment.start.y - thickness / 2.0,
-                dash,
-                thickness,
-            ));
-        } else {
-            pieces.push((
-                segment.start.x - thickness / 2.0,
-                segment.start.y.min(segment.end.y) + offset,
-                thickness,
-                dash,
-            ));
-        }
-        offset += DASH + GAP;
-    }
-    let last = pieces.last_mut().expect("a positive line has a dash");
-    if horizontal {
-        last.2 = segment.start.x.max(segment.end.x) - last.0;
-    } else {
-        last.3 = segment.start.y.max(segment.end.y) - last.1;
-    }
-    pieces
-}
-
-fn line_bounds(segment: Segment, thickness: f32) -> (f32, f32, f32, f32) {
-    let left = segment.start.x.min(segment.end.x);
-    let top = segment.start.y.min(segment.end.y);
-    let width = (segment.start.x - segment.end.x).abs();
-    let height = (segment.start.y - segment.end.y).abs();
-    if width >= height {
-        (left, top - thickness / 2.0, width.max(thickness), thickness)
-    } else {
-        (
-            left - thickness / 2.0,
-            top,
-            thickness,
-            height.max(thickness),
-        )
-    }
-}
-
-fn toolbar() -> impl Scene {
+fn bar_node(bar: Bar) -> impl Scene {
     bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            height: px(34),
-            column_gap: px(10),
-        }
-        @ignore_picking()
-        Children [
-            @chrome_text("Requirements flow  →  left to right".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) --
-            Node {
-                margin: {UiRect::left(auto())},
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                column_gap: px(8),
-                padding: {UiRect::axes(px(10), px(5))},
-                border: px(1),
-                border_radius: BorderRadius::all(px(8)),
-            }
-            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
-            BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-            @ignore_picking()
-            Children [
-                @chrome_text("Skill Points".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT) --
-                @bank_text()
-            ]
-            --
-            @reset_button()
-        ]
-    }
-}
-
-fn canvas(layout: TreeLayout, cells: Vec<CellView>, connectors: Vec<ConnectorView>) -> impl Scene {
-    let empty = layout.nodes.is_empty();
-    let bands: Vec<_> = layout.bands.iter().map(job_band).collect();
-    let connectors: Vec<_> = connectors.into_iter().map(connector_segment).collect();
-    let nodes: Vec<_> = cells.into_iter().map(skill_cell).collect();
-    let empty_message = empty.then(|| EntityScene(empty_content()));
-    let content_width = if empty {
-        percent(100)
-    } else {
-        px(layout.width)
-    };
-    let content_height = if empty {
-        percent(100)
-    } else {
-        px(layout.height)
-    };
-    let content = tree_content(
-        content_width,
-        content_height,
-        bands,
-        connectors,
-        nodes,
-        empty_message,
-    );
-
-    bsn! {
-        SkillCanvasFrame
-        Node {
-            height: px(PANE_HEIGHT),
-            position_type: PositionType::Relative,
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.18)})
-        BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        @ignore_picking()
-        Children [
-            #canvas
-            SkillCanvasViewport
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(0), top: px(0),
-                width: percent(100), height: px(PANE_HEIGHT),
-                overflow: {Overflow::scroll()},
-                padding: {UiRect { left: Val::Px(7.0), right: Val::Px(15.0), top: Val::Px(7.0), bottom: Val::Px(15.0) }},
-            }
-            ScrollArea
-            Pickable
-            Children [ @content ]
-            --
-            @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Vertical} }
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(3), top: px(4), bottom: px(12), width: px(6),
-            }
-            --
-            @FeathersScrollbar { @target: #canvas, @orientation: {ControlOrientation::Horizontal} }
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(4), right: px(12), bottom: px(3), height: px(6),
-            }
-        ]
-    }
-}
-
-fn tree_content(
-    width: Val,
-    height: Val,
-    bands: Vec<impl Scene>,
-    connectors: Vec<impl Scene>,
-    nodes: Vec<impl Scene>,
-    empty_message: Option<EntityScene<impl Scene>>,
-) -> impl Scene {
-    bsn! {
-        Node {
-            position_type: PositionType::Relative,
-            width: {width},
-            height: {height},
-            flex_shrink: 0.0,
-        }
-        @ignore_picking()
-        Children [ {bands} -- {connectors} -- {nodes} -- {empty_message} ]
-    }
-}
-
-fn connector_segment(view: ConnectorView) -> impl Scene {
-    bsn! {
-        view.marker
         Node {
             position_type: PositionType::Absolute,
-            left: {Val::Px(view.left)},
-            top: {Val::Px(view.top)},
-            width: {Val::Px(view.width)},
-            height: {Val::Px(view.height)},
+            left: px(bar.x),
+            top: px(bar.y),
+            width: px(bar.width),
+            height: px(bar.height),
         }
-        BackgroundColor({view.color})
-        ZIndex(1)
         @ignore_picking()
     }
 }
 
-fn empty_content() -> impl Scene {
+fn dash(bar: Bar) -> impl Scene {
     bsn! {
-        SkillEmptyMessage
-        Text("No skills.")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        Node { margin: {UiRect::all(auto())} }
-        @ignore_picking()
+        @bar_node(bar)
+        BackgroundColor(ro_dark::MUTED_BRONZE)
     }
 }
 
-fn job_band(band: &JobBand) -> impl Scene + use<> {
-    let label = band
-        .label
-        .clone()
-        .unwrap_or_else(|| format!("Job #{}", band.job_id));
+fn line(link: Link, bar: Bar) -> impl Scene {
+    let marker = SkillLine {
+        source: link.source,
+        target: link.target,
+        minimum_level: link.minimum_level,
+    };
+    let halo = glow(Color::NONE);
     bsn! {
-        SkillJobBand
+        marker
+        @bar_node(bar)
+        BackgroundColor(ro_dark::DIVIDER)
+        halo
+        Visibility::Hidden
+    }
+}
+
+/// One skill of the tree: its slot with the icon and level, the plan steppers on the
+/// slot's top corners, the level meter and the name.
+fn skill_node(view: NodeView) -> impl Scene {
+    let skill_id = view.placement.skill_id;
+    let (left, top) = origin(view.placement);
+    let icon = view
+        .icon
+        .map(|path| EntityScene(skill_icon(skill_id, path)));
+    let pips: Vec<_> = (0..view.max_level)
+        .map(|index| pip(skill_id, index))
+        .collect();
+    bsn! {
+        SkillPanelCell(skill_id)
         Node {
             position_type: PositionType::Absolute,
-            left: {Val::Px(band.x)},
-            top: px(0),
-            width: {Val::Px(band.width)},
-            height: {Val::Px(band.height)},
-            padding: {UiRect::all(px(7))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(10)),
+            left: px(left),
+            top: px(top),
+            width: px(NODE),
+            height: px(NODE),
         }
-        BackgroundColor({Color::srgba(1.0, 1.0, 1.0, 0.014)})
-        BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.05))
-        ZIndex(0)
-        @ignore_picking()
-        Children [
-            Node {
-                width: percent(100),
-                height: px(25),
-                align_items: AlignItems::Center,
-                padding: {UiRect::horizontal(px(5))},
-                border_radius: BorderRadius::all(px(7)),
-            }
-            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.3)})
-            @ignore_picking()
-            Children [
-                @chrome_text(label, 10.5, lifthrasir_ui::theme::TEXT_DIM) --
-                @job_point_text(band.job_id)
-            ]
-        ]
-    }
-}
-
-fn skill_cell(view: CellView) -> impl Scene {
-    let icon = view.icon.map(|path| EntityScene(skill_icon(path)));
-    bsn! {
-        SkillPanelCell({view.skill_id})
-        Node {
-            position_type: PositionType::Absolute,
-            left: {Val::Px(view.bounds.x)},
-            top: {Val::Px(view.bounds.y)},
-            width: {Val::Px(view.bounds.width)},
-            height: {Val::Px(view.bounds.height)},
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            row_gap: px(4),
-            padding: {UiRect::vertical(px(3))},
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor(Color::NONE)
-        ZIndex(2)
         Pickable
         on(on_cell_click)
         on(on_cell_drag_start)
         Children [
-            SkillNodeFrame({view.skill_id})
-            Node {
-                position_type: PositionType::Relative,
-                width: px(44), height: px(44),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: px(1),
-                border_radius: BorderRadius::all(px(10)),
-            }
-            BackgroundColor(lifthrasir_ui::theme::FIELD)
-            BorderColor::all(lifthrasir_ui::theme::STROKE)
-            Outline { width: px(0), offset: px(2), color: Color::NONE }
+            SkillNodeFrame(skill_id)
+            @slot_frame(SLOT, Ring::None)
+            Node { position_type: PositionType::Absolute, left: px(SLOT_LEFT), top: px(0) }
             @ignore_picking()
-            Children [ {icon} ]
+            Children [
+                {icon}
+                --
+                SkillNodeLevel(skill_id)
+                @chrome_text(String::new(), 10.0, ro_dark::VALUE)
+                TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
+                Node { position_type: PositionType::Absolute, right: px(3), bottom: px(2) }
+            ]
             --
-            @skill_name_text(view.skill_id, view.name) --
-            @stepper_row(view.skill_id) --
-            @dimmer(view.skill_id)
+            @stepper(skill_id, false)
+            --
+            @stepper(skill_id, true)
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(SLOT_LEFT),
+                top: px(SLOT + 4.0),
+                width: px(SLOT),
+                height: px(4),
+                column_gap: px(1),
+            }
+            @ignore_picking()
+            Children [ {pips} ]
+            --
+            SkillNodeName(skill_id)
+            @chrome_text(view.name, 11.0, ro_dark::LABEL)
+            TextLayout { justify: Justify::Center }
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                right: px(0),
+                top: px(SLOT + 12.0),
+                max_height: px(28),
+                overflow: {Overflow::clip()},
+            }
+            --
+            SkillNodeDimmer(skill_id)
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0), top: px(0), right: px(0), bottom: px(0),
+            }
+            BackgroundColor(Color::NONE)
+            Visibility::Hidden
+            @ignore_picking()
         ]
     }
 }
 
-fn skill_icon(path: String) -> impl Scene {
+fn skill_icon(skill_id: u32, path: String) -> impl Scene {
     bsn! {
+        SkillNodeIcon(skill_id)
         ImageNode { image: {path} }
-        Node { width: px(30), height: px(30) }
+        Node { width: px(ICON), height: px(ICON) }
         @ignore_picking()
     }
 }
 
-fn stepper_row(skill_id: u32) -> impl Scene {
+fn pip(skill_id: u32, index: u32) -> impl Scene {
     bsn! {
-        SkillNodeControls(skill_id)
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(3),
-        }
-        Visibility::Hidden
+        SkillPip { skill_id, index }
+        Node { flex_grow: 1.0, flex_basis: px(0), height: px(4), border: px(1) }
+        BackgroundColor(ro_dark::BAR_TROUGH)
+        BorderColor::all(ro_dark::INSET_RULE)
         @ignore_picking()
-        Children [
-            @stepper(skill_id, false, false) --
-            @skill_level_text(skill_id) --
-            @stepper(skill_id, true, false)
-        ]
     }
 }
 
-pub(super) fn stepper(skill_id: u32, raise: bool, enabled: bool) -> impl Scene {
-    let glyph = if raise { "+" } else { "−" };
-    let background = if enabled {
-        lifthrasir_ui::theme::EMERALD
+/// A round plan button on a slot corner. It shows only while its step is allowed.
+fn stepper(skill_id: u32, raise: bool) -> impl Scene {
+    let (icon, left) = if raise {
+        ("plus", SLOT_LEFT + SLOT - 9.0)
     } else {
-        lifthrasir_ui::theme::FIELD
-    };
-    let pickable = if enabled {
-        Pickable::default()
-    } else {
-        Pickable::IGNORE
+        ("minus", SLOT_LEFT - 9.0)
     };
     bsn! {
         SkillPanelStepper { skill_id, raise }
-        Node {
-            width: px(14), height: px(14),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::MAX,
-        }
-        BackgroundColor(background)
-        pickable
-        on(on_stepper)
-        Children [ @stepper_glyph(skill_id, raise, glyph.to_string(), enabled) ]
-    }
-}
-
-fn skill_name_text(skill_id: u32, name: String) -> impl Scene {
-    bsn! {
-        SkillNodeName(skill_id)
-        Text({name})
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(8.5)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        @ignore_picking()
-    }
-}
-
-fn skill_level_text(skill_id: u32) -> impl Scene {
-    bsn! {
-        SkillNodeLevel(skill_id)
-        Text("0/0")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(9.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        @ignore_picking()
-    }
-}
-
-fn stepper_glyph(skill_id: u32, raise: bool, glyph: String, enabled: bool) -> impl Scene {
-    bsn! {
-        SkillStepperGlyph { skill_id, raise }
-        Text({glyph})
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(10.0)},
-        }
-        TextColor({if enabled { lifthrasir_ui::theme::EMERALD_INK } else { lifthrasir_ui::theme::TEXT_FAINT }})
-        @ignore_picking()
-    }
-}
-
-fn dimmer(skill_id: u32) -> impl Scene {
-    bsn! {
-        SkillNodeDimmer(skill_id)
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(0), right: px(0), top: px(0), bottom: px(0),
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.5)})
+        @round_button(icon, raise)
+        Node { position_type: PositionType::Absolute, left: px(left), top: px(-7) }
         Visibility::Hidden
-        Pickable::IGNORE
-        ZIndex(3)
+        on(on_stepper)
     }
 }
 
-fn job_point_text(job_id: u32) -> impl Scene {
-    bsn! {
-        SkillJobPointText(job_id)
-        Text("0 points")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(9.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        Node { margin: {UiRect::left(auto())} }
-        @ignore_picking()
-    }
+/// Fill, stroke, stroke width and halo of a slot.
+fn frame_style(look: &Look) -> (Color, Color, f32, BoxShadow) {
+    let fill = match (look.locked, look.edge) {
+        (true, _) => ro_dark::SLOT_DISABLED,
+        (false, Edge::Hover) => ro_dark::SLOT_HOVER,
+        (false, _) => ro_dark::SLOT,
+    };
+    let none = glow(Color::NONE);
+    let (stroke, width, halo) = match look.edge {
+        Edge::Selected => Ring::Selected.style(),
+        Edge::Chain => (ro_dark::FROST_GLOW, 1.0, none),
+        Edge::Max => (ro_dark::BRONZE_LIGHT, 1.0, none),
+        Edge::Hover => (ro_dark::BUTTON_STROKE, 1.0, none),
+        Edge::Rest if look.locked => (ro_dark::INSET_RULE, 1.0, none),
+        Edge::Rest => (ro_dark::SLOT_STROKE, 1.0, none),
+    };
+    (fill, stroke, width, halo)
 }
 
-fn staged_count_text() -> impl Scene {
-    bsn! {
-        SkillPanelStagedCount
-        Text("0 changes staged")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(10.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        @ignore_picking()
-    }
+/// The slot's level badge: `MAX` once mastered with nothing planned, else `3/10`.
+pub(super) fn level_badge(look: &Look) -> (String, Color) {
+    let (total, maxed) = (look.total(), look.total() >= look.max);
+    let text = if maxed && look.staged == 0 {
+        "MAX".to_string()
+    } else {
+        format!("{total}/{}", look.max)
+    };
+    let color = if look.staged > 0 {
+        ro_dark::FROST_GLOW
+    } else if maxed {
+        ro_dark::BRONZE_LIGHT
+    } else if look.locked {
+        ro_dark::FAINT
+    } else {
+        ro_dark::VALUE
+    };
+    (text, color)
 }
 
-fn footer() -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            height: px(38),
-            padding: {UiRect::horizontal(px(12))},
-            column_gap: px(9),
-            border: {UiRect { top: Val::Px(1.0), ..default() }},
-        }
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        @ignore_picking()
-        Children [
-            @staged_count_text() --
-            Node {
-                margin: {UiRect::left(auto())},
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::FlexEnd,
-            }
-            @ignore_picking()
-            Children [ @apply_button() ]
-        ]
-    }
-}
-
-fn bank_text() -> impl Scene {
-    bsn! {
-        SkillPanelBank
-        Text("0")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(16.0)},
-        }
-        TextColor(lifthrasir_ui::theme::GOLD)
-        @ignore_picking()
-    }
-}
-
-fn reset_button() -> impl Scene {
-    bsn! {
-        SkillPanelCommitButton { apply: false }
-        Node {
-            height: px(28),
-            padding: {UiRect::horizontal(px(13))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor({lifthrasir_ui::theme::FIELD.with_alpha(0.3)})
-        Pickable::IGNORE
-        on(on_reset)
-        Children [ @chrome_text("Reset Plan".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) ]
-    }
-}
-
-fn apply_button() -> impl Scene {
-    bsn! {
-        SkillPanelCommitButton { apply: true }
-        Node {
-            height: px(28),
-            padding: {UiRect::horizontal(px(16))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor({lifthrasir_ui::theme::EMERALD.with_alpha(0.3)})
-        Pickable::IGNORE
-        on(on_apply)
-        Children [ @chrome_text("Apply".to_string(), 11.5, lifthrasir_ui::theme::EMERALD_INK) ]
-    }
-}
-
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub(super) fn project_live(
-    tree: Res<SkillTreeState>,
-    ui: Res<SkillPanelUi>,
-    staging: Res<SkillPanelStaging>,
-    gates: Res<SkillGateSnapshot>,
-    mut backgrounds: ParamSet<(
-        Query<(&SkillPanelCell, &mut BackgroundColor)>,
-        Query<(&SkillPanelStepper, &mut BackgroundColor, &mut Pickable)>,
-        Query<(&SkillConnector, &mut Node, &mut BackgroundColor)>,
-        Query<(&SkillPanelCommitButton, &mut BackgroundColor, &mut Pickable)>,
-    )>,
-    mut frames: Query<(&SkillNodeFrame, &mut BorderColor, &mut Outline)>,
-    mut focus_nodes: ParamSet<(
-        Query<(&SkillNodeDimmer, &mut Visibility)>,
-        Query<(&SkillNodeControls, &mut Visibility)>,
-    )>,
-    mut text_colors: ParamSet<(
-        Query<(&SkillNodeName, &mut TextColor)>,
-        Query<(&SkillStepperGlyph, &mut TextColor)>,
-    )>,
-    mut texts: ParamSet<(
-        Query<(&SkillNodeLevel, &mut Text)>,
-        Query<(&SkillJobPointText, &mut Text)>,
-        Query<&mut Text, With<SkillPanelBank>>,
-        Query<&mut Text, With<SkillPanelStagedCount>>,
+pub(super) fn paint_frames(
+    looks: Res<SkillLooks>,
+    mut frames: Query<(
+        &SkillNodeFrame,
+        &mut Node,
+        &mut BackgroundColor,
+        &mut BorderColor,
+        &mut BoxShadow,
     )>,
 ) {
-    let can_raise = |skill_id| {
-        gates.values.is_some_and(|gates| {
-            staging.can_raise_with_gates(
-                skill_id,
-                &tree,
-                gates.base_level,
-                gates.job_level,
-                gates.skill_point,
-            )
-        })
-    };
-    let focused = ui.hovered.or(ui.selected);
-    let focus = focused.and_then(|skill_id| super::layout::focus(&tree, skill_id));
-    let related_node = |skill_id| {
-        focus.as_ref().is_none_or(|focus| {
-            focus.focused == skill_id
-                || focus.prerequisite_nodes.contains(&skill_id)
-                || focus.unlock_nodes.contains(&skill_id)
-        })
-    };
-    let related_edge = |source, target| {
-        focus.as_ref().is_some_and(|focus| {
-            focus.prerequisite_edges.contains(&(source, target))
-                || focus.unlock_edges.contains(&(source, target))
-        })
-    };
-    for (cell, mut background) in &mut backgrounds.p0() {
-        let color = if ui.selected == Some(cell.0) {
-            lifthrasir_ui::theme::EMERALD_INK
-        } else {
-            Color::NONE
-        };
-        if background.0 != color {
-            background.0 = color;
-        }
-    }
-    for (marker, mut border, mut outline) in &mut frames {
-        let Some(node) = tree.skills.get(&marker.0) else {
+    for (frame, mut node, mut fill, mut stroke, mut halo) in &mut frames {
+        let Some(look) = looks.skills.get(&frame.0) else {
             continue;
         };
-        let level = staging.effective_level(marker.0, &tree);
-        let color = if node.max_level > 0 && level >= node.max_level {
-            lifthrasir_ui::theme::GOLD
-        } else if level > 0 {
-            lifthrasir_ui::theme::EMERALD
-        } else if can_raise(marker.0) {
-            lifthrasir_ui::theme::GOLD_FAINT
-        } else {
-            lifthrasir_ui::theme::STROKE
-        };
-        if border.top != color {
-            *border = BorderColor::all(color);
-        }
-        let (outline_width, outline_color) = if focused == Some(marker.0) {
-            (px(2), lifthrasir_ui::theme::EMERALD_BRI)
-        } else if focus.as_ref().is_some_and(|focus| {
-            focus.prerequisite_nodes.contains(&marker.0) || focus.unlock_nodes.contains(&marker.0)
-        }) {
-            (px(1), lifthrasir_ui::theme::GOLD)
-        } else {
-            (px(0), Color::NONE)
-        };
-        if outline.width != outline_width {
-            outline.width = outline_width;
-        }
-        if outline.color != outline_color {
-            outline.color = outline_color;
-        }
-    }
-    for (marker, mut visibility) in &mut focus_nodes.p0() {
-        let next = if related_node(marker.0) {
-            Visibility::Hidden
-        } else {
-            Visibility::Inherited
-        };
-        if *visibility != next {
-            *visibility = next;
-        }
-    }
-    for (marker, mut visibility) in &mut focus_nodes.p1() {
-        let next = if focused == Some(marker.0) {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        if *visibility != next {
-            *visibility = next;
-        }
-    }
-    for (marker, mut color) in &mut text_colors.p0() {
-        let Some(node) = tree.skills.get(&marker.0) else {
-            continue;
-        };
-        let level = staging.effective_level(marker.0, &tree);
-        let next = cell_icon_color(level > 0, node.max_level > 0 && level >= node.max_level);
-        if color.0 != next {
-            color.0 = next;
-        }
-    }
-    for (marker, mut text) in &mut texts.p0() {
-        let Some(node) = tree.skills.get(&marker.0) else {
-            continue;
-        };
-        let next = format_level(staging.effective_level(marker.0, &tree), node.max_level);
-        if text.0 != next {
-            text.0 = next;
-        }
-    }
-    for (stepper, mut background, mut pickable) in &mut backgrounds.p1() {
-        let enabled = if stepper.raise {
-            can_raise(stepper.skill_id)
-        } else {
-            staging.can_lower(stepper.skill_id, &tree)
-        };
-        let color = if enabled {
-            lifthrasir_ui::theme::EMERALD
-        } else {
-            lifthrasir_ui::theme::FIELD
-        };
-        if background.0 != color {
-            background.0 = color;
-        }
-        let next = if enabled {
-            Pickable::default()
-        } else {
-            Pickable::IGNORE
-        };
-        if *pickable != next {
-            *pickable = next;
-        }
-    }
-    for (glyph, mut color) in &mut text_colors.p1() {
-        let enabled = if glyph.raise {
-            can_raise(glyph.skill_id)
-        } else {
-            staging.can_lower(glyph.skill_id, &tree)
-        };
-        let next = if enabled {
-            lifthrasir_ui::theme::EMERALD_INK
-        } else {
-            lifthrasir_ui::theme::TEXT_FAINT
-        };
-        if color.0 != next {
-            color.0 = next;
-        }
-    }
-    for (connector, mut node, mut background) in &mut backgrounds.p2() {
-        let met = staging.effective_level(connector.source, &tree) >= connector.minimum_level;
-        if !connector.backlink {
-            let thickness = if met { 2.0 } else { 1.0 };
-            set_connector_thickness(&mut node, connector.horizontal, thickness);
-        }
-        let color = match (
-            focus.is_some(),
-            related_edge(connector.source, connector.target),
-        ) {
-            (true, true) if connector.backlink => lifthrasir_ui::theme::TEXT_FAINT.with_alpha(0.7),
-            (true, true) if met => lifthrasir_ui::theme::EMERALD.with_alpha(0.9),
-            (true, true) => lifthrasir_ui::theme::GOLD.with_alpha(0.85),
-            (true, false) if connector.backlink => {
-                lifthrasir_ui::theme::TEXT_FAINT.with_alpha(0.18)
-            }
-            (true, false) if met => lifthrasir_ui::theme::EMERALD.with_alpha(0.16),
-            (true, false) => lifthrasir_ui::theme::GOLD.with_alpha(0.14),
-            (false, _) if connector.backlink => lifthrasir_ui::theme::TEXT_FAINT.with_alpha(0.38),
-            (false, _) if met => lifthrasir_ui::theme::EMERALD.with_alpha(0.45),
-            (false, _) => lifthrasir_ui::theme::GOLD_FAINT,
-        };
-        if background.0 != color {
-            background.0 = color;
-        }
-    }
-    let mut totals = std::collections::HashMap::<u32, u32>::new();
-    for (&skill_id, node) in &tree.skills {
-        *totals.entry(node.job_id).or_default() += staging.effective_level(skill_id, &tree);
-    }
-    for (job, mut text) in &mut texts.p1() {
-        let next = format!("{} points", totals.get(&job.0).copied().unwrap_or(0));
-        if text.0 != next {
-            text.0 = next;
-        }
-    }
-    if let Ok(mut text) = texts.p2().single_mut() {
-        let next = gates
-            .values
-            .map(|gates| staging.points_left(gates.skill_point))
-            .unwrap_or(0)
-            .to_string();
-        if text.0 != next {
-            text.0 = next;
-        }
-    }
-    if let Ok(mut text) = texts.p3().single_mut() {
-        let spent = staging.spent();
-        let next = if spent == 1 {
-            "1 change staged".to_string()
-        } else {
-            format!("{spent} changes staged")
-        };
-        if text.0 != next {
-            text.0 = next;
-        }
-    }
-    let enabled = !staging.is_empty();
-    for (button, mut background, mut pickable) in &mut backgrounds.p3() {
-        let color = if button.apply {
-            lifthrasir_ui::theme::EMERALD.with_alpha(if enabled { 1.0 } else { 0.3 })
-        } else {
-            lifthrasir_ui::theme::FIELD.with_alpha(if enabled { 1.0 } else { 0.3 })
-        };
-        if background.0 != color {
-            background.0 = color;
-        }
-        let next = if enabled {
-            Pickable::default()
-        } else {
-            Pickable::IGNORE
-        };
-        if *pickable != next {
-            *pickable = next;
+        let (background, border, width, shadow) = frame_style(look);
+        fill.set_if_neq(BackgroundColor(background));
+        stroke.set_if_neq(BorderColor::all(border));
+        halo.set_if_neq(shadow);
+        let border = UiRect::all(px(width));
+        if node.border != border {
+            node.border = border;
         }
     }
 }
 
-fn set_connector_thickness(node: &mut Node, horizontal: bool, thickness: f32) {
-    let (position, size) = if horizontal {
-        (&mut node.top, &mut node.height)
-    } else {
-        (&mut node.left, &mut node.width)
-    };
-    let (Val::Px(old_position), Val::Px(old_thickness)) = (*position, *size) else {
-        panic!("skill connector geometry must use pixel values");
-    };
-    if old_thickness == thickness {
-        return;
+pub(super) fn paint_labels(
+    looks: Res<SkillLooks>,
+    mut icons: Query<(&SkillNodeIcon, &mut ImageNode)>,
+    mut levels: Query<(&SkillNodeLevel, &mut Text, &mut TextColor), Without<SkillNodeName>>,
+    mut names: Query<(&SkillNodeName, &mut TextColor), Without<SkillNodeLevel>>,
+) {
+    for (icon, mut image) in &mut icons {
+        let Some(look) = looks.skills.get(&icon.0) else {
+            continue;
+        };
+        let color = Color::WHITE.with_alpha(if look.locked { 0.5 } else { 1.0 });
+        if image.color != color {
+            image.color = color;
+        }
     }
-    *position = px(old_position + old_thickness / 2.0 - thickness / 2.0);
-    *size = px(thickness);
+    for (level, mut text, mut color) in &mut levels {
+        let Some(look) = looks.skills.get(&level.0) else {
+            continue;
+        };
+        let (badge, tone) = level_badge(look);
+        if text.0 != badge {
+            text.0 = badge;
+        }
+        color.set_if_neq(TextColor(tone));
+    }
+    for (name, mut color) in &mut names {
+        let Some(look) = looks.skills.get(&name.0) else {
+            continue;
+        };
+        let tone = match (look.locked, look.edge) {
+            (true, _) => ro_dark::FAINT,
+            (false, Edge::Selected) => ro_dark::STRONG,
+            (false, _) => ro_dark::LABEL,
+        };
+        color.set_if_neq(TextColor(tone));
+    }
+}
+
+/// Learned levels are bronze, planned ones frost and the rest empty.
+pub(super) fn paint_pips(
+    looks: Res<SkillLooks>,
+    mut pips: Query<(&SkillPip, &mut BackgroundColor, &mut BorderColor)>,
+) {
+    for (pip, mut fill, mut stroke) in &mut pips {
+        let Some(look) = looks.skills.get(&pip.skill_id) else {
+            continue;
+        };
+        let (background, border) = if pip.index < look.level {
+            (ro_dark::BASE_EXP, ro_dark::BASE_EXP)
+        } else if pip.index < look.total() {
+            (ro_dark::FROST_GLOW, ro_dark::FROST_GLOW)
+        } else {
+            (ro_dark::BAR_TROUGH, ro_dark::INSET_RULE)
+        };
+        fill.set_if_neq(BackgroundColor(background));
+        stroke.set_if_neq(BorderColor::all(border));
+    }
+}
+
+pub(super) fn paint_overlays(
+    looks: Res<SkillLooks>,
+    mut steppers: Query<(&SkillPanelStepper, &mut Visibility), Without<SkillNodeDimmer>>,
+    mut dimmers: Query<(&SkillNodeDimmer, &mut Visibility, &mut BackgroundColor)>,
+) {
+    for (stepper, mut visibility) in &mut steppers {
+        let allowed = looks.skills.get(&stepper.skill_id).is_some_and(|look| {
+            if stepper.raise {
+                look.can_raise
+            } else {
+                look.can_lower
+            }
+        });
+        visibility.set_if_neq(shown_if(allowed));
+    }
+    for (dimmer, mut visibility, mut wash) in &mut dimmers {
+        let alpha = match looks.skills.get(&dimmer.0).map(|look| look.dim) {
+            Some(Dim::Faded) => 0.78,
+            Some(Dim::Unrelated) => 0.55,
+            Some(Dim::None) | None => 0.0,
+        };
+        visibility.set_if_neq(shown_if(alpha > 0.0));
+        wash.set_if_neq(BackgroundColor(ro_dark::INSET.with_alpha(alpha)));
+    }
+}
+
+/// A met requirement is a solid bronze line, an unmet one shows its dashes, and the
+/// lines inside the focused skill's chain glow frost.
+pub(super) fn paint_lines(
+    looks: Res<SkillLooks>,
+    mut lines: Query<(
+        &SkillLine,
+        &mut Visibility,
+        &mut BackgroundColor,
+        &mut BoxShadow,
+    )>,
+) {
+    for (line, mut visibility, mut fill, mut halo) in &mut lines {
+        let lit = looks.chain.contains(&line.source) && looks.chain.contains(&line.target);
+        let met = looks
+            .skills
+            .get(&line.source)
+            .is_some_and(|look| look.total() >= line.minimum_level);
+        let (color, shadow) = if lit {
+            (
+                ro_dark::FROST_GLOW,
+                BoxShadow::new(
+                    ro_dark::FROST_GLOW.with_alpha(0.7),
+                    Val::ZERO,
+                    Val::ZERO,
+                    Val::ZERO,
+                    px(5),
+                ),
+            )
+        } else {
+            (ro_dark::DIVIDER, glow(Color::NONE))
+        };
+        visibility.set_if_neq(shown_if(lit || met));
+        fill.set_if_neq(BackgroundColor(color));
+        halo.set_if_neq(shadow);
+    }
+}
+
+pub(super) fn paint_tab_dots(looks: Res<SkillLooks>, mut dots: Query<(&SkillTabDot, &mut Node)>) {
+    for (dot, mut node) in &mut dots {
+        let display = if looks.planned_jobs.contains(&dot.0) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if node.display != display {
+            node.display = display;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -917,115 +723,69 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dashed_line_pieces_cover_both_endpoints_for_non_aligned_lengths() {
-        let cases = [
-            Segment {
-                start: super::super::layout::Point { x: 2.0, y: 5.0 },
-                end: super::super::layout::Point { x: 20.0, y: 5.0 },
-            },
-            Segment {
-                start: super::super::layout::Point { x: 20.0, y: 5.0 },
-                end: super::super::layout::Point { x: 2.0, y: 5.0 },
-            },
-            Segment {
-                start: super::super::layout::Point { x: 5.0, y: 2.0 },
-                end: super::super::layout::Point { x: 5.0, y: 20.0 },
-            },
-            Segment {
-                start: super::super::layout::Point { x: 5.0, y: 20.0 },
-                end: super::super::layout::Point { x: 5.0, y: 2.0 },
-            },
-        ];
+    fn dashes_start_at_the_bar_and_never_overrun_it() {
+        let across = Bar {
+            x: 10.0,
+            y: 5.0,
+            width: 20.0,
+            height: 2.0,
+        };
+        let pieces = dash_bars(across);
+        assert_eq!(pieces.len(), 4);
+        assert_eq!(pieces[0].x, 10.0);
+        let last = pieces.last().unwrap();
+        assert_eq!((last.x, last.width), (28.0, 2.0));
+        assert!(pieces.iter().all(|piece| piece.height == 2.0));
 
-        for segment in cases {
-            let pieces = line_pieces(segment, 1.0, true);
-            assert_eq!(pieces.len(), 2);
-            let horizontal = segment.start.y == segment.end.y;
-            let first_start = if horizontal {
-                pieces.first().expect("first dash").0
-            } else {
-                pieces.first().expect("first dash").1
-            };
-            let last = pieces.last().expect("last dash");
-            let last_end = if horizontal {
-                last.0 + last.2
-            } else {
-                last.1 + last.3
-            };
-            let minimum = if horizontal {
-                segment.start.x.min(segment.end.x)
-            } else {
-                segment.start.y.min(segment.end.y)
-            };
-            let maximum = if horizontal {
-                segment.start.x.max(segment.end.x)
-            } else {
-                segment.start.y.max(segment.end.y)
-            };
-
-            assert_eq!(first_start, minimum);
-            assert_eq!(last_end, maximum);
-            assert!(pieces.windows(2).all(|pair| {
-                let first_end = if horizontal {
-                    pair[0].0 + pair[0].2
-                } else {
-                    pair[0].1 + pair[0].3
-                };
-                let second_start = if horizontal { pair[1].0 } else { pair[1].1 };
-                first_end <= second_start
-            }));
-        }
+        let down = Bar {
+            x: 5.0,
+            y: 10.0,
+            width: 2.0,
+            height: 9.0,
+        };
+        let pieces = dash_bars(down);
+        assert_eq!(pieces.len(), 2);
+        assert_eq!((pieces[1].y, pieces[1].height), (16.0, 3.0));
     }
 
     #[test]
-    fn connector_thickness_preserves_horizontal_and_vertical_midpoints() {
-        let mut horizontal = Node {
-            top: px(10),
-            height: px(1),
-            ..default()
-        };
-        set_connector_thickness(&mut horizontal, true, 2.0);
-        assert_eq!((horizontal.top, horizontal.height), (px(9.5), px(2)));
-        set_connector_thickness(&mut horizontal, true, 1.0);
-        assert_eq!((horizontal.top, horizontal.height), (px(10), px(1)));
+    fn a_link_is_one_bar_in_a_column_and_an_elbow_across_columns() {
+        let straight = link_bars((22.0, 8.0), (22.0, 120.0));
+        assert_eq!(straight.len(), 1);
+        assert_eq!(straight[0].y + straight[0].height, 120.0);
 
-        let mut vertical = Node {
-            left: px(20),
-            width: px(1),
-            ..default()
-        };
-        set_connector_thickness(&mut vertical, false, 2.0);
-        assert_eq!((vertical.left, vertical.width), (px(19.5), px(2)));
-        set_connector_thickness(&mut vertical, false, 1.0);
-        assert_eq!((vertical.left, vertical.width), (px(20), px(1)));
+        let elbow = link_bars((22.0, 8.0), (222.0, 120.0));
+        assert_eq!(elbow.len(), 3);
+        assert_eq!(elbow[1].width, 202.0);
+        assert_eq!(elbow[2].x, 222.0 + NODE / 2.0 - 1.0);
+        assert_eq!(elbow[2].y + elbow[2].height, 120.0);
     }
 
     #[test]
-    fn unresolved_job_label_uses_job_id() {
-        let band = JobBand {
-            job_id: 42,
-            label: None,
-            x: 0.0,
-            width: 100.0,
-            height: 100.0,
-            cycle_break: false,
+    fn level_badge_reads_max_only_without_a_plan() {
+        let look = Look {
+            level: 5,
+            staged: 0,
+            max: 5,
+            locked: false,
+            edge: Edge::Max,
+            dim: Dim::None,
+            can_raise: false,
+            can_lower: false,
         };
-        let mut app = App::new();
-        app.add_plugins((
-            MinimalPlugins,
-            AssetPlugin::default(),
-            bevy::scene::ScenePlugin,
-        ));
-        app.init_asset::<Font>();
-        app.world_mut().spawn_scene(job_band(&band)).unwrap();
-        app.update();
+        assert_eq!(
+            level_badge(&look),
+            ("MAX".to_string(), ro_dark::BRONZE_LIGHT)
+        );
 
-        let world = app.world_mut();
-        assert!(
-            world
-                .query::<&Text>()
-                .iter(world)
-                .any(|text| text.0 == "Job #42")
+        let planned = Look {
+            level: 3,
+            staged: 2,
+            ..look
+        };
+        assert_eq!(
+            level_badge(&planned),
+            ("5/5".to_string(), ro_dark::FROST_GLOW)
         );
     }
 }

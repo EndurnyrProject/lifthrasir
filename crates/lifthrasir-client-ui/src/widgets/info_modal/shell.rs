@@ -17,7 +17,6 @@ use lifthrasir_ui::theme::feathers_theme::{
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 
 use crate::widgets::info_modal::InfoModalRoot;
-use crate::widgets::info_modal::view::ColoredLine;
 
 /// Fixed card dimensions shared by item and skill details.
 pub const MODAL_WIDTH: f32 = 440.0;
@@ -401,50 +400,6 @@ fn metadata_cell(key: String, value: String) -> impl Scene {
             @chrome_text(key.to_uppercase(), 9.5, lifthrasir_ui::theme::TEXT_DIM) --
             @chrome_text(value, 12.0, lifthrasir_ui::theme::TEXT)
         ]
-    }
-}
-
-/// A stack of description lines, each already split into `^RRGGBB`-colored runs —
-/// `.im-desc`. Shared by the item and skill scenes.
-pub fn description_section(lines: Vec<ColoredLine>) -> impl Scene {
-    let rows: Vec<_> = lines.into_iter().map(colored_line).collect();
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
-        @ignore_picking()
-        Children [ {rows} ]
-    }
-}
-
-/// One description line, already split into `^RRGGBB`-colored runs: a `Text` root
-/// holding the first run plus a `TextSpan` child per following run.
-fn colored_line(runs: ColoredLine) -> impl Scene {
-    let mut runs = runs.into_iter();
-    let (first_color, first_text) = runs
-        .next()
-        .unwrap_or((lifthrasir_ui::theme::TEXT_DIM, String::new()));
-    let spans: Vec<_> = runs
-        .map(|(color, text)| colored_span(color, text))
-        .collect();
-    bsn! {
-        Text(first_text)
-        TextFont {
-            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(first_color)
-        @ignore_picking()
-        Children [ {spans} ]
-    }
-}
-
-fn colored_span(color: Color, text: String) -> impl Scene {
-    bsn! {
-        TextSpan(text)
-        TextFont {
-            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(color)
     }
 }
 

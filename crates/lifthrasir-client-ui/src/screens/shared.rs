@@ -1,10 +1,11 @@
 //! Helpers any menu screen can use: number formatting, header pieces and the layout
 //! and state helpers for the RO-dark art buttons.
 
+use bevy::color::{Luminance, Mix};
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSourceTemplate, LetterSpacing};
 use lifthrasir_ui::theme::{self, ro_dark};
-use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon};
+use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{BUTTON_SHADOW, ButtonArt, button, button_with};
 
 /// Art tint of a button that cannot be used.
@@ -114,4 +115,152 @@ pub fn glow(color: Color) -> BoxShadow {
         return BoxShadow::default();
     }
     BoxShadow::new(color, Val::ZERO, Val::ZERO, Val::ZERO, px(10))
+}
+
+/// `Inherited` when `shown`, else `Hidden`.
+pub fn shown_if(shown: bool) -> Visibility {
+    if shown {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    }
+}
+
+/// The outline of an item or skill slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ring {
+    None,
+    Rare,
+    Selected,
+}
+
+impl Ring {
+    /// Stroke colour, stroke width and halo.
+    pub fn style(self) -> (Color, f32, BoxShadow) {
+        match self {
+            Self::None => (ro_dark::SLOT_STROKE, 1.0, glow(Color::NONE)),
+            Self::Rare => (
+                ro_dark::RARE_RING,
+                2.0,
+                glow(ro_dark::RARE_GLOW.with_alpha(0.5)),
+            ),
+            Self::Selected => (
+                ro_dark::SELECT_RING,
+                2.0,
+                glow(ro_dark::FROST_GLOW.with_alpha(0.55)),
+            ),
+        }
+    }
+}
+
+/// The square every slot is drawn in, centring its icon.
+pub fn slot_frame(size: f32, ring: Ring) -> impl Scene {
+    let (stroke, width, halo) = ring.style();
+    bsn! {
+        Node {
+            width: px(size),
+            height: px(size),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: px(width),
+        }
+        BackgroundColor(ro_dark::SLOT)
+        BorderColor::all(stroke)
+        halo
+    }
+}
+
+/// A stack of text lines, each split into coloured runs: a `Text` holding the first
+/// run plus a `TextSpan` per following one.
+pub fn colored_lines(lines: Vec<Vec<(Color, String)>>) -> impl Scene {
+    let rows: Vec<_> = lines.into_iter().map(colored_line).collect();
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
+        @ignore_picking()
+        Children [ {rows} ]
+    }
+}
+
+fn colored_line(runs: Vec<(Color, String)>) -> impl Scene {
+    let mut runs = runs.into_iter();
+    let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT_DIM, String::new()));
+    let spans: Vec<_> = runs
+        .map(|(color, text)| colored_span(color, text))
+        .collect();
+    bsn! {
+        Text(first_text)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(12.0)},
+        }
+        TextColor(first_color)
+        @ignore_picking()
+        Children [ {spans} ]
+    }
+}
+
+fn colored_span(color: Color, text: String) -> impl Scene {
+    bsn! {
+        TextSpan(text)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(12.0)},
+        }
+        TextColor(color)
+    }
+}
+
+/// [`colored_lines`] recoloured with [`slate_ink`] to stay readable on the RO-dark
+/// window body and its insets.
+pub fn slate_lines(lines: Vec<Vec<(Color, String)>>) -> impl Scene {
+    let lines = lines
+        .into_iter()
+        .map(|runs| {
+            runs.into_iter()
+                .map(|(color, text)| (slate_ink(color), text))
+                .collect()
+        })
+        .collect();
+    colored_lines(lines)
+}
+
+/// RO colour codes were authored for a white window, so dark hues are mixed towards
+/// white until they reach 4.5:1 contrast on the RO-dark window body.
+pub fn slate_ink(color: Color) -> Color {
+    if color == theme::TEXT_DIM {
+        return ro_dark::BODY;
+    }
+    let body = ro_dark::WINDOW_BODY.to_linear().luminance();
+    let min_luminance = (body + 0.05) * 4.6 - 0.05;
+    let linear = color.to_linear();
+    let luminance = linear.luminance();
+    if luminance >= min_luminance {
+        return color;
+    }
+    let lift = (min_luminance - luminance) / (1.0 - luminance);
+    linear.mix(&LinearRgba::WHITE, lift).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slate_ink_lifts_dark_hues_and_keeps_bright_ones() {
+        let body = ro_dark::WINDOW_BODY.to_linear().luminance();
+        let bright = Color::srgb_u8(0xff, 0xff, 0x00);
+        assert_eq!(slate_ink(bright), bright);
+        assert_eq!(slate_ink(lifthrasir_ui::theme::TEXT_DIM), ro_dark::BODY);
+        for dark in [
+            Color::srgb_u8(0x00, 0x00, 0x88),
+            Color::srgb_u8(0xcc, 0x00, 0x00),
+            Color::srgb_u8(0x77, 0x77, 0x77),
+            Color::BLACK,
+        ] {
+            let ink = slate_ink(dark).to_linear().luminance();
+            let contrast = (ink + 0.05) / (body + 0.05);
+            assert!(contrast >= 4.5, "{dark:?}: contrast {contrast}");
+        }
+    }
 }

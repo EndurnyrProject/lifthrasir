@@ -25,10 +25,9 @@ use lifthrasir_ui::widgets::primitives::{
     window_titled,
 };
 
-use crate::screens::shared::{flush_button, glow, usable};
-use crate::widgets::info_modal::description::slate_ink;
+use crate::screens::shared::{flush_button, glow, slate_lines, usable};
 use crate::widgets::info_modal::shell::{self, EdgeGrade, PARCHMENT};
-use crate::widgets::info_modal::view::{ColoredLine, ItemInfoView, decorated_name};
+use crate::widgets::info_modal::view::{ItemInfoView, decorated_name};
 use crate::widgets::info_modal::{InfoModalRoot, ItemAction, ItemActionKind};
 
 const WINDOW_WIDTH: f32 = 360.0;
@@ -207,7 +206,7 @@ fn summary(view: &ItemInfoView) -> impl Scene + use<> {
         ro_dark::STRONG
     };
     let description =
-        (!view.description.is_empty()).then(|| EntityScene(description(view.description.clone())));
+        (!view.description.is_empty()).then(|| EntityScene(slate_lines(view.description.clone())));
     bsn! {
         Node { align_items: AlignItems::FlexStart, column_gap: px(16) }
         @ignore_picking()
@@ -353,19 +352,6 @@ fn rule() -> impl Scene {
             @ignore_picking()
         ]
     }
-}
-
-/// The description lines, recoloured to stay readable on the window body.
-fn description(lines: Vec<ColoredLine>) -> impl Scene {
-    let lines = lines
-        .into_iter()
-        .map(|runs| {
-            runs.into_iter()
-                .map(|(color, text)| (slate_ink(color), text))
-                .collect()
-        })
-        .collect();
-    shell::description_section(lines)
 }
 
 /// The contextual `(label, value)` rows (weight, price, creator), two per line.

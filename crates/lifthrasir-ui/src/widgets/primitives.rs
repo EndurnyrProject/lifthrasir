@@ -226,6 +226,79 @@ pub fn tab(active: bool) -> impl Scene {
     }
 }
 
+/// One option of a segmented control: a small pill that is lit while `active`. The
+/// caller adds its marker, the click observer and a label coloured by [`tab_text`].
+pub fn segment(active: bool) -> impl Scene {
+    let (fill, stroke) = if active {
+        (ro_dark::TAB_ACTIVE, ro_dark::TAB_STROKE)
+    } else {
+        (ro_dark::TAB_INACTIVE, ro_dark::SLOT_STROKE)
+    };
+    let hover = if active {
+        (fill, stroke)
+    } else {
+        (ro_dark::TAB_HOVER, ro_dark::MUTED_BRONZE)
+    };
+    let colors = HoverColors {
+        rest: (fill, stroke),
+        hover,
+    };
+    bsn! {
+        Hovered
+        colors
+        Node {
+            height: px(24),
+            padding: {UiRect::horizontal(px(10))},
+            align_items: AlignItems::Center,
+            column_gap: px(6),
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        Pickable
+    }
+}
+
+/// An 18px round button showing the `ui/icons/<icon>.svg` glyph, frost blue when
+/// `primary`. The caller positions it and attaches the click observer.
+pub fn round_button(icon: &'static str, primary: bool) -> impl Scene {
+    let (fill, hover, stroke) = if primary {
+        (
+            ro_dark::PRIMARY,
+            ro_dark::PRIMARY_HOVER,
+            ro_dark::PRIMARY_STROKE,
+        )
+    } else {
+        (
+            ro_dark::BUTTON,
+            ro_dark::BUTTON_HOVER,
+            ro_dark::BUTTON_STROKE,
+        )
+    };
+    let colors = HoverColors {
+        rest: (fill, stroke),
+        hover: (hover, stroke),
+    };
+    bsn! {
+        Hovered
+        colors
+        Node {
+            width: px(18),
+            height: px(18),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: px(1),
+            border_radius: BorderRadius::MAX,
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        Pickable
+        Children [ @glyph_icon(icon, 8.0, ro_dark::STRONG) ]
+    }
+}
+
 /// The label and count colours of a [`tab`].
 pub fn tab_text(active: bool) -> (Color, Color) {
     if active {

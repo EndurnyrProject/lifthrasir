@@ -30,10 +30,10 @@ use lifthrasir_ui::widgets::primitives::{
     BUTTON_SHADOW, ButtonArt, HoverColors, inset, tab, tab_text,
 };
 
-use crate::screens::shared::{flush_button, overline};
+use crate::screens::shared::{Ring, flush_button, overline, slot_frame};
 use crate::widgets::character_window::{attributes, preview};
 use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal, view};
-use crate::widgets::inventory_window::scene::{CellView, Ring, slot_frame, slot_marks};
+use crate::widgets::inventory_window::scene::{CellView, slot_marks};
 use crate::widgets::inventory_window::{cell_view, item_name};
 
 const SLOT: f32 = 50.0;

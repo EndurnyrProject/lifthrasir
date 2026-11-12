@@ -17,7 +17,7 @@ use lifthrasir_ui::widgets::primitives::{
     window_title_bar, window_titled,
 };
 
-use crate::screens::shared::{DANGER_TINT, flush_button, glow, thousands, usable};
+use crate::screens::shared::{DANGER_TINT, Ring, flush_button, slot_frame, thousands, usable};
 use crate::widgets::inventory_window::{
     COLUMNS, InventoryBody, InventoryCell, InventoryFooter, InventoryGrid, InventoryLabel,
     InventorySearchField, InventorySearchPlaceholder, InventoryTab, InventoryTabButton,
@@ -36,33 +36,6 @@ const SELECTION_SLOT: f32 = 44.0;
 /// Above every window, like the hotbar's name tags.
 const TOOLTIP_Z: i32 = 1500;
 const SELECTION_ICON: f32 = 32.0;
-
-/// The outline of a slot.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Ring {
-    None,
-    Rare,
-    Selected,
-}
-
-impl Ring {
-    /// Stroke colour, stroke width and halo.
-    pub(crate) fn style(self) -> (Color, f32, BoxShadow) {
-        match self {
-            Self::None => (ro_dark::SLOT_STROKE, 1.0, glow(Color::NONE)),
-            Self::Rare => (
-                ro_dark::RARE_RING,
-                2.0,
-                glow(ro_dark::RARE_GLOW.with_alpha(0.5)),
-            ),
-            Self::Selected => (
-                ro_dark::SELECT_RING,
-                2.0,
-                glow(ro_dark::FROST_GLOW.with_alpha(0.55)),
-            ),
-        }
-    }
-}
 
 pub(super) struct TabView {
     pub tab: InventoryTab,
@@ -366,24 +339,6 @@ fn slot(cell: Option<CellView>) -> Box<dyn Scene> {
     match cell {
         Some(view) => Box::new(item_slot(view)),
         None => Box::new(bsn! { @slot_frame(SLOT, Ring::None) @ignore_picking() }),
-    }
-}
-
-/// The square every slot is drawn in, centring its icon.
-pub(crate) fn slot_frame(size: f32, ring: Ring) -> impl Scene {
-    let (stroke, width, halo) = ring.style();
-    bsn! {
-        Node {
-            width: px(size),
-            height: px(size),
-            flex_shrink: 0.0,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border: px(width),
-        }
-        BackgroundColor(ro_dark::SLOT)
-        BorderColor::all(stroke)
-        halo
     }
 }
 

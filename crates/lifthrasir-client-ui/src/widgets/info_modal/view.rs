@@ -482,7 +482,7 @@ fn skill_edge_grade(effective: u32, max_level: u32, requires_met: bool) -> EdgeG
 /// The per-level value at `effective`'s rank (1-based, index `effective - 1`),
 /// clamped to the table's last entry. `None` for an empty table (no data at that
 /// level, e.g. passives with no SP cost).
-fn level_value<T: Copy>(levels: &[T], effective: u32) -> Option<T> {
+pub(crate) fn level_value<T: Copy>(levels: &[T], effective: u32) -> Option<T> {
     if levels.is_empty() {
         return None;
     }
