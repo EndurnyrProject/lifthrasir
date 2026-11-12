@@ -17,6 +17,7 @@ pub mod death_dialog;
 pub mod emote;
 pub mod escape_menu;
 pub mod guild_window;
+pub mod homunculus;
 pub mod hotbar;
 pub mod info_modal;
 pub mod minimap;
@@ -90,6 +91,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     emote::spawn_emote_picker(&mut commands, root);
     guild_window::scene::build(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);
+    homunculus::spawn_status(&mut commands, root);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     navigation::panel::spawn_navigation_panel(
         &mut commands,

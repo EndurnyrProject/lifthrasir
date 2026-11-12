@@ -334,8 +334,8 @@ impl Window {
         }
 
         let mut sum = 0u16;
-        for i in 0..=self.num_values as usize {
-            sum = sum.wrapping_add(self.weights[i]);
+        for &weight in &self.weights[..=self.num_values as usize] {
+            sum = sum.wrapping_add(weight);
         }
         self.total = sum;
     }

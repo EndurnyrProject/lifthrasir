@@ -7,6 +7,7 @@ pub mod gameplay;
 pub mod ground;
 pub mod guild;
 pub mod handshake;
+pub mod homunculus;
 pub mod inventory;
 pub mod mount;
 pub mod movement;

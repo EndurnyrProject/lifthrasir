@@ -7,6 +7,50 @@ use crate::dto::{
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
 
+/// An owner command for the authenticated character's Homunculus.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct HomunculusRequested {
+    pub request_id: u64,
+    pub command: HomunculusCommand,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HomunculusCommand {
+    Inspect,
+    Move {
+        x: i32,
+        y: i32,
+    },
+    Follow,
+    Attack {
+        target_id: u32,
+    },
+    Standby,
+    CastSkill {
+        skill_id: u32,
+        level: u32,
+        target: HomunculusSkillTarget,
+    },
+    Feed,
+    Rename {
+        name: String,
+    },
+    Rest,
+    Delete {
+        confirmed: bool,
+    },
+    LearnSkill {
+        skill_id: u32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomunculusSkillTarget {
+    Actor(u32),
+    SelfTarget,
+}
+
 /// Answer a skill text request. `None` cancels the request.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

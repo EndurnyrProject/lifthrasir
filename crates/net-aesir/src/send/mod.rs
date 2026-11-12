@@ -4,6 +4,7 @@ pub mod character;
 pub mod equipment;
 pub mod ground;
 pub mod guild;
+pub mod homunculus;
 pub mod inventory;
 pub mod lifecycle;
 pub mod mount;
