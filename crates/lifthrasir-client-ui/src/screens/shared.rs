@@ -2,11 +2,16 @@
 //! and state helpers for the RO-dark art buttons.
 
 use bevy::color::{Luminance, Mix};
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate, LetterSpacing};
+use bevy::text::{EditableText, FontSize, FontSourceTemplate, LetterSpacing};
+use bevy::ui_widgets::TextInput;
 use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
-use lifthrasir_ui::widgets::primitives::{BUTTON_SHADOW, ButtonArt, button, button_with};
+use lifthrasir_ui::widgets::placeholder::Placeholder;
+use lifthrasir_ui::widgets::primitives::{
+    BUTTON_SHADOW, ButtonArt, INPUT_SHADOW, button, button_with, input_frame,
+};
 
 /// Art tint of a button that cannot be used.
 pub const DISABLED_TINT: Color = Color::srgb(0.45, 0.45, 0.45);
@@ -87,6 +92,208 @@ pub fn small_button(icon: &'static str, size: f32) -> impl Scene {
             flex_shrink: 0.0,
             margin: {UiRect::all(px(-BUTTON_SHADOW))},
         }
+    }
+}
+
+/// A 24px-high art button `width` px wide, for list rows and inline prompts. It is
+/// laid out by its shape like [`flush_button`].
+pub fn row_button(art: ButtonArt, label: &'static str, width: f32) -> impl Scene {
+    bsn! {
+        @button_with(art, chrome_text(label.into(), 11.0, ro_dark::BUTTON_LABEL))
+        Node {
+            width: px(width + 2.0 * BUTTON_SHADOW),
+            height: px(24.0 + 2.0 * BUTTON_SHADOW),
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            margin: {UiRect::all(px(-BUTTON_SHADOW))},
+        }
+    }
+}
+
+/// A small filled tag beside a name: a count or a warning.
+pub fn chip(text: String, fill: Color, ink: Color) -> impl Scene {
+    bsn! {
+        Node {
+            height: px(18),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            padding: {UiRect::horizontal(px(6))},
+            border_radius: BorderRadius::all(px(3)),
+        }
+        BackgroundColor(fill)
+        @ignore_picking()
+        Children [ @chrome_text(text, 10.0, ink) ]
+    }
+}
+
+/// A search box in the input frame, growing to share its row. `F` marks the text so
+/// the owner can read it, and `hint` shows while it is empty. The negative margin
+/// cancels the frame's baked shadow so the row lays out by the shape.
+pub fn search_field<F>(hint: &'static str) -> impl Scene
+where
+    F: Component + Default + Clone + Unpin,
+{
+    bsn! {
+        @input_frame()
+        Node {
+            flex_grow: 1.0,
+            min_width: px(0),
+            margin: {UiRect::all(px(-INPUT_SHADOW))},
+            position_type: PositionType::Relative,
+        }
+        Children [
+            #field
+            F::default()
+            EditableText
+            TextInput
+            TextFont {
+                font: FontSourceTemplate::Handle(theme::FONT_BODY),
+                font_size: {FontSize::Px(13.0)},
+            }
+            TextColor(ro_dark::BODY)
+            Node { flex_grow: 1.0, min_width: px(0), height: px(18) }
+            --
+            Placeholder(#field)
+            @chrome_text(hint.into(), 13.0, ro_dark::MUTED)
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(INPUT_SHADOW + 10.0),
+                top: px(INPUT_SHADOW + 6.0),
+            }
+        ]
+    }
+}
+
+/// Lights the frame of a [`search_field`] while its `F` text has keyboard focus.
+pub fn light_search_focus<F: Component>(
+    focus: Res<InputFocus>,
+    fields: Query<(Entity, &ChildOf), With<F>>,
+    mut frames: Query<&mut Outline>,
+) {
+    for (field, frame) in &fields {
+        let Ok(mut outline) = frames.get_mut(frame.parent()) else {
+            continue;
+        };
+        let color = if focus.get() == Some(field) {
+            ro_dark::FROST_GLOW
+        } else {
+            Color::NONE
+        };
+        if outline.color != color {
+            outline.color = color;
+        }
+    }
+}
+
+/// RO's weight tiers: natural regen stops at 50% of the limit, attacks and skills at 90%.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Load {
+    Light,
+    Heavy,
+    Overweight,
+}
+
+impl Load {
+    pub fn of(weight: u32, max_weight: u32) -> Self {
+        let (weight, max_weight) = (u64::from(weight), u64::from(max_weight));
+        if max_weight == 0 {
+            return Self::Light;
+        }
+        if weight * 10 >= max_weight * 9 {
+            return Self::Overweight;
+        }
+        if weight * 2 >= max_weight {
+            return Self::Heavy;
+        }
+        Self::Light
+    }
+
+    /// Status text, its colour and the bar colour.
+    fn style(self) -> (&'static str, Color, Color) {
+        match self {
+            Self::Light => ("Light", ro_dark::STATUS_ONLINE, ro_dark::JOB_EXP),
+            Self::Heavy => (
+                "Heavy \u{b7} No regen",
+                ro_dark::STATUS_BUSY,
+                ro_dark::BASE_EXP,
+            ),
+            Self::Overweight => (
+                "Overweight \u{b7} Can\u{2019}t attack",
+                ro_dark::STATUS_FULL,
+                ro_dark::HP,
+            ),
+        }
+    }
+}
+
+/// Carried weight over the limit, with marks at the 50% and 90% tiers. It grows to
+/// share its row.
+pub fn weight_meter(weight: u32, max_weight: u32) -> impl Scene {
+    let (status, tone, bar) = Load::of(weight, max_weight).style();
+    let fill = (weight as f32 / max_weight.max(1) as f32).min(1.0) * 100.0;
+    let amount = format!(
+        "{} / {}",
+        thousands(weight.into()),
+        thousands(max_weight.into())
+    );
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            flex_grow: 1.0,
+            min_width: px(0),
+            row_gap: px(6),
+        }
+        @ignore_picking()
+        Children [
+            Node { align_items: AlignItems::Baseline, column_gap: px(8) }
+            @ignore_picking()
+            Children [
+                @chrome_text("Weight".into(), 12.0, ro_dark::LABEL)
+                --
+                @chrome_text(amount, 12.0, ro_dark::STRONG)
+                Node { flex_grow: 1.0 }
+                --
+                @chrome_text(status.into(), 11.0, tone)
+            ]
+            --
+            Node {
+                height: px(10),
+                padding: px(1),
+                border: px(1),
+                border_radius: BorderRadius::all(px(5)),
+                position_type: PositionType::Relative,
+            }
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::BAR_FRAME)
+            @ignore_picking()
+            Children [
+                Node {
+                    width: {Val::Percent(fill)},
+                    height: percent(100),
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor(bar)
+                @ignore_picking()
+                --
+                @tier_mark(50.0)
+                --
+                @tier_mark(90.0)
+            ]
+        ]
+    }
+}
+
+fn tier_mark(at: f32) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: {Val::Percent(at)},
+            top: px(-3),
+            width: px(1),
+            height: px(14),
+        }
+        BackgroundColor({ro_dark::TITLE.with_alpha(0.55)})
+        @ignore_picking()
     }
 }
 
@@ -245,6 +452,15 @@ pub fn slate_ink(color: Color) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn load_follows_the_fifty_and_ninety_percent_tiers() {
+        assert_eq!(Load::of(999, 2000), Load::Light);
+        assert_eq!(Load::of(1000, 2000), Load::Heavy);
+        assert_eq!(Load::of(1799, 2000), Load::Heavy);
+        assert_eq!(Load::of(1800, 2000), Load::Overweight);
+        assert_eq!(Load::of(0, 0), Load::Light);
+    }
 
     #[test]
     fn slate_ink_lifts_dark_hues_and_keeps_bright_ones() {

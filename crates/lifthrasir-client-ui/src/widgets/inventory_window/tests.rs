@@ -114,15 +114,6 @@ fn grid_draws_every_bag_slot_unfiltered_and_whole_rows_when_filtered() {
 }
 
 #[test]
-fn load_follows_the_fifty_and_ninety_percent_tiers() {
-    assert_eq!(Load::of(999, 2000), Load::Light);
-    assert_eq!(Load::of(1000, 2000), Load::Heavy);
-    assert_eq!(Load::of(1799, 2000), Load::Heavy);
-    assert_eq!(Load::of(1800, 2000), Load::Overweight);
-    assert_eq!(Load::of(0, 0), Load::Light);
-}
-
-#[test]
 fn is_double_click_respects_index_and_window() {
     let last = LastCellClick {
         index: 5,

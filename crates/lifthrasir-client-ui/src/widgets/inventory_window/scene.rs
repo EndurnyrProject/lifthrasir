@@ -5,24 +5,24 @@
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{EditableText, FontSize, FontSourceTemplate};
 use bevy::ui::OverrideClip;
-use bevy::ui_widgets::{ControlOrientation, ScrollArea, TextInput};
+use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
-use lifthrasir_ui::theme::{self, ro_dark};
+use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{
-    BUTTON_SHADOW, ButtonArt, HoverColors, INPUT_SHADOW, WINDOW_SHADOW, button_with, close_button,
-    diamond, display_text, divider, divider_diamond, input_frame, inset, tab, tab_text,
-    window_title_bar, window_titled,
+    BUTTON_SHADOW, ButtonArt, HoverColors, WINDOW_SHADOW, button_with, close_button, diamond,
+    display_text, divider, divider_diamond, inset, tab, tab_text, window_title_bar, window_titled,
 };
 
-use crate::screens::shared::{DANGER_TINT, Ring, flush_button, slot_frame, thousands, usable};
+use crate::screens::shared::{
+    DANGER_TINT, Ring, flush_button, search_field, slot_frame, thousands, usable, weight_meter,
+};
 use crate::widgets::inventory_window::{
     COLUMNS, InventoryBody, InventoryCell, InventoryFooter, InventoryGrid, InventoryLabel,
-    InventorySearchField, InventorySearchPlaceholder, InventoryTab, InventoryTabButton,
-    InventoryTitlebar, InventoryTooltip, InventoryWindowRoot, Load, act_on_selection, close_window,
-    cycle_sort, hide_slot_name, on_cell_click, on_cell_drag_start, pick_tab, show_slot_name,
+    InventorySearchField, InventoryTab, InventoryTabButton, InventoryTitlebar, InventoryTooltip,
+    InventoryWindowRoot, act_on_selection, close_window, cycle_sort, hide_slot_name, on_cell_click,
+    on_cell_drag_start, pick_tab, show_slot_name,
 };
 
 const WINDOW_LEFT: f32 = 320.0;
@@ -147,44 +147,11 @@ fn search_row() -> impl Scene {
         }
         @ignore_picking()
         Children [
-            @search_field()
+            @search_field::<InventorySearchField>("Search items")
             --
             @chrome_text("Sort".into(), 12.0, ro_dark::MUTED)
             --
             @sort_button()
-        ]
-    }
-}
-
-/// The search field. The negative margin cancels the frame's baked shadow so the row
-/// lays out by the shape.
-fn search_field() -> impl Scene {
-    bsn! {
-        @input_frame()
-        Node {
-            flex_grow: 1.0,
-            min_width: px(0),
-            margin: {UiRect::all(px(-INPUT_SHADOW))},
-            position_type: PositionType::Relative,
-        }
-        Children [
-            InventorySearchField
-            EditableText
-            TextInput
-            TextFont {
-                font: FontSourceTemplate::Handle(theme::FONT_BODY),
-                font_size: {FontSize::Px(13.0)},
-            }
-            TextColor(ro_dark::BODY)
-            Node { flex_grow: 1.0, min_width: px(0), height: px(18) }
-            --
-            InventorySearchPlaceholder
-            @chrome_text("Search items".into(), 13.0, ro_dark::MUTED)
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(INPUT_SHADOW + 10.0),
-                top: px(INPUT_SHADOW + 6.0),
-            }
         ]
     }
 }
@@ -607,93 +574,6 @@ pub(super) fn footer(view: FooterView) -> impl Scene {
             --
             @zeny_box(view.zeny)
         ]
-    }
-}
-
-/// Status text, its colour and the bar colour of a weight tier.
-fn load_style(load: Load) -> (&'static str, Color, Color) {
-    match load {
-        Load::Light => ("Light", ro_dark::STATUS_ONLINE, ro_dark::JOB_EXP),
-        Load::Heavy => (
-            "Heavy \u{b7} No regen",
-            ro_dark::STATUS_BUSY,
-            ro_dark::BASE_EXP,
-        ),
-        Load::Overweight => (
-            "Overweight \u{b7} Can\u{2019}t attack",
-            ro_dark::STATUS_FULL,
-            ro_dark::HP,
-        ),
-    }
-}
-
-/// Carried weight over the limit, with marks at the 50% and 90% tiers.
-fn weight_meter(weight: u32, max_weight: u32) -> impl Scene {
-    let (status, tone, bar) = load_style(Load::of(weight, max_weight));
-    let fill = (weight as f32 / max_weight.max(1) as f32).min(1.0) * 100.0;
-    let amount = format!(
-        "{} / {}",
-        thousands(weight.into()),
-        thousands(max_weight.into())
-    );
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Column,
-            flex_grow: 1.0,
-            min_width: px(0),
-            row_gap: px(6),
-        }
-        @ignore_picking()
-        Children [
-            Node { align_items: AlignItems::Baseline, column_gap: px(8) }
-            @ignore_picking()
-            Children [
-                @chrome_text("Weight".into(), 12.0, ro_dark::LABEL)
-                --
-                @chrome_text(amount, 12.0, ro_dark::STRONG)
-                Node { flex_grow: 1.0 }
-                --
-                @chrome_text(status.into(), 11.0, tone)
-            ]
-            --
-            Node {
-                height: px(10),
-                padding: px(1),
-                border: px(1),
-                border_radius: BorderRadius::all(px(5)),
-                position_type: PositionType::Relative,
-            }
-            BackgroundColor(ro_dark::BAR_TROUGH)
-            BorderColor::all(ro_dark::BAR_FRAME)
-            @ignore_picking()
-            Children [
-                Node {
-                    width: {Val::Percent(fill)},
-                    height: percent(100),
-                    border_radius: BorderRadius::all(px(3)),
-                }
-                BackgroundColor(bar)
-                @ignore_picking()
-                --
-                @tier_mark(50.0)
-                --
-                @tier_mark(90.0)
-            ]
-        ]
-    }
-}
-
-fn tier_mark(at: f32) -> impl Scene {
-    bsn! {
-        Node {
-            position_type: PositionType::Absolute,
-            left: {Val::Percent(at)},
-            top: px(-3),
-            width: px(1),
-            height: px(14),
-        }
-        BackgroundColor({ro_dark::TITLE.with_alpha(0.55)})
-        @ignore_picking()
     }
 }
 

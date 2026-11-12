@@ -10,7 +10,6 @@
 use std::time::Duration;
 
 use bevy::ecs::system::SystemParam;
-use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
@@ -25,9 +24,8 @@ use lifthrasir_client::domain::equipment::EquipItemRequested;
 use lifthrasir_client::domain::hotbar::HotbarSlot;
 use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 use lifthrasir_client::domain::inventory::{Inventory, Item, ItemCategory, UseItemRequested};
-use lifthrasir_ui::theme::ro_dark;
 
-use crate::screens::shared::{Ring, thousands};
+use crate::screens::shared::{Ring, light_search_focus, thousands};
 use crate::widgets::hotbar::HotbarDrag;
 use crate::widgets::info_modal::shell::EdgeGrade;
 use crate::widgets::info_modal::view::{decorated_name, inventory_item_view, item_edge_grade};
@@ -154,9 +152,6 @@ pub struct InventoryGrid;
 #[derive(Component, Default, Clone)]
 pub struct InventorySearchField;
 
-#[derive(Component, Default, Clone)]
-pub struct InventorySearchPlaceholder;
-
 /// A text of the static frame that [`rebuild_body`] keeps current.
 #[derive(Component, Default, Clone, Copy)]
 pub enum InventoryLabel {
@@ -178,30 +173,6 @@ pub struct InventoryCell {
 #[derive(Component, Default, Clone)]
 pub struct InventoryTooltip;
 
-/// RO's weight tiers: natural regen stops at 50% of the limit, attacks and skills at 90%.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Load {
-    Light,
-    Heavy,
-    Overweight,
-}
-
-impl Load {
-    pub(super) fn of(weight: u32, max_weight: u32) -> Self {
-        let (weight, max_weight) = (u64::from(weight), u64::from(max_weight));
-        if max_weight == 0 {
-            return Self::Light;
-        }
-        if weight * 10 >= max_weight * 9 {
-            return Self::Overweight;
-        }
-        if weight * 2 >= max_weight {
-            return Self::Heavy;
-        }
-        Self::Light
-    }
-}
-
 pub struct InventoryWindowPlugin;
 
 impl Plugin for InventoryWindowPlugin {
@@ -214,6 +185,7 @@ impl Plugin for InventoryWindowPlugin {
                     toggle_inventory_window.run_if(ui_unfocused),
                     reflect_open,
                     sync_search,
+                    light_search_focus::<InventorySearchField>,
                     rebuild_body.after(sync_search),
                     rebuild_footer,
                 )
@@ -253,40 +225,17 @@ fn reflect_open(
     }
 }
 
-/// Mirrors the search field into [`InventoryUi::query`], hides the placeholder once
-/// there is text and lights the frame's focus outline.
+/// Mirrors the search field into [`InventoryUi::query`].
 fn sync_search(
-    focus: Res<InputFocus>,
-    fields: Query<(Entity, &EditableText, &ChildOf), With<InventorySearchField>>,
-    mut placeholders: Query<&mut Visibility, With<InventorySearchPlaceholder>>,
-    mut frames: Query<&mut Outline>,
+    fields: Query<&EditableText, With<InventorySearchField>>,
     mut ui: ResMut<InventoryUi>,
 ) {
-    let Ok((field, text, frame)) = fields.single() else {
+    let Ok(text) = fields.single() else {
         return;
     };
     let value = text.value().to_string();
     if ui.query != value.trim() {
         ui.query = value.trim().to_string();
-    }
-    let placeholder = if value.is_empty() {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-    for mut visibility in &mut placeholders {
-        visibility.set_if_neq(placeholder);
-    }
-    let Ok(mut outline) = frames.get_mut(frame.parent()) else {
-        return;
-    };
-    let color = if focus.get() == Some(field) {
-        ro_dark::FROST_GLOW
-    } else {
-        Color::NONE
-    };
-    if outline.color != color {
-        outline.color = color;
     }
 }
 

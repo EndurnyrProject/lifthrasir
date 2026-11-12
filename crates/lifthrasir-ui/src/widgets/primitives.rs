@@ -136,7 +136,8 @@ pub fn window_title(text: &'static str) -> impl Scene {
 
 /// The title row of a [`window_titled`] with `trailing` pushed to its right end, 14px
 /// in from the shape edge. The caller adds the drag marker and observer.
-pub fn window_title_bar(text: &'static str, trailing: impl Scene) -> impl Scene {
+pub fn window_title_bar(text: impl Into<String>, trailing: impl Scene) -> impl Scene {
+    let text = text.into();
     bsn! {
         Node {
             height: px(TITLE_BAR_HEIGHT),
@@ -146,11 +147,38 @@ pub fn window_title_bar(text: &'static str, trailing: impl Scene) -> impl Scene 
             margin: {UiRect { right: px(14.0 - CONTENT_INSET), bottom: px(6), ..default() }},
         }
         Children [
-            @title_text(text, 17.0)
+            @display_text(text, 17.0, ro_dark::TITLE)
             Node { flex_grow: 1.0 }
             --
             @trailing
         ]
+    }
+}
+
+/// A 22px borderless icon button that lights up under the pointer: the remove and
+/// dismiss marks of list rows. The caller attaches the `Activate` observer.
+pub fn ghost_button(icon: &'static str) -> impl Scene {
+    let colors = HoverColors {
+        rest: (Color::NONE, Color::NONE),
+        hover: (ro_dark::BUTTON, ro_dark::BUTTON_STROKE),
+    };
+    bsn! {
+        Button
+        Hovered
+        colors
+        Node {
+            width: px(22),
+            height: px(22),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(4)),
+        }
+        BackgroundColor(Color::NONE)
+        BorderColor::all(Color::NONE)
+        Pickable
+        Children [ @glyph_icon(icon, 9.0, ro_dark::MUTED) ]
     }
 }
 
