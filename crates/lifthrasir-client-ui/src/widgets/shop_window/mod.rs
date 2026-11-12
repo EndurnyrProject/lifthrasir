@@ -9,9 +9,8 @@
 use std::collections::HashMap;
 
 use bevy::ecs::system::SystemParam;
-use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
-use bevy::text::{EditableText, TextEdit};
+use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
 use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
@@ -21,12 +20,11 @@ use lifthrasir_client::domain::entities::components::EntityName;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use lifthrasir_client::domain::inventory::Inventory;
-use lifthrasir_ui::theme::ro_dark;
 use net_contract::commands::{BuyFromShop, CloseNpcShop, SellToShop};
 use net_contract::dto::{BuyEntry, SellEntry, ShopBuyItem, ShopSellItem};
 use net_contract::events::ShopOpened;
 
-use crate::screens::shared::light_search_focus;
+use crate::screens::shared::{light_field_focus, light_search_focus, set_field_text, typed_number};
 use crate::widgets::info_modal::view::{inventory_item_view, shop_item_view};
 use crate::widgets::info_modal::{InfoContent, ItemAction, ShowInfoModal};
 use crate::widgets::npc_dialog::{ActiveNpcDialog, NpcDialogRoot};
@@ -338,7 +336,10 @@ impl Plugin for ShopWindowPlugin {
         );
         app.add_systems(
             Update,
-            (light_search_focus::<ShopSearchField>, light_qty_focus)
+            (
+                light_search_focus::<ShopSearchField>,
+                light_field_focus::<ShopQtyField>,
+            )
                 .run_if(in_state(GameState::InGame)),
         );
         app.add_systems(
@@ -417,24 +418,6 @@ fn sync_search(
     let value = text.value().to_string();
     if session.query != value.trim() {
         session.query = value.trim().to_string();
-    }
-}
-
-/// Rings the quantity field that has keyboard focus.
-fn light_qty_focus(
-    focus: Res<InputFocus>,
-    mut fields: Query<(Entity, &mut BorderColor), With<ShopQtyField>>,
-) {
-    if !focus.is_changed() {
-        return;
-    }
-    for (field, mut border) in &mut fields {
-        let color = if focus.get() == Some(field) {
-            ro_dark::FROST_GLOW
-        } else {
-            ro_dark::SLOT_STROKE
-        };
-        *border = BorderColor::all(color);
     }
 }
 
@@ -606,7 +589,7 @@ fn clamp_qty(qty: u32, cap: u32) -> u32 {
 
 /// The quantity typed in a row's field. An empty field counts as one.
 fn typed_qty(field: &EditableText) -> u32 {
-    field.value().to_string().parse().unwrap_or(1)
+    typed_number(field).unwrap_or(1)
 }
 
 /// Steps the quantity field of row `key` by `step`, within `[1, cap]`.
@@ -615,9 +598,7 @@ fn step_row(fields: &mut Query<(&ShopQtyField, &mut EditableText)>, key: u32, st
         return;
     };
     let qty = clamp_qty(typed_qty(&field).saturating_add_signed(step), cap);
-    field.clear();
-    field.editor.set_text(&qty.to_string());
-    field.queue_edit(TextEdit::TextEnd(false));
+    set_field_text(&mut field, &qty.to_string());
 }
 
 #[derive(SystemParam)]

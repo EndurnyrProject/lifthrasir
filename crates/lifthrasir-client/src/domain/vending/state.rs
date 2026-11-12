@@ -467,6 +467,11 @@ impl VendingState {
             })
         {
             shop.total_earned = total_earned;
+            // The server sends no fresh snapshot per sale, so the sold units leave the
+            // listing here and the snapshot keeps showing what is left.
+            if let Some(item) = shop.items.iter_mut().find(|item| item.index == sale.index) {
+                item.amount = item.amount.saturating_sub(sale.amount);
+            }
         }
         self.sales.push(sale.clone());
         if self.sales.len() > RECENT_SALES {

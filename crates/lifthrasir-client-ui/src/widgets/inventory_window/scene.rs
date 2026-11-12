@@ -44,6 +44,7 @@ pub(super) struct TabView {
 }
 
 /// One filled slot. `pips` holds one entry per card slot, `true` when a card sits in it.
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CellView {
     pub index: u16,
     pub icon: Option<String>,

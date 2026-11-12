@@ -1,20 +1,16 @@
-//! Vending window: the seller's setup editor, its read-only monitor, the
-//! buyer's basket, and the shared vending feedback line.
+//! Vending window: the seller's shop setup, the seller's open shop, a buyer's view of
+//! someone else's shop, and the summary a closed shop leaves behind.
 //!
-//! The window has two panels. The left one ([`source`]) shows what can be
-//! dragged in: the cart's sellable stock during setup, the vendor's listings
-//! while browsing. The right one is the editor, monitor or basket. Items move
-//! between them by drag-and-drop or double-click ([`drag`]).
+//! Authority stays in [`VendingState`] and the server: this module only projects that
+//! state into a window and turns its controls into [`VendingIntent`]s. It never
+//! charges SP, moves items, or edits inventory or zeny.
 //!
-//! Authority stays in [`VendingState`] and the server: this module only projects
-//! that state into a window and turns affordances into [`VendingIntent`]s. It
-//! never charges SP, moves items, or edits inventory/zeny.
-//!
-//! The chrome and the content host are spawned once. [`rebuild_content`] refills
-//! the host only when its *structure* changes (mode, setup/shop identity, or the
-//! set of drafted cart slots), so a focused quantity/price/title field survives
-//! typing and every unrelated inventory, zeny, or sale update.
+//! The frame and its body host are spawned once. [`rebuild_content`] refills the host
+//! when what it shows changes. The setup body is identified by its listed slots alone,
+//! so a focused field survives typing and every unrelated update, and
+//! [`sync_setup_readouts`] keeps its notes and totals current in place.
 
+use bevy::ecs::system::SystemParam;
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -24,65 +20,56 @@ use lifthrasir_assets::catalogs::random_option::RandomOptionDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::cart::Cart;
 use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::components::EntityName;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use lifthrasir_client::domain::vending::{
     RevealVendingSeller, VendingIntent, VendingNotice, VendingState, VendingSystems,
 };
-use net_contract::dto::{VendingCloseTarget, VendingListOutcome, VendingPurchaseOutcome};
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::primitives::WINDOW_SHADOW;
+use net_contract::dto::{
+    VendingCloseTarget, VendingListOutcome, VendingPurchaseOutcome, VendingSnapshot,
+};
 use net_contract::events::ChatHeard;
 
 pub mod buyer;
-pub mod cells;
-pub mod drag;
 pub mod feedback;
 pub mod scene;
 pub mod seller;
-pub mod source;
+mod view;
 
 #[cfg(test)]
 mod tests;
 
 use buyer::BuyerBasket;
-use cells::{ItemCellView, item_icon, item_name};
 use feedback::vending_notice_text;
 pub use seller::{DraftRow, SellerDraft, clamp_title};
 
-use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view};
+use crate::screens::shared::{
+    DISABLED_TINT, light_field_focus, set_field_text, shown_if, typed_number,
+};
+use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view as info_view};
+use crate::widgets::pushcart_window::CartWindowRoot;
 
-/// Marks the window root so visibility, drag, and close act on this window only.
+/// Marks the window root so visibility, width, drag and close act on this window only.
 #[derive(Component, Default, Clone)]
 pub struct VendingWindowRoot;
 
-/// The draggable titlebar (the drag handle).
+/// The draggable title bar. Its text child is retitled as the body changes.
 #[derive(Component, Default, Clone)]
 pub struct VendingWindowTitlebar;
 
-/// The padded body region under the titlebar.
-#[derive(Component, Default, Clone)]
-pub struct VendingWindowBody;
-
-/// The titlebar label, updated in place as the mode changes.
-#[derive(Component, Default, Clone)]
-pub struct VendingTitle;
-
-/// The region the rebuild system refills; typed fields live here.
+/// The region [`rebuild_content`] refills; typed fields live here.
 #[derive(Component, Default, Clone)]
 pub struct VendingContentHost;
 
-/// The editor/monitor status line (SP already paid, or earned total).
-#[derive(Component, Default, Clone)]
-pub struct VendingModeNote;
-
-/// The validation/rejection line under the content.
-#[derive(Component, Default, Clone)]
-pub struct VendingErrorLine;
-
-/// The shop title field; read on submit, never mirrored per keystroke.
+/// The shop name field; read on submit, never mirrored per keystroke.
 #[derive(Component, Default, Clone)]
 pub struct VendingTitleField;
 
-/// Which typed value a row field holds.
-#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+/// Which typed value a listing field holds.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DraftFieldKind {
     #[default]
     Amount,
@@ -96,42 +83,95 @@ pub struct VendingDraftField {
     pub kind: DraftFieldKind,
 }
 
-/// The remove affordance of a drafted listing.
+/// The quantity field of the browsed listing with this index. The row's stepper edits
+/// it and Add reads it.
 #[derive(Component, Default, Clone, Copy)]
-pub struct VendingRowRemove {
-    pub cart_index: u32,
-}
+pub struct VendingQtyField(pub u32);
 
-/// The submit affordance of the editor.
+/// The Open Shop button, greyed out until the draft can open.
 #[derive(Component, Default, Clone)]
 pub struct VendingOpenButton;
 
-/// One basket row, keyed by its opaque listing index.
+/// Where an inspected item lives.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Surface {
+    /// A cart slot, by its cart index.
+    #[default]
+    Cart,
+    /// A listing of the shop being browsed, by its opaque listing index.
+    Listing,
+    /// A listing of the seller's own open shop.
+    Shop,
+}
+
+/// An item row; a right-click opens its details.
 #[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VendingBasketRow {
+pub struct VendingItem {
+    pub surface: Surface,
     pub index: u32,
 }
 
-/// The remove affordance of a basket row.
+/// A scroll viewport whose offset survives a rebuild.
 #[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BasketRemove {
-    pub index: u32,
+pub enum VendingScroll {
+    #[default]
+    Stock,
+    Listings,
+    Sales,
+    ForSale,
+    Basket,
 }
 
-/// One quantity stepper of a basket row.
-#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BasketStep {
-    pub index: u32,
-    pub up: bool,
+/// A text of the setup body that follows what is typed. The keyed ones belong to the
+/// listing of that cart slot.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SetupReadout {
+    #[default]
+    TitleCount,
+    /// The title on the sign preview.
+    Sign,
+    Note(u32),
+    /// The price spelled out, as in `2 million`.
+    Words(u32),
+    Total(u32),
+    /// What the whole shop earns if everything sells.
+    Potential,
+    Status,
 }
 
-/// The cancel affordance of the editor.
-#[derive(Component, Default, Clone)]
-pub struct VendingCancelButton;
-
-/// Body identity: what is shown, which shop or setup it belongs to, and the rows
-/// it renders (cart slots for the editor, staged quantities for the basket).
-type Structure = (Mode, String, Vec<(u32, u32)>);
+/// What a vending button does when activated.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VendingAction {
+    /// The title bar's close button: cancels a setup, hides anything else.
+    #[default]
+    CloseWindow,
+    /// Lists the cart slot with this index.
+    List(u32),
+    Unlist(u32),
+    OpenShop,
+    CancelSetup,
+    /// Raises the Close Shop prompt.
+    AskClose,
+    KeepOpen,
+    CloseShop,
+    /// Steps the quantity field of a browsed listing down.
+    RowDec(u32),
+    RowInc(u32),
+    /// Adds a browsed listing's typed quantity to the basket.
+    AddRow(u32),
+    RemoveLine(u32),
+    /// Sends the basket, unless its total needs confirming first.
+    Buy,
+    /// Sends a basket the confirmation is up for.
+    BuyNow,
+    BackFromConfirm,
+    /// Dismisses the note about what a refreshed shop changed.
+    AckChange,
+    Refresh,
+    /// Leaves the closed shop's summary for the pushcart window.
+    BackToCart,
+    SetUpAgain,
+}
 
 /// Which body the window is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +179,20 @@ enum Mode {
     Setup,
     Shop,
     Browse,
+    /// The summary of a shop that just closed.
+    Closed,
+}
+
+impl Mode {
+    /// Width of the window's shape around this body.
+    fn width(self) -> f32 {
+        match self {
+            Mode::Setup => 964.0,
+            Mode::Shop => 904.0,
+            Mode::Browse => 944.0,
+            Mode::Closed => 448.0,
+        }
+    }
 }
 
 /// What the window currently shows, and whether the player wants it open.
@@ -146,19 +200,22 @@ enum Mode {
 pub struct VendingUi {
     visible: bool,
     mode: Option<Mode>,
-    /// The structural identity of the rendered body, so unrelated updates do not
-    /// respawn (and thereby unfocus) typed fields.
-    structure: Option<Structure>,
     /// The browse snapshot the basket was last reconciled against.
-    last_browse: Option<net_contract::dto::VendingSnapshot>,
+    last_browse: Option<VendingSnapshot>,
     error: Option<String>,
+    /// What a refreshed shop took out of the basket, until acknowledged.
+    change: Option<String>,
     pending_close: bool,
-    /// The left panel's rendered identity; see [`source::SourceStructure`].
-    source_structure: Option<source::SourceStructure>,
-    /// The item under the pointer in the left panel, for its info line.
-    hovered: Option<drag::DragSource>,
+    /// The Close Shop prompt is up.
+    ask_close: bool,
+    /// The buyer's "check the zeros" prompt is up.
+    confirm: bool,
     /// A freshly listed row whose price field should take focus once spawned.
     focus_price: Option<u32>,
+    /// The open shop's id with each listing's amount when the window first saw it.
+    opening: (String, Vec<(u32, u32)>),
+    /// The closed shop whose summary the player has already seen.
+    dismissed: Option<String>,
 }
 
 impl VendingUi {
@@ -170,12 +227,12 @@ impl VendingUi {
         self.error.as_deref()
     }
 
-    fn hide(&mut self) {
+    /// Hides the window and retires the closed shop's summary with it.
+    fn hide(&mut self, state: &VendingState) {
         self.visible = false;
-    }
-
-    fn set_error(&mut self, error: Option<String>) {
-        self.error = error;
+        if let Some(shop) = state.last_closed_shop() {
+            self.dismissed = Some(shop.shop_id.clone());
+        }
     }
 }
 
@@ -186,31 +243,19 @@ impl Plugin for VendingWindowPlugin {
         app.init_resource::<SellerDraft>()
             .init_resource::<BuyerBasket>()
             .init_resource::<VendingUi>()
-            .init_resource::<drag::VendingDrag>()
-            .init_resource::<drag::LastVendingClick>()
             .add_systems(
                 Update,
                 (
-                    (
-                        reveal_on_intent,
-                        sync_window_state,
-                        sync_browse_basket,
-                        settle_buyer_basket,
-                        rebuild_content,
-                        source::rebuild_source,
-                        focus_new_price_field,
-                    )
-                        .chain(),
-                    (
-                        sync_texts,
-                        source::sync_source_info,
-                        drag::highlight_drop_zones,
-                        drag::end_drag_on_release,
-                        drag::update_vending_ghost,
-                        deliver_vending_feedback,
-                        cancel_on_escape,
-                    )
-                        .chain(),
+                    reveal_on_intent,
+                    sync_window_state,
+                    sync_browse_basket,
+                    settle_buyer_basket,
+                    rebuild_content,
+                    focus_new_price_field,
+                    sync_setup_readouts,
+                    light_field_focus::<VendingQtyField>,
+                    deliver_vending_feedback,
+                    cancel_on_escape,
                 )
                     .chain()
                     .after(VendingSystems::Projection)
@@ -238,6 +283,63 @@ fn reset_vending_ui(
     *ui = VendingUi::default();
 }
 
+/// The world as the vending window reads it.
+#[derive(SystemParam)]
+pub struct VendingData<'w, 's> {
+    state: Res<'w, VendingState>,
+    cart: Res<'w, Cart>,
+    item_db: Res<'w, ItemDb>,
+    registry: Res<'w, EntityRegistry>,
+    names: Query<'w, 's, &'static EntityName>,
+    statuses: Query<'w, 's, &'static CharacterStatus, With<LocalPlayer>>,
+}
+
+impl VendingData<'_, '_> {
+    /// The local player's zeny, weight and weight limit.
+    fn purse(&self) -> (u32, u32, u32) {
+        self.statuses.iter().next().map_or((0, 0, 0), |status| {
+            (status.zeny, status.weight, status.max_weight)
+        })
+    }
+
+    /// The vendor's name, once its entity has spawned and been named.
+    fn vendor_name(&self, unit_id: u64) -> Option<String> {
+        let entity = self.registry.get_entity(u32::try_from(unit_id).ok()?)?;
+        self.names.get(entity).ok().map(|name| name.name.clone())
+    }
+}
+
+/// The typed fields of the setup body.
+#[derive(SystemParam)]
+pub struct SetupFields<'w, 's> {
+    title: Query<'w, 's, &'static EditableText, With<VendingTitleField>>,
+    rows: Query<'w, 's, (&'static VendingDraftField, &'static EditableText)>,
+}
+
+impl SetupFields<'_, '_> {
+    /// Copies what is typed into `draft`. An empty price stays unset and an empty
+    /// quantity counts as zero, so neither can pass validation by accident.
+    fn absorb(&self, draft: &mut SellerDraft) {
+        if let Ok(title) = self.title.single() {
+            draft.title = title.value().to_string();
+        }
+        for (field, text) in &self.rows {
+            let Some(row) = draft
+                .rows
+                .iter_mut()
+                .find(|row| row.cart_index == field.cart_index)
+            else {
+                continue;
+            };
+            let typed = typed_number(text);
+            match field.kind {
+                DraftFieldKind::Amount => row.amount = typed.unwrap_or(0),
+                DraftFieldKind::Price => row.price = typed,
+            }
+        }
+    }
+}
+
 /// Shows the window for a seller reveal or a freshly loaded vendor shop.
 ///
 /// Browse results are the only list notices (owner reconciliation emits none),
@@ -262,326 +364,256 @@ fn reveal_on_intent(
     }
 }
 
-fn sync_window_state(
-    state: Res<VendingState>,
-    mut ui: ResMut<VendingUi>,
-    mut draft: ResMut<SellerDraft>,
-    mut roots: Query<(&mut Visibility, &Children), With<VendingWindowRoot>>,
-    mut titles: Query<&mut Text, With<VendingTitle>>,
-) {
-    // A close that the domain no longer tracks has settled (or was rejected), so
-    // the affordance becomes usable again instead of staying latched.
-    if ui.pending_close && !state.close_pending() {
-        ui.pending_close = false;
-    }
-
-    let mode = current_mode(&state);
-
-    // A new authoritative setup always opens the editor; leaving vending hides it.
-    if ui.mode != mode {
-        if mode == Some(Mode::Setup) {
-            ui.visible = true;
-            draft.reset();
-        }
-        ui.mode = mode;
-        ui.error = None;
-        ui.pending_close = false;
-    }
-
-    let Ok((mut visibility, _)) = roots.single_mut() else {
-        return;
-    };
-    *visibility = if ui.visible && mode.is_some() {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-
-    let label = match mode {
-        Some(Mode::Setup) => "Set Up Shop",
-        Some(Mode::Shop) => "My Shop",
-        Some(Mode::Browse) => "Vendor",
-        None => "Vending",
-    };
-    for mut title in &mut titles {
-        if title.0 != label {
-            title.0 = label.to_string();
-        }
-    }
-}
-
-/// Setup preparation wins over everything: the seller editor is authoritative.
-fn current_mode(state: &VendingState) -> Option<Mode> {
+/// Setup preparation wins over everything: the seller editor is authoritative. A
+/// closed shop's summary shows last, and only until it is dismissed.
+fn current_mode(state: &VendingState, dismissed: Option<&str>) -> Option<Mode> {
     if state.setup().is_some() {
         return Some(Mode::Setup);
     }
     if state.browse().is_some() {
         return Some(Mode::Browse);
     }
-    state.active_shop().map(|_| Mode::Shop)
-}
-
-fn state_identity(state: &VendingState) -> (Option<Mode>, String) {
-    match current_mode(state) {
-        Some(Mode::Setup) => (
-            Some(Mode::Setup),
-            state
-                .setup()
-                .map_or_else(String::new, |setup| setup.setup_id.clone()),
-        ),
-        Some(Mode::Shop) => (
-            Some(Mode::Shop),
-            state
-                .active_shop()
-                .map_or_else(String::new, |shop| shop.shop_id.clone()),
-        ),
-        Some(Mode::Browse) => (
-            Some(Mode::Browse),
-            state
-                .browse()
-                .map_or_else(String::new, |shop| shop.shop_id.clone()),
-        ),
-        None => (None, String::new()),
+    if state.active_shop().is_some() {
+        return Some(Mode::Shop);
     }
+    state
+        .last_closed_shop()
+        .filter(|shop| dismissed != Some(shop.shop_id.as_str()))
+        .map(|_| Mode::Closed)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "one rebuild reads the state, draft, item names, typed fields and hosts"
-)]
-fn rebuild_content(
-    mut commands: Commands,
-    state: Res<VendingState>,
-    cart: Res<Cart>,
-    item_db: Res<ItemDb>,
+/// Follows the domain into the body it calls for, then shows, sizes and titles the
+/// window to match.
+fn sync_window_state(
+    data: VendingData,
     mut ui: ResMut<VendingUi>,
     mut draft: ResMut<SellerDraft>,
-    basket: Res<BuyerBasket>,
-    statuses: Query<&CharacterStatus, With<LocalPlayer>>,
-    fields: Query<(&VendingDraftField, &EditableText)>,
-    title_fields: Query<&EditableText, With<VendingTitleField>>,
-    hosts: Query<(Entity, Option<&Children>), With<VendingContentHost>>,
-    new_hosts: Query<(), Added<VendingContentHost>>,
+    mut roots: Query<(&mut Visibility, &mut Node), With<VendingWindowRoot>>,
+    titlebars: Query<&Children, With<VendingWindowTitlebar>>,
+    mut texts: Query<&mut Text>,
 ) {
-    let (mode, identity) = state_identity(&state);
-    let membership: Vec<(u32, u32)> = match mode {
-        Some(Mode::Setup) => draft.rows.iter().map(|row| (row.cart_index, 0)).collect(),
-        Some(Mode::Browse) => basket
-            .lines()
+    let state = &data.state;
+    // A close that the domain no longer tracks has settled (or was rejected), so
+    // the affordance becomes usable again instead of staying latched.
+    if ui.pending_close && !state.close_pending() {
+        ui.pending_close = false;
+    }
+
+    let mode = current_mode(state, ui.dismissed.as_deref());
+    if ui.mode != mode {
+        // A new setup always opens the editor, and a closed shop its summary.
+        if matches!(mode, Some(Mode::Setup | Mode::Closed)) {
+            ui.visible = true;
+        }
+        if mode == Some(Mode::Setup) {
+            draft.reset();
+        }
+        ui.mode = mode;
+        ui.error = None;
+        ui.change = None;
+        ui.pending_close = false;
+        ui.ask_close = false;
+        ui.confirm = false;
+    }
+    // A summary that another body replaced is not brought back afterwards.
+    let stale_summary = state
+        .last_closed_shop()
+        .filter(|_| mode.is_some_and(|mode| mode != Mode::Closed))
+        .filter(|shop| ui.dismissed.as_deref() != Some(shop.shop_id.as_str()));
+    if let Some(shop) = stale_summary {
+        ui.dismissed = Some(shop.shop_id.clone());
+    }
+    let newly_open = state
+        .active_shop()
+        .filter(|shop| shop.shop_id != ui.opening.0);
+    if let Some(shop) = newly_open {
+        let amounts = shop
+            .items
             .iter()
-            .map(|line| (line.index, line.amount))
-            .collect(),
-        _ => Vec::new(),
-    };
-    let structure = mode.map(|mode| (mode, identity, membership));
-    if structure == ui.structure && new_hosts.is_empty() {
-        return;
+            .map(|item| (item.index, item.amount))
+            .collect();
+        ui.opening = (shop.shop_id.clone(), amounts);
     }
-    ui.structure = structure;
-    ui.pending_close = false;
 
-    absorb_typed_fields(&fields, &title_fields, &mut draft);
-
-    let Ok((host, children)) = hosts.single() else {
+    let Ok((mut visibility, mut node)) = roots.single_mut() else {
         return;
     };
-    for children in children.into_iter() {
-        for child in children.iter() {
-            commands.entity(child).despawn();
-        }
+    let shown = shown_if(ui.visible && mode.is_some());
+    if *visibility != shown {
+        *visibility = shown;
     }
-
-    let error = ui.error.clone();
-    match mode {
-        Some(Mode::Setup) => {
-            let Some(setup) = state.setup() else { return };
-            let rows = draft_views(&draft, &cart, &item_db);
-            let note = format!("SP already paid: {}", setup.sp_spent);
-            let slots = format!("{} / {} slots", draft.rows.len(), setup.max_slots);
-            commands
-                .spawn_scene(scene::editor(rows, draft.title.clone(), note, slots, error))
-                .insert(ChildOf(host));
-        }
-        Some(Mode::Shop) => {
-            let Some(shop) = state.active_shop() else {
-                return;
-            };
-            let rows = shop_views(shop, &item_db);
-            let sales = sale_views(state.recent_sales(), &item_db);
-            let note = format!("Earned {}z", shop.total_earned);
-            commands
-                .spawn_scene(scene::monitor(rows, sales, note, error))
-                .insert(ChildOf(host));
-        }
-        Some(Mode::Browse) => {
-            let Some(shop) = state.browse() else { return };
-            let rows = basket_views(shop, &basket, &item_db);
-            let total = basket.total(shop);
-            let note = match total {
-                Some(total) => format!("Total {}z", total),
-                None => "Total -".to_string(),
-            };
-            let zeny = u64::from(statuses.iter().next().map_or(0, |status| status.zeny));
-            let guidance = total.and_then(|total| {
-                (total > zeny).then(|| format!("You need {} more zeny.", total - zeny))
-            });
-            commands
-                .spawn_scene(scene::buyer(rows, note, guidance, error))
-                .insert(ChildOf(host));
-        }
-        None => {}
+    let Some(mode) = mode else {
+        return;
+    };
+    let width = px(mode.width() + 2.0 * WINDOW_SHADOW);
+    if node.width != width {
+        node.width = width;
     }
-}
-
-fn absorb_typed_fields(
-    fields: &Query<(&VendingDraftField, &EditableText)>,
-    title_fields: &Query<&EditableText, With<VendingTitleField>>,
-    draft: &mut SellerDraft,
-) {
-    if let Ok(title) = title_fields.single() {
-        draft.title = title.value().to_string();
-    }
-    for (field, text) in fields {
-        let parsed = text.value().to_string().trim().parse::<u32>().ok();
-        let Some(row) = draft
-            .rows
-            .iter_mut()
-            .find(|row| row.cart_index == field.cart_index)
-        else {
+    let title = match mode {
+        Mode::Setup => "Set Up Shop".to_string(),
+        Mode::Shop | Mode::Closed => "Your Shop".to_string(),
+        Mode::Browse => state
+            .browse()
+            .and_then(|shop| data.vendor_name(shop.vendor_unit_id))
+            .map_or_else(
+                || "Shop".to_string(),
+                |name| format!("{name}\u{2019}s Shop"),
+            ),
+    };
+    for child in titlebars.iter().flatten() {
+        let Ok(mut text) = texts.get_mut(*child) else {
             continue;
         };
-        if let Some(parsed) = parsed {
-            match field.kind {
-                DraftFieldKind::Amount => row.amount = parsed,
-                DraftFieldKind::Price => row.price = parsed,
-            }
+        if text.0 != title {
+            text.0.clone_from(&title);
         }
     }
 }
 
-fn draft_views(draft: &SellerDraft, cart: &Cart, item_db: &ItemDb) -> Vec<scene::DraftRowView> {
-    draft
-        .rows
-        .iter()
-        .filter_map(|row| {
-            let item = cart.get(u16::try_from(row.cart_index).ok()?)?;
-            Some(scene::DraftRowView {
-                cart_index: row.cart_index,
-                cell: ItemCellView {
-                    icon: item_icon(item_db, item.nameid, item.identified),
-                    refine: item.refine,
-                    ..default()
-                },
-                label: item_name(item_db, item.nameid, item.identified),
-                stock: item.amount,
-                amount_input: row.amount.to_string(),
-                price_input: row.price.to_string(),
-            })
-        })
-        .collect()
+/// What the body shows. The setup body is identified by its grant and its listed
+/// slots alone, so nothing typed into it and no unrelated update redraws it.
+#[derive(PartialEq)]
+enum Body {
+    Setup(String, Vec<u32>),
+    Seller(view::SellerView),
+    Buyer(view::BuyerView),
+    Closed(view::ClosedView),
 }
 
-fn shop_views(
-    shop: &net_contract::dto::VendingSnapshot,
-    item_db: &ItemDb,
-) -> Vec<scene::ShopRowView> {
-    shop.items
-        .iter()
-        .map(|item| scene::ShopRowView {
-            index: item.index,
-            cell: ItemCellView {
-                icon: item_icon(item_db, item.nameid, item.identified),
-                refine: item.refine,
-                ..default()
-            },
-            label: item_name(item_db, item.nameid, item.identified),
-            amount: item.amount,
-            price: item.price,
-        })
-        .collect()
-}
-
-/// One row per staged basket line, in staging order.
-fn basket_views(
-    shop: &net_contract::dto::VendingSnapshot,
+fn current_body(
+    data: &VendingData,
+    ui: &VendingUi,
     basket: &BuyerBasket,
-    item_db: &ItemDb,
-) -> Vec<scene::BasketRowView> {
-    basket
-        .lines()
-        .iter()
-        .filter_map(|line| {
-            let listing = shop.items.iter().find(|item| item.index == line.index)?;
-            Some(scene::BasketRowView {
-                index: line.index,
-                cell: ItemCellView {
-                    icon: item_icon(item_db, listing.nameid, listing.identified),
-                    refine: listing.refine,
-                    ..default()
-                },
-                label: item_name(item_db, listing.nameid, listing.identified),
-                price: listing.price,
-                quantity: line.amount,
-                line_total: u64::from(listing.price) * u64::from(line.amount),
+    draft: &SellerDraft,
+) -> Option<Body> {
+    let state = &data.state;
+    let (zeny, weight, max_weight) = data.purse();
+    Some(match ui.mode? {
+        Mode::Setup => Body::Setup(
+            state.setup()?.setup_id.clone(),
+            draft.rows.iter().map(|row| row.cart_index).collect(),
+        ),
+        Mode::Shop => Body::Seller(view::SellerView {
+            zeny,
+            closing: ui.pending_close || state.close_pending(),
+            ask_close: ui.ask_close,
+            error: ui.error.clone(),
+            ..view::seller_view(
+                state.active_shop()?,
+                &ui.opening.1,
+                state.recent_sales(),
+                &data.item_db,
+            )
+        }),
+        Mode::Browse => {
+            let shop = state.browse()?;
+            Body::Buyer(view::BuyerView {
+                vendor: data.vendor_name(shop.vendor_unit_id),
+                zeny,
+                weight,
+                max_weight,
+                change: ui.change.clone(),
+                error: ui.error.clone(),
+                confirm: ui.confirm,
+                pending: state.purchase_pending(),
+                ..view::buyer_view(shop, basket, &data.item_db)
             })
-        })
-        .collect()
+        }
+        Mode::Closed => Body::Closed(view::closed_view(state.last_closed_shop()?)),
+    })
 }
 
-fn sale_views(
-    sales: &[lifthrasir_client::domain::vending::VendingSale],
-    item_db: &ItemDb,
-) -> Vec<scene::SaleRowView> {
-    sales
-        .iter()
-        .map(|sale| scene::SaleRowView {
-            cell: ItemCellView {
-                icon: item_icon(item_db, sale.nameid, true),
-                ..default()
-            },
-            label: item_name(item_db, sale.nameid, true),
-            amount: sale.amount,
-            zeny: sale.zeny_gained,
-            buyer: sale.buyer_name.clone(),
-        })
-        .collect()
+/// The body host and the scroll offsets of what it holds.
+#[derive(SystemParam)]
+struct Mounts<'w, 's> {
+    hosts: Query<
+        'w,
+        's,
+        (
+            Entity,
+            Ref<'static, VendingContentHost>,
+            Option<&'static Children>,
+        ),
+    >,
+    scrolls: Query<'w, 's, (&'static VendingScroll, &'static ScrollPosition)>,
 }
 
-fn sync_texts(
-    state: Res<VendingState>,
+impl Mounts<'_, '_> {
+    fn scroll(&self, kind: VendingScroll) -> Vec2 {
+        self.scrolls
+            .iter()
+            .find(|(scroll, _)| **scroll == kind)
+            .map(|(_, position)| position.0)
+            .unwrap_or_default()
+    }
+}
+
+/// The seller's draft with the fields it is typed into.
+#[derive(SystemParam)]
+struct Drafting<'w, 's> {
+    draft: ResMut<'w, SellerDraft>,
+    fields: SetupFields<'w, 's>,
+}
+
+/// Refills the body host when what it shows changes, and empties it while the window
+/// is hidden. Lists keep their scroll offsets, and what was typed into the setup body
+/// is copied into the draft before its fields are respawned.
+fn rebuild_content(
+    mut commands: Commands,
+    data: VendingData,
     ui: Res<VendingUi>,
-    mut notes: Query<&mut Text, (With<VendingModeNote>, Without<VendingErrorLine>)>,
-    mut errors: Query<&mut Text, With<VendingErrorLine>>,
+    basket: Res<BuyerBasket>,
+    mut drafting: Drafting,
+    mounts: Mounts,
+    mut shown: Local<Option<Body>>,
 ) {
-    let note = match (ui.mode, state.setup(), state.active_shop()) {
-        (Some(Mode::Setup), Some(setup), _) => format!("SP already paid: {}", setup.sp_spent),
-        (Some(Mode::Shop), _, Some(shop)) => format!("Earned {}z", shop.total_earned),
-        _ => String::new(),
+    let Ok((host, mount, children)) = mounts.hosts.single() else {
+        return;
     };
-    for mut text in &mut notes {
-        if text.0 != note {
-            text.0 = note.clone();
-        }
+    let body = ui
+        .is_visible()
+        .then(|| current_body(&data, &ui, &basket, &drafting.draft))
+        .flatten();
+    if body == *shown && !mount.is_added() {
+        return;
     }
-    let error = ui.error.clone().unwrap_or_default();
-    for mut text in &mut errors {
-        if text.0 != error {
-            text.0 = error.clone();
-        }
+    drafting.fields.absorb(&mut drafting.draft);
+    for child in children.into_iter().flatten() {
+        commands.entity(*child).despawn();
     }
+    let scroll = |first, second| [mounts.scroll(first), mounts.scroll(second)];
+    let content = match &body {
+        Some(Body::Setup(..)) => data.state.setup().map(|setup| {
+            let view = view::setup_view(setup, &drafting.draft, &data.cart, &data.item_db);
+            let scroll = scroll(VendingScroll::Stock, VendingScroll::Listings);
+            commands.spawn_scene(scene::setup(view, scroll)).id()
+        }),
+        Some(Body::Seller(view)) => {
+            let scroll = scroll(VendingScroll::Stock, VendingScroll::Sales);
+            Some(
+                commands
+                    .spawn_scene(scene::seller(view.clone(), scroll))
+                    .id(),
+            )
+        }
+        Some(Body::Buyer(view)) => {
+            let scroll = scroll(VendingScroll::ForSale, VendingScroll::Basket);
+            Some(
+                commands
+                    .spawn_scene(scene::buyer(view.clone(), scroll))
+                    .id(),
+            )
+        }
+        Some(Body::Closed(view)) => Some(commands.spawn_scene(scene::closed(view.clone())).id()),
+        None => None,
+    };
+    if let Some(content) = content {
+        commands.entity(content).insert(ChildOf(host));
+    }
+    *shown = body;
 }
 
-pub fn on_row_removed(
-    activate: On<Activate>,
-    removals: Query<&VendingRowRemove>,
-    mut draft: ResMut<SellerDraft>,
-) {
-    if let Ok(removal) = removals.get(activate.entity) {
-        draft.remove(removal.cart_index);
-    }
-}
-
-/// Focuses the price field of a row just listed by a drop or double-click.
+/// Focuses the price field of a row that was just listed.
 fn focus_new_price_field(
     mut ui: ResMut<VendingUi>,
     fields: Query<(Entity, &VendingDraftField), Added<VendingDraftField>>,
@@ -599,101 +631,371 @@ fn focus_new_price_field(
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "submitting reads typed fields, the draft, the cart and the setup"
-)]
-pub fn on_open_shop(
-    _: On<Activate>,
-    state: Res<VendingState>,
-    cart: Res<Cart>,
-    mut draft: ResMut<SellerDraft>,
-    fields: Query<(&VendingDraftField, &EditableText)>,
-    title_fields: Query<&EditableText, With<VendingTitleField>>,
-    mut ui: ResMut<VendingUi>,
-    mut intents: MessageWriter<VendingIntent>,
-    mut focus: ResMut<InputFocus>,
+type TitleField<'a> = (Entity, &'a EditableText, &'a mut BorderColor);
+type DraftField<'a> = (
+    Entity,
+    &'a VendingDraftField,
+    &'a EditableText,
+    &'a mut BorderColor,
+);
+
+/// Keeps the setup body's read-outs, field borders and Open Shop button in step with
+/// what is typed, without respawning anything.
+fn sync_setup_readouts(
+    data: VendingData,
+    ui: Res<VendingUi>,
+    focus: Res<InputFocus>,
+    mut titles: Query<TitleField, With<VendingTitleField>>,
+    mut rows: Query<DraftField, Without<VendingTitleField>>,
+    mut readouts: Query<(&SetupReadout, &mut Text, &mut TextColor)>,
+    mut open: Query<(&mut ImageNode, &mut Pickable), With<VendingOpenButton>>,
 ) {
-    if ui.pending_close || state.open_pending() {
-        return;
-    }
-    let Some(setup) = state.setup().cloned() else {
+    let Some(setup) = data.state.setup() else {
         return;
     };
-    absorb_typed_fields(&fields, &title_fields, &mut draft);
-    if let Ok(title) = title_fields.single() {
-        draft.title = clamp_title(&title.value().to_string(), setup.max_title_bytes);
+    let Ok((title_field, title, mut title_border)) = titles.single_mut() else {
+        return;
+    };
+    let mut typed: Vec<(u32, Option<u32>, Option<u32>)> = Vec::new();
+    for (_, field, text, _) in &rows {
+        let position = typed
+            .iter()
+            .position(|(cart_index, ..)| *cart_index == field.cart_index)
+            .unwrap_or_else(|| {
+                typed.push((field.cart_index, None, None));
+                typed.len() - 1
+            });
+        match field.kind {
+            DraftFieldKind::Amount => typed[position].1 = typed_number(text),
+            DraftFieldKind::Price => typed[position].2 = typed_number(text),
+        }
+    }
+    let live = view::setup_live(
+        view::TypedSetup {
+            title: &title.value().to_string(),
+            rows: &typed,
+        },
+        setup,
+        &data.cart,
+        &data.item_db,
+        ui.error(),
+    );
+
+    for (readout, mut text, mut color) in &mut readouts {
+        let Some((value, tone)) = live.texts.get(readout) else {
+            continue;
+        };
+        if text.0 != *value {
+            text.0.clone_from(value);
+        }
+        if color.0 != *tone {
+            color.0 = *tone;
+        }
     }
 
-    if let Err(error) = draft.validate(&setup, &cart) {
-        ui.set_error(Some(error));
-        return;
+    let border = |entity, bad| {
+        BorderColor::all(if focus.get() == Some(entity) {
+            ro_dark::FROST_GLOW
+        } else if bad {
+            ro_dark::STATUS_FULL
+        } else {
+            ro_dark::SLOT_STROKE
+        })
+    };
+    let wanted = border(title_field, live.bad_title);
+    if *title_border != wanted {
+        *title_border = wanted;
     }
-    ui.set_error(None);
-    focus.clear();
-    intents.write(VendingIntent::Open {
-        setup_id: setup.setup_id,
-        title: draft.title.trim().to_string(),
-        entries: draft.offers(),
-    });
+    for (entity, field, _, mut stroke) in &mut rows {
+        let bad = live.bad_fields.contains(&(field.cart_index, field.kind));
+        let wanted = border(entity, bad);
+        if *stroke != wanted {
+            *stroke = wanted;
+        }
+    }
+
+    for (mut art, mut pickable) in &mut open {
+        let (tint, usable) = if live.ready {
+            (Color::WHITE, true)
+        } else {
+            (DISABLED_TINT, false)
+        };
+        if art.color != tint {
+            art.color = tint;
+        }
+        if pickable.is_hoverable != usable {
+            *pickable = Pickable {
+                should_block_lower: usable,
+                is_hoverable: usable,
+            };
+        }
+    }
 }
 
-pub fn on_cancel_setup(
-    _: On<Activate>,
-    state: Res<VendingState>,
-    mut ui: ResMut<VendingUi>,
-    mut intents: MessageWriter<VendingIntent>,
-    mut focus: ResMut<InputFocus>,
+type QtyField = (&'static VendingQtyField, &'static mut EditableText);
+/// Keeps the buyer's quantity fields apart from the setup fields [`SetupFields`] reads.
+type NotSetupField = (Without<VendingDraftField>, Without<VendingTitleField>);
+
+/// Everything a vending button may read or change. Only local staging and intents:
+/// the server still validates the submitted shop or purchase.
+#[derive(SystemParam)]
+pub struct VendingActions<'w, 's> {
+    data: VendingData<'w, 's>,
+    draft: ResMut<'w, SellerDraft>,
+    basket: ResMut<'w, BuyerBasket>,
+    ui: ResMut<'w, VendingUi>,
+    intents: MessageWriter<'w, VendingIntent>,
+    focus: ResMut<'w, InputFocus>,
+    fields: SetupFields<'w, 's>,
+    quantities: Query<'w, 's, QtyField, NotSetupField>,
+    carts: Query<'w, 's, &'static mut Visibility, With<CartWindowRoot>>,
+}
+
+impl VendingActions<'_, '_> {
+    fn run(&mut self, action: VendingAction) {
+        match action {
+            VendingAction::CloseWindow => {
+                close_window(&self.data.state, &mut self.ui, &mut self.intents);
+            }
+            VendingAction::List(cart_index) => {
+                self.ui.error = self.list(cart_index).err();
+            }
+            VendingAction::Unlist(cart_index) => {
+                self.draft.remove(cart_index);
+            }
+            VendingAction::OpenShop => self.open_shop(),
+            VendingAction::CancelSetup => self.cancel_setup(),
+            VendingAction::AskClose => self.ui.ask_close = true,
+            VendingAction::KeepOpen => self.ui.ask_close = false,
+            VendingAction::CloseShop => self.close_shop(),
+            VendingAction::RowDec(index) => self.step_row(index, -1),
+            VendingAction::RowInc(index) => self.step_row(index, 1),
+            VendingAction::AddRow(index) => self.add_row(index),
+            VendingAction::RemoveLine(index) => self.remove_line(index),
+            VendingAction::Buy => self.buy(false),
+            VendingAction::BuyNow => self.buy(true),
+            VendingAction::BackFromConfirm => self.ui.confirm = false,
+            VendingAction::AckChange => self.ui.change = None,
+            VendingAction::Refresh => {
+                self.intents.write(VendingIntent::Refresh);
+            }
+            VendingAction::BackToCart => {
+                self.ui.hide(&self.data.state);
+                for mut visibility in &mut self.carts {
+                    *visibility = Visibility::Visible;
+                }
+            }
+            VendingAction::SetUpAgain => {
+                self.ui.hide(&self.data.state);
+                self.intents.write(VendingIntent::EnterSeller);
+            }
+        }
+    }
+
+    /// Lists a cart slot with its whole stack and queues its price field for focus.
+    fn list(&mut self, cart_index: u32) -> Result<(), String> {
+        let setup = self.data.state.setup().ok_or("The shop setup has ended.")?;
+        let stock = u16::try_from(cart_index)
+            .ok()
+            .and_then(|slot| self.data.cart.get(slot))
+            .map(|item| item.amount)
+            .ok_or("That cart slot no longer holds an item.")?;
+        if self.draft.add(cart_index, stock, setup)? {
+            self.ui.focus_price = Some(cart_index);
+        }
+        Ok(())
+    }
+
+    fn open_shop(&mut self) {
+        if self.ui.pending_close || self.data.state.open_pending() {
+            return;
+        }
+        let Some(setup) = self.data.state.setup() else {
+            return;
+        };
+        self.fields.absorb(&mut self.draft);
+        self.draft.title = clamp_title(self.draft.title.trim(), setup.max_title_bytes);
+        if let Err(error) = self.draft.validate(setup, &self.data.cart) {
+            self.ui.error = Some(error);
+            return;
+        }
+        self.ui.error = None;
+        self.focus.clear();
+        self.intents.write(VendingIntent::Open {
+            setup_id: setup.setup_id.clone(),
+            title: self.draft.title.clone(),
+            entries: self.draft.offers(),
+        });
+    }
+
+    fn cancel_setup(&mut self) {
+        let Some(setup) = self.data.state.setup() else {
+            return;
+        };
+        if self.ui.pending_close {
+            return;
+        }
+        self.ui.pending_close = true;
+        self.focus.clear();
+        self.intents.write(VendingIntent::Close {
+            target: VendingCloseTarget::Setup(setup.setup_id.clone()),
+        });
+    }
+
+    fn close_shop(&mut self) {
+        let Some(shop) = self.data.state.active_shop() else {
+            return;
+        };
+        if self.ui.pending_close {
+            return;
+        }
+        self.ui.pending_close = true;
+        self.ui.ask_close = false;
+        self.intents.write(VendingIntent::Close {
+            target: VendingCloseTarget::Shop(shop.shop_id.clone()),
+        });
+    }
+
+    /// The typed quantity of a browsed listing. An empty field counts as one.
+    fn typed_quantity(&self, index: u32) -> u32 {
+        self.quantities
+            .iter()
+            .find(|(field, _)| field.0 == index)
+            .and_then(|(_, text)| typed_number(text))
+            .unwrap_or(1)
+            .max(1)
+    }
+
+    /// Steps a listing's quantity field within what the basket has not taken yet.
+    fn step_row(&mut self, index: u32, step: i32) {
+        let Some(shop) = self.data.state.browse() else {
+            return;
+        };
+        let Some(listing) = shop.items.iter().find(|item| item.index == index) else {
+            return;
+        };
+        let room = listing
+            .amount
+            .saturating_sub(self.basket.quantity(index))
+            .max(1);
+        let quantity = self
+            .typed_quantity(index)
+            .saturating_add_signed(step)
+            .clamp(1, room);
+        if let Some((_, mut text)) = self
+            .quantities
+            .iter_mut()
+            .find(|(field, _)| field.0 == index)
+        {
+            set_field_text(&mut text, &quantity.to_string());
+        }
+    }
+
+    fn add_row(&mut self, index: u32) {
+        if self.data.state.purchase_pending() {
+            return;
+        }
+        let Some(shop) = self.data.state.browse() else {
+            return;
+        };
+        let wanted = self
+            .basket
+            .quantity(index)
+            .saturating_add(self.typed_quantity(index));
+        self.basket.set_quantity(shop, index, wanted);
+        self.ui.confirm = false;
+    }
+
+    fn remove_line(&mut self, index: u32) {
+        if self.data.state.purchase_pending() {
+            return;
+        }
+        if let Some(shop) = self.data.state.browse() {
+            self.basket.set_quantity(shop, index, 0);
+        }
+        self.ui.confirm = false;
+    }
+
+    /// Confirms the staged quantities and quoted prices in exactly one request. A
+    /// total of [`view::CONFIRM_FROM`] or more raises the prompt first, and only
+    /// `confirmed` sends it.
+    fn buy(&mut self, confirmed: bool) {
+        if self.data.state.purchase_pending() {
+            return;
+        }
+        let Some(shop) = self.data.state.browse() else {
+            return;
+        };
+        let refusal = match self.basket.total(shop) {
+            _ if self.basket.is_empty() => Err("Choose at least one item.".to_string()),
+            None => Err("The basket no longer matches this shop.".to_string()),
+            Some(total) => {
+                let zeny = u64::from(self.data.purse().0);
+                if total > zeny {
+                    Err(format!("You need {} more zeny.", total - zeny))
+                } else {
+                    Ok(total)
+                }
+            }
+        };
+        let total = match refusal {
+            Ok(total) => total,
+            Err(error) => {
+                self.ui.error = Some(error);
+                return;
+            }
+        };
+        self.ui.error = None;
+        if total >= view::CONFIRM_FROM && !confirmed {
+            self.ui.confirm = true;
+            return;
+        }
+        self.ui.confirm = false;
+        self.intents.write(VendingIntent::Purchase {
+            vendor_unit_id: shop.vendor_unit_id,
+            shop_id: shop.shop_id.clone(),
+            items: self.basket.to_buy_lines(shop),
+        });
+    }
+}
+
+/// Runs the [`VendingAction`] of the activated button.
+///
+/// `bevy_ui_widgets`' `Button` fires `Activate` on release of any pointer button, so
+/// a right-click on a row's button, meant only to open the item details, reaches this
+/// handler too and is dropped here.
+pub fn on_vending_button(
+    activate: On<Activate>,
+    actions: Query<&VendingAction>,
+    mouse: Option<Res<ButtonInput<MouseButton>>>,
+    mut vending: VendingActions,
+) {
+    if mouse.is_some_and(|mouse| mouse.just_released(MouseButton::Right)) {
+        return;
+    }
+    if let Ok(action) = actions.get(activate.entity) {
+        vending.run(*action);
+    }
+}
+
+/// Closing the window cancels a setup (the grant is still held), and hides anything
+/// else. It never closes an open shop: the server keeps selling behind a hidden window.
+fn close_window(
+    state: &VendingState,
+    ui: &mut VendingUi,
+    intents: &mut MessageWriter<VendingIntent>,
 ) {
     let Some(setup) = state.setup() else {
+        ui.hide(state);
         return;
     };
     if ui.pending_close {
         return;
     }
     ui.pending_close = true;
-    focus.clear();
     intents.write(VendingIntent::Close {
         target: VendingCloseTarget::Setup(setup.setup_id.clone()),
     });
-}
-
-pub fn on_close_shop(
-    _: On<Activate>,
-    state: Res<VendingState>,
-    mut ui: ResMut<VendingUi>,
-    mut intents: MessageWriter<VendingIntent>,
-) {
-    let Some(shop) = state.active_shop() else {
-        return;
-    };
-    if ui.pending_close {
-        return;
-    }
-    ui.pending_close = true;
-    intents.write(VendingIntent::Close {
-        target: VendingCloseTarget::Shop(shop.shop_id.clone()),
-    });
-}
-
-/// The titlebar close button: cancels preparation, hides an active shop (the
-/// server keeps selling), and never closes a shop implicitly.
-pub fn on_close_button(
-    _: On<Activate>,
-    state: Res<VendingState>,
-    mut ui: ResMut<VendingUi>,
-    mut intents: MessageWriter<VendingIntent>,
-) {
-    if let Some(setup) = state.setup() {
-        if !ui.pending_close {
-            ui.pending_close = true;
-            intents.write(VendingIntent::Close {
-                target: VendingCloseTarget::Setup(setup.setup_id.clone()),
-            });
-        }
-        return;
-    }
-    ui.hide();
 }
 
 fn cancel_on_escape(
@@ -705,16 +1007,7 @@ fn cancel_on_escape(
     if !keys.just_pressed(KeyCode::Escape) || !ui.visible {
         return;
     }
-    if let Some(setup) = state.setup() {
-        if !ui.pending_close {
-            ui.pending_close = true;
-            intents.write(VendingIntent::Close {
-                target: VendingCloseTarget::Setup(setup.setup_id.clone()),
-            });
-        }
-        return;
-    }
-    ui.hide();
+    close_window(&state, &mut ui, &mut intents);
 }
 
 fn deliver_vending_feedback(
@@ -730,7 +1023,7 @@ fn deliver_vending_feedback(
 }
 
 /// Binds the basket to the shop being browsed and re-applies it to a refreshed
-/// snapshot, explaining every dropped, re-priced, or clamped row.
+/// snapshot, noting every dropped, re-priced, or clamped row for the buyer.
 fn sync_browse_basket(
     state: Res<VendingState>,
     mut basket: ResMut<BuyerBasket>,
@@ -753,7 +1046,8 @@ fn sync_browse_basket(
     if let Some(previous) = previous.filter(|_| same_shop && !state.purchase_pending()) {
         let messages = basket.reconcile(&previous, &current);
         if !messages.is_empty() {
-            ui.set_error(Some(messages.join(" ")));
+            ui.change = Some(messages.join(" "));
+            ui.confirm = false;
         }
     }
     ui.last_browse = Some(current);
@@ -772,129 +1066,57 @@ fn settle_buyer_basket(mut notices: MessageReader<VendingNotice>, mut basket: Re
     }
 }
 
-/// The details view for a vending item: a cart item with its cards and
-/// options, or a vendor/own-shop listing with its price and creator.
+/// The details view for a vending item: a cart item with its cards and options, or a
+/// vendor or own-shop listing with its price and creator.
 pub fn inspect_view(
-    source: drag::DragSource,
+    item: VendingItem,
     state: &VendingState,
     cart: &Cart,
     item_db: &ItemDb,
     option_db: Option<&RandomOptionDb>,
-) -> Option<view::ItemInfoView> {
-    let listing_in = |shop: Option<&net_contract::dto::VendingSnapshot>| {
+) -> Option<info_view::ItemInfoView> {
+    let listing_in = |shop: Option<&VendingSnapshot>| {
         shop?
             .items
             .iter()
-            .find(|item| item.index == source.index)
-            .map(|item| view::vending_item_view(item, item_db, option_db))
+            .find(|listing| listing.index == item.index)
+            .map(|listing| info_view::vending_item_view(listing, item_db, option_db))
     };
-    match source.kind {
-        drag::DragKind::Stock | drag::DragKind::Draft => {
-            let item = cart.get(u16::try_from(source.index).ok()?)?;
-            Some(view::cart_item_view(item, item_db, option_db))
+    match item.surface {
+        Surface::Cart => {
+            let slot = cart.get(u16::try_from(item.index).ok()?)?;
+            Some(info_view::cart_item_view(slot, item_db, option_db))
         }
-        drag::DragKind::Listing | drag::DragKind::Basket => listing_in(state.browse()),
-        drag::DragKind::Shop => listing_in(state.active_shop()),
+        Surface::Listing => listing_in(state.browse()),
+        Surface::Shop => listing_in(state.active_shop()),
     }
 }
 
-/// A secondary click on any vending item opens its details. Info only: vending
-/// items are never in the bag, so no equip/use/compound action applies.
+/// A secondary click on any vending row opens its item's details. Info only: vending
+/// items are never in the bag, so no equip, use or compound action applies.
 pub fn on_item_inspect(
     click: On<PointerClick>,
-    sources: Query<&drag::DragSource>,
-    state: Res<VendingState>,
-    cart: Res<Cart>,
-    item_db: Res<ItemDb>,
+    items: Query<&VendingItem>,
+    data: VendingData,
     option_db: Option<Res<RandomOptionDb>>,
     mut info: MessageWriter<ShowInfoModal>,
 ) {
     if click.button != PointerButton::Secondary {
         return;
     }
-    let Ok(source) = sources.get(click.entity) else {
+    let Ok(item) = items.get(click.entity) else {
         return;
     };
-    let Some(view) = inspect_view(*source, &state, &cart, &item_db, option_db.as_deref()) else {
-        return;
-    };
-    info.write(ShowInfoModal {
-        content: InfoContent::Item { view, action: None },
-    });
-}
-
-/// The basket row's remove button.
-pub fn on_basket_remove(
-    activate: On<Activate>,
-    removals: Query<&BasketRemove>,
-    state: Res<VendingState>,
-    mut basket: ResMut<BuyerBasket>,
-) {
-    let Ok(removal) = removals.get(activate.entity) else {
-        return;
-    };
-    if state.purchase_pending() {
-        return;
+    let view = inspect_view(
+        *item,
+        &data.state,
+        &data.cart,
+        &data.item_db,
+        option_db.as_deref(),
+    );
+    if let Some(view) = view {
+        info.write(ShowInfoModal {
+            content: InfoContent::Item { view, action: None },
+        });
     }
-    if let Some(shop) = state.browse() {
-        basket.set_quantity(shop, removal.index, 0);
-    }
-}
-
-pub fn on_basket_step(
-    activate: On<Activate>,
-    steps: Query<&BasketStep>,
-    state: Res<VendingState>,
-    mut basket: ResMut<BuyerBasket>,
-) {
-    let Ok(step) = steps.get(activate.entity) else {
-        return;
-    };
-    if state.purchase_pending() {
-        return;
-    }
-    let Some(shop) = state.browse() else {
-        return;
-    };
-    basket.step(shop, step.index, step.up);
-}
-
-pub fn on_basket_refresh(_: On<Activate>, mut intents: MessageWriter<VendingIntent>) {
-    intents.write(VendingIntent::Refresh);
-}
-
-/// Confirms the staged quantities and quoted prices in exactly one request.
-pub fn on_checkout(
-    _: On<Activate>,
-    state: Res<VendingState>,
-    statuses: Query<&CharacterStatus, With<LocalPlayer>>,
-    basket: Res<BuyerBasket>,
-    mut ui: ResMut<VendingUi>,
-    mut intents: MessageWriter<VendingIntent>,
-) {
-    if state.purchase_pending() {
-        return;
-    }
-    let Some(shop) = state.browse() else {
-        return;
-    };
-    if basket.is_empty() {
-        ui.set_error(Some("Choose at least one item.".to_string()));
-        return;
-    }
-    let Some(total) = basket.total(shop) else {
-        ui.set_error(Some("The basket no longer matches this shop.".to_string()));
-        return;
-    };
-    let zeny = u64::from(statuses.iter().next().map_or(0, |status| status.zeny));
-    if total > zeny {
-        ui.set_error(Some(format!("You need {} more zeny.", total - zeny)));
-        return;
-    }
-    ui.set_error(None);
-    intents.write(VendingIntent::Purchase {
-        vendor_unit_id: shop.vendor_unit_id,
-        shop_id: shop.shop_id.clone(),
-        items: basket.to_buy_lines(shop),
-    });
 }

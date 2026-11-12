@@ -392,6 +392,47 @@ fn cumulative_earnings_come_from_the_server_not_from_summation() {
 }
 
 #[test]
+fn a_sale_takes_its_units_off_the_listing() {
+    let mut state = VendingState::default();
+    state.apply(&ingress(ready()));
+    let request_id = state.begin_open(SETUP_ID, 0.0).expect("open request");
+    let mut shop = snapshot(SHOP_ID, 0);
+    shop.items.push(net_contract::dto::VendingListing {
+        index: 2,
+        nameid: 501,
+        type_: 0,
+        amount: 3,
+        identified: true,
+        attribute: 0,
+        refine: 0,
+        cards: vec![],
+        options: vec![],
+        price: 500,
+        signer_name: String::new(),
+        creator_id: 0,
+        creator_kind: net_contract::dto::VendingCreatorKind::None,
+        enchant_grade: 0,
+    });
+    state.apply(&ingress(VendingIngressPayload::OpenResult {
+        request_id,
+        setup_id: SETUP_ID.into(),
+        setup_active: false,
+        outcome: VendingOpenOutcome::Success,
+        snapshot: Some(shop),
+    }));
+
+    let left = |state: &VendingState| state.active_shop().map(|shop| shop.items[0].amount);
+    state.apply(&ingress(sale(1, 500)));
+    assert_eq!(left(&state), Some(2));
+    state.apply(&ingress(sale(1, 500)));
+    assert_eq!(
+        left(&state),
+        Some(2),
+        "a replayed sale is not counted twice"
+    );
+}
+
+#[test]
 fn sale_reports_for_other_shops_are_ignored() {
     let mut state = VendingState::default();
     state.apply(&ingress(sale(1, 500)));

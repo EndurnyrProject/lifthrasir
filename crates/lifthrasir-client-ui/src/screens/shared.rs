@@ -4,7 +4,10 @@
 use bevy::color::{Luminance, Mix};
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
-use bevy::text::{EditableText, FontSize, FontSourceTemplate, LetterSpacing};
+use bevy::text::{
+    EditableText, EditableTextFilter, FontSize, FontSourceTemplate, LetterSpacing, TextEdit,
+};
+use bevy::ui::ShadowStyle;
 use bevy::ui_widgets::TextInput;
 use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
@@ -185,6 +188,116 @@ pub fn light_search_focus<F: Component>(
     }
 }
 
+/// A stack never holds more than 30,000, so five digits cover every quantity.
+pub const QTY_DIGITS: usize = 5;
+
+/// A bordered field for a number of at most `digits` digits, starting at `value`. The
+/// caller adds its marker, width and text alignment.
+pub fn number_field(value: String, digits: usize) -> impl Scene {
+    let field = EditableText {
+        max_characters: Some(digits),
+        ..EditableText::new(value)
+    };
+    bsn! {
+        field
+        TextInput
+        EditableTextFilter::new(|c| c.is_ascii_digit())
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(13.0)},
+        }
+        TextColor(ro_dark::BODY)
+        Node {
+            height: px(24),
+            flex_shrink: 0.0,
+            padding: {UiRect::axes(px(4), px(2))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+        }
+        BackgroundColor(ro_dark::INSET)
+        BorderColor::all(ro_dark::SLOT_STROKE)
+    }
+}
+
+/// The number typed in a field, or `None` while it is empty or too large.
+pub fn typed_number(field: &EditableText) -> Option<u32> {
+    field.value().to_string().parse().ok()
+}
+
+/// Replaces a field's text and leaves the caret at its end.
+pub fn set_field_text(field: &mut EditableText, text: &str) {
+    field.clear();
+    field.editor.set_text(text);
+    field.queue_edit(TextEdit::TextEnd(false));
+}
+
+/// Rings the `F` field that has keyboard focus.
+pub fn light_field_focus<F: Component>(
+    focus: Res<InputFocus>,
+    mut fields: Query<(Entity, &mut BorderColor), With<F>>,
+) {
+    if !focus.is_changed() {
+        return;
+    }
+    for (field, mut border) in &mut fields {
+        let color = if focus.get() == Some(field) {
+            ro_dark::FROST_GLOW
+        } else {
+            ro_dark::SLOT_STROKE
+        };
+        *border = BorderColor::all(color);
+    }
+}
+
+/// The title of a [`shop_sign`], kept on one line.
+pub fn sign_title(title: String) -> impl Scene {
+    bsn! {
+        @chrome_text(title, 12.0, ro_dark::STRONG)
+        TextLayout { linebreak: LineBreak::NoWrap }
+        TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
+    }
+}
+
+/// A vending shop's sign: a bag glyph and a [`sign_title`] clipped at `max_width`.
+/// `glow` halos the plate and [`Color::NONE`] leaves only its drop shadow. Picking is
+/// left to the caller.
+pub fn shop_sign(title: impl Scene, max_width: f32, glow: Color) -> impl Scene {
+    let shade = |color, y, blur| ShadowStyle {
+        color,
+        x_offset: Val::ZERO,
+        y_offset: px(y),
+        spread_radius: Val::ZERO,
+        blur_radius: px(blur),
+    };
+    let shadow = BoxShadow(vec![
+        shade(Color::BLACK.with_alpha(0.7), 3, 8),
+        shade(glow, 0, 10),
+    ]);
+    bsn! {
+        Node {
+            height: px(28),
+            max_width: px(max_width),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            column_gap: px(7),
+            padding: {UiRect::new(px(7), px(11), px(0), px(0))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(4)),
+        }
+        BackgroundColor(ro_dark::TITLE_BAR)
+        BorderColor::all(ro_dark::BRONZE)
+        shadow
+        Children [
+            @glyph_icon("bag", 14.0, ro_dark::BASE_EXP)
+            Node { flex_shrink: 0.0 }
+            --
+            Node { min_width: px(0), overflow: {Overflow::clip()} }
+            @ignore_picking()
+            Children [ @title ]
+        ]
+    }
+}
+
 /// RO's weight tiers: natural regen stops at 50% of the limit, attacks and skills at 90%.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Load {
@@ -230,12 +343,32 @@ impl Load {
 /// share its row.
 pub fn weight_meter(weight: u32, max_weight: u32) -> impl Scene {
     let (status, tone, bar) = Load::of(weight, max_weight).style();
-    let fill = (weight as f32 / max_weight.max(1) as f32).min(1.0) * 100.0;
-    let amount = format!(
-        "{} / {}",
-        thousands(weight.into()),
-        thousands(max_weight.into())
-    );
+    meter(
+        "Weight",
+        (weight, max_weight),
+        (status.into(), tone),
+        bar,
+        true,
+    )
+}
+
+/// An `amount` over its limit: the label and both numbers, a `status` in its tone on
+/// the right, then the bar. `tiers` marks RO's 50% and 90% weight tiers. It grows to
+/// share its row.
+pub fn meter(
+    label: &'static str,
+    (amount, limit): (u32, u32),
+    (status, tone): (String, Color),
+    bar: Color,
+    tiers: bool,
+) -> impl Scene {
+    let fill = (amount as f32 / limit.max(1) as f32).min(1.0) * 100.0;
+    let amount = format!("{} / {}", thousands(amount.into()), thousands(limit.into()));
+    let marks: Vec<_> = [50.0, 90.0]
+        .into_iter()
+        .filter(|_| tiers)
+        .map(tier_mark)
+        .collect();
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
@@ -248,12 +381,12 @@ pub fn weight_meter(weight: u32, max_weight: u32) -> impl Scene {
             Node { align_items: AlignItems::Baseline, column_gap: px(8) }
             @ignore_picking()
             Children [
-                @chrome_text("Weight".into(), 12.0, ro_dark::LABEL)
+                @chrome_text(label.into(), 12.0, ro_dark::LABEL)
                 --
                 @chrome_text(amount, 12.0, ro_dark::STRONG)
                 Node { flex_grow: 1.0 }
                 --
-                @chrome_text(status.into(), 11.0, tone)
+                @chrome_text(status, 11.0, tone)
             ]
             --
             Node {
@@ -275,9 +408,7 @@ pub fn weight_meter(weight: u32, max_weight: u32) -> impl Scene {
                 BackgroundColor(bar)
                 @ignore_picking()
                 --
-                @tier_mark(50.0)
-                --
-                @tier_mark(90.0)
+                {marks}
             ]
         ]
     }

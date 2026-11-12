@@ -1,5 +1,5 @@
-//! World-anchored vending boards: a hanging shop sign over each visible vendor,
-//! clickable to open its shop.
+//! World-anchored vending boards: a shop sign over each visible vendor, clickable to
+//! open its shop. Hovering one shows the whole title, which the sign itself cuts off.
 //!
 //! The sign keeps a fixed on-screen size for legibility, but its anchor is a
 //! world-space point over the vendor's head, so it stays on the head at any
@@ -8,23 +8,26 @@
 //! has not spawned yet, so the cached title and shop id stay available; it is
 //! only rendered and clickable once the target resolves.
 
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use lifthrasir_client::core::state::GameState;
+use lifthrasir_client::domain::entities::components::EntityName;
 use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use lifthrasir_client::domain::vending::{VendingIntent, VendingState};
 use lifthrasir_runtime::rendering::layers::SPRITE_BASE_Y_OFFSET;
-use lifthrasir_ui::theme;
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::primitives::HoverColors;
 
-use crate::worldspace::{WorldCameraFilter, WorldspaceFont, viewport_to_ui};
+use crate::screens::shared::{shop_sign, sign_title};
+use crate::worldspace::{WorldCameraFilter, viewport_to_ui};
 
-/// Bounded board width; a longer title is clipped here and shown in full by the
-/// seller or buyer window, which the board opens.
-const BOARD_WIDTH: f32 = 180.0;
-const TITLE_FONT_SIZE: f32 = 13.0;
-const KICKER_FONT_SIZE: f32 = 9.0;
-const BADGE_SIZE: f32 = 20.0;
-const BADGE_ICON_SIZE: f32 = 12.0;
+/// Widest a sign gets; a longer title is cut off here and shown whole on hover.
+const BOARD_WIDTH: f32 = 220.0;
 const NOTCH_SIZE: f32 = 8.0;
+const TOOLTIP_WIDTH: f32 = 250.0;
+/// How far above the head point the tooltip's bottom edge sits: over the sign.
+const TOOLTIP_LIFT: f32 = 42.0;
 /// World units from the sprite quads' base up to just over the head, measured
 /// along the billboard's up axis (the camera's up). NOTE: tuned for a seated
 /// vendor; adjust live via BRP if the notch sits off the head.
@@ -38,11 +41,7 @@ impl Plugin for VendingBoardPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                sync_vending_boards,
-                dress_vending_boards,
-                follow_vending_boards,
-            )
+            (sync_vending_boards, follow_vending_boards)
                 .chain()
                 .run_if(in_state(GameState::InGame)),
         )
@@ -51,242 +50,120 @@ impl Plugin for VendingBoardPlugin {
 }
 
 /// A board for one vendor identity; `target` is re-resolved every frame.
-#[derive(Component, Debug, Clone)]
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
 pub struct VendingBoardLabel {
     pub vendor_unit_id: u64,
     pub shop_id: String,
+    pub title: String,
+    /// The local player's own shop, which the sign marks with a frost halo.
     pub own: bool,
     pub target: Option<Entity>,
-    pub title: Entity,
 }
 
-/// The clickable sign plate; clicking it opens the shop of `board`.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct VendingBoardPlate {
-    pub board: Entity,
-    pub own: bool,
-}
-
-/// The title text node, updated in place when the displayed shop changes.
+/// The clickable sign plate.
 #[derive(Component, Default, Clone)]
-pub struct VendingBoardTitle;
+pub struct VendingBoardPlate;
 
-/// The cart glyph inside the badge; its image is loaded by [`dress_vending_boards`].
+/// The full-title tooltip of a hovered sign.
 #[derive(Component, Default, Clone)]
-pub struct VendingBoardIcon;
+pub struct VendingBoardTooltip;
 
-/// Sign colours: gold for other vendors, emerald for the player's own shop.
-struct SignPalette {
-    accent: Color,
-    trim: Color,
-}
-
-impl SignPalette {
-    fn new(own: bool) -> Self {
-        if own {
-            Self {
-                accent: theme::EMERALD,
-                trim: theme::EMERALD_DEEP.with_alpha(0.55),
-            }
-        } else {
-            Self {
-                accent: theme::GOLD,
-                trim: theme::GOLD.with_alpha(0.55),
-            }
+/// The sign hanging from a zero-height anchor at the head point: the plate, then the
+/// notch under it. The observers sit on the root, which the plate's events bubble to.
+fn board(title: String, own: bool) -> impl Scene {
+    let glow = if own {
+        ro_dark::FROST_GLOW.with_alpha(0.45)
+    } else {
+        Color::NONE
+    };
+    let colors = HoverColors {
+        rest: (ro_dark::TITLE_BAR, ro_dark::BRONZE),
+        hover: (ro_dark::BUTTON_HOVER, ro_dark::BRONZE_HIGHLIGHT),
+    };
+    // A square turned 45 degrees points its bottom-right corner down, so its right
+    // and bottom borders draw the notch outline under the plate.
+    let tilt = UiTransform::from_rotation(Rot2::degrees(45.0));
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            width: px(BOARD_WIDTH),
+            height: px(0),
         }
-    }
-}
-
-fn spawn_board(
-    commands: &mut Commands,
-    font: &WorldspaceFont,
-    board: &net_contract::dto::VendingBoard,
-    own: bool,
-    target: Option<Entity>,
-) -> Entity {
-    let palette = SignPalette::new(own);
-    let root = commands.spawn_empty().id();
-    let title = commands
-        .spawn((
-            VendingBoardTitle,
-            Text::new(board.title.clone()),
-            TextFont::from_font_size(TITLE_FONT_SIZE),
-            TextColor(theme::DISPLAY_GOLD),
-            TextLayout::no_wrap(),
-            Pickable::IGNORE,
-        ))
-        .id();
-    let text_column = commands
-        .spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                min_width: Val::Px(0.0),
-                overflow: Overflow::clip(),
-                ..default()
-            },
-            Pickable::IGNORE,
-        ))
-        .id();
-    if own {
-        let kicker = commands
-            .spawn((
-                Text::new("MY SHOP"),
-                TextFont {
-                    font: font.0.clone().into(),
-                    font_size: KICKER_FONT_SIZE.into(),
-                    ..default()
-                },
-                TextColor(palette.accent),
-                Pickable::IGNORE,
-            ))
-            .id();
-        commands.entity(text_column).add_child(kicker);
-    }
-    commands.entity(text_column).add_child(title);
-
-    let icon = commands
-        .spawn((
-            VendingBoardIcon,
-            ImageNode::solid_color(theme::FIELD),
-            Node {
-                width: Val::Px(BADGE_ICON_SIZE),
-                height: Val::Px(BADGE_ICON_SIZE),
-                ..default()
-            },
-            Pickable::IGNORE,
-        ))
-        .id();
-    let badge = commands
-        .spawn((
-            Node {
-                width: Val::Px(BADGE_SIZE),
-                height: Val::Px(BADGE_SIZE),
-                flex_shrink: 0.0,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border_radius: BorderRadius::MAX,
-                ..default()
-            },
-            BackgroundColor(palette.accent),
-            Pickable::IGNORE,
-        ))
-        .add_child(icon)
-        .id();
-    let plate = commands
-        .spawn((
-            VendingBoardPlate { board: root, own },
-            Node {
-                max_width: Val::Px(BOARD_WIDTH),
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(7.0),
-                padding: UiRect::new(Val::Px(4.0), Val::Px(10.0), Val::Px(4.0), Val::Px(4.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(6.0)),
-                ..default()
-            },
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(palette.trim),
-            BoxShadow::new(
-                Color::BLACK.with_alpha(0.5),
-                Val::Px(0.0),
-                Val::Px(2.0),
-                Val::Px(0.0),
-                Val::Px(6.0),
-            ),
-            Pickable::default(),
-        ))
-        .observe(board_clicked)
-        .observe(plate_hovered)
-        .observe(plate_unhovered)
-        .add_children(&[badge, text_column])
-        .id();
-    // A square turned 45° clockwise points its bottom-right corner down, so its
-    // right and bottom borders draw the notch outline under the plate.
-    let notch = commands
-        .spawn((
-            Node {
-                width: Val::Px(NOTCH_SIZE),
-                height: Val::Px(NOTCH_SIZE),
-                margin: UiRect::top(Val::Px(-NOTCH_SIZE / 2.0 - 1.0)),
-                border: UiRect::new(Val::ZERO, Val::Px(1.0), Val::ZERO, Val::Px(1.0)),
-                ..default()
-            },
-            UiTransform::from_rotation(Rot2::degrees(45.0)),
-            BackgroundColor(theme::GLASS),
-            BorderColor::all(palette.trim),
-            Pickable::IGNORE,
-        ))
-        .id();
-    // Zero-height anchor at the head point; the sign hangs upward from it.
-    let sign = commands
-        .spawn((
+        GlobalZIndex(BOARD_Z)
+        Visibility::Hidden
+        @ignore_picking()
+        on(board_clicked)
+        on(show_board_title)
+        on(hide_board_title)
+        Children [
             Node {
                 position_type: PositionType::Absolute,
-                bottom: Val::Px(0.0),
-                width: Val::Percent(100.0),
+                bottom: px(0),
+                width: percent(100),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
-        ))
-        .add_children(&[plate, notch])
-        .id();
-    commands
-        .entity(root)
-        .insert((
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Px(BOARD_WIDTH),
-                height: Val::Px(0.0),
-                ..default()
-            },
-            GlobalZIndex(BOARD_Z),
-            Visibility::Hidden,
-            Pickable::IGNORE,
-            VendingBoardLabel {
-                vendor_unit_id: board.vendor_unit_id,
-                shop_id: board.shop_id.clone(),
-                own,
-                target,
-                title,
-            },
-        ))
-        .add_child(sign);
-    root
-}
-
-/// Loads the sign's title font and cart glyph into freshly spawned boards.
-fn dress_vending_boards(
-    assets: Res<AssetServer>,
-    mut titles: Query<&mut TextFont, Added<VendingBoardTitle>>,
-    mut icons: Query<&mut ImageNode, Added<VendingBoardIcon>>,
-) {
-    for mut font in &mut titles {
-        font.font = assets.load(theme::FONT_TITLE).into();
-    }
-    for mut icon in &mut icons {
-        icon.image = assets.load(format!("{}cart.svg", theme::ICON_DIR));
+            }
+            @ignore_picking()
+            Children [
+                VendingBoardPlate
+                Hovered
+                colors
+                @shop_sign(sign_title(title), BOARD_WIDTH, glow)
+                Pickable
+                --
+                Node {
+                    width: px(NOTCH_SIZE),
+                    height: px(NOTCH_SIZE),
+                    margin: {UiRect::top(px(-NOTCH_SIZE / 2.0 - 1.0))},
+                    border: {UiRect::new(px(0), px(1), px(0), px(1))},
+                }
+                tilt
+                BackgroundColor(ro_dark::TITLE_BAR)
+                BorderColor::all(ro_dark::BRONZE)
+                @ignore_picking()
+            ]
+        ]
     }
 }
 
-fn plate_hovered(
-    over: On<PointerOver>,
-    mut plates: Query<(&VendingBoardPlate, &mut BackgroundColor, &mut BorderColor)>,
-) {
-    if let Ok((plate, mut fill, mut border)) = plates.get_mut(over.entity) {
-        fill.0 = theme::GLASS_2;
-        border.set_all(SignPalette::new(plate.own).accent);
-    }
-}
-
-fn plate_unhovered(
-    out: On<PointerOut>,
-    mut plates: Query<(&VendingBoardPlate, &mut BackgroundColor, &mut BorderColor)>,
-) {
-    if let Ok((plate, mut fill, mut border)) = plates.get_mut(out.entity) {
-        fill.0 = theme::GLASS;
-        border.set_all(SignPalette::new(plate.own).trim);
+/// The tooltip over a hovered sign: who runs the shop when that is known, the whole
+/// title, and what a click does.
+fn board_tooltip(vendor: Option<String>, title: String, own: bool) -> impl Scene {
+    let vendor: Vec<_> = vendor
+        .into_iter()
+        .map(|name| chrome_text(name, 13.0, ro_dark::HERO))
+        .collect();
+    let hint = if own {
+        "Click to manage your shop"
+    } else {
+        "Click to browse"
+    };
+    bsn! {
+        VendingBoardTooltip
+        Node {
+            position_type: PositionType::Absolute,
+            left: px((BOARD_WIDTH - TOOLTIP_WIDTH) / 2.0),
+            bottom: px(TOOLTIP_LIFT),
+            width: px(TOOLTIP_WIDTH),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(2),
+            padding: {UiRect::axes(px(12), px(10))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(ro_dark::TOOLTIP_BODY)
+        BorderColor::all(ro_dark::BUTTON_STROKE)
+        @ignore_picking()
+        Children [
+            {vendor}
+            --
+            @chrome_text(title, 12.0, ro_dark::BODY)
+            --
+            Node { margin: {UiRect::top(px(6))}, padding: {UiRect::top(px(6))}, border: {UiRect::top(px(1))} }
+            BorderColor::all(ro_dark::SLOT_STROKE)
+            @ignore_picking()
+            Children [ @chrome_text(hint.into(), 11.0, ro_dark::MUTED) ]
+        ]
     }
 }
 
@@ -294,21 +171,45 @@ fn plate_unhovered(
 /// browses the displayed shop identity.
 fn board_clicked(
     click: On<PointerClick>,
-    plates: Query<&VendingBoardPlate>,
     labels: Query<&VendingBoardLabel>,
     mut intents: MessageWriter<VendingIntent>,
 ) {
     if click.button != PointerButton::Primary {
         return;
     }
-    let Ok(plate) = plates.get(click.entity) else {
-        return;
-    };
-    let Ok(label) = labels.get(plate.board) else {
+    let Ok(label) = labels.get(click.entity) else {
         return;
     };
     if let Some(intent) = board_intent(label) {
         intents.write(intent);
+    }
+}
+
+fn show_board_title(
+    over: On<PointerOver>,
+    labels: Query<&VendingBoardLabel>,
+    names: Query<&EntityName>,
+    mut commands: Commands,
+) {
+    let Ok(label) = labels.get(over.entity) else {
+        return;
+    };
+    let vendor = label
+        .target
+        .and_then(|target| names.get(target).ok())
+        .map(|name| name.name.clone());
+    commands
+        .spawn_scene(board_tooltip(vendor, label.title.clone(), label.own))
+        .insert(ChildOf(over.entity));
+}
+
+fn hide_board_title(
+    _: On<PointerOut>,
+    tooltips: Query<Entity, With<VendingBoardTooltip>>,
+    mut commands: Commands,
+) {
+    for tooltip in &tooltips {
+        commands.entity(tooltip).despawn();
     }
 }
 
@@ -331,45 +232,41 @@ pub fn head_anchor(feet: Vec3, camera_up: Vec3) -> Vec3 {
     feet + Vec3::Y * SPRITE_BASE_Y_OFFSET + camera_up * BOARD_HEAD_RISE
 }
 
-/// Keeps exactly one board per vendor the domain reports, updating a replaced
-/// shop identity in place and dropping boards that are no longer reported.
+/// Keeps exactly one board per vendor the domain reports. A board whose shop, title
+/// or ownership changed is replaced, since all three are drawn into the sign, and
+/// boards that are no longer reported are dropped.
 fn sync_vending_boards(
     mut commands: Commands,
     state: Res<VendingState>,
     registry: Res<EntityRegistry>,
-    font: Res<WorldspaceFont>,
     mut boards: Query<(Entity, &mut VendingBoardLabel)>,
-    mut titles: Query<&mut Text, With<VendingBoardTitle>>,
     positioned: Query<(), With<GlobalTransform>>,
 ) {
     let own_unit_id = registry.local_player_account_id().map(u64::from);
     for board in state.boards().values() {
-        let own = own_unit_id == Some(board.vendor_unit_id);
-        let target = u32::try_from(board.vendor_unit_id)
-            .ok()
-            .and_then(|unit_id| registry.get_entity(unit_id))
-            .filter(|entity| positioned.contains(*entity));
+        let wanted = VendingBoardLabel {
+            vendor_unit_id: board.vendor_unit_id,
+            shop_id: board.shop_id.clone(),
+            title: board.title.clone(),
+            own: own_unit_id == Some(board.vendor_unit_id),
+            target: u32::try_from(board.vendor_unit_id)
+                .ok()
+                .and_then(|unit_id| registry.get_entity(unit_id))
+                .filter(|entity| positioned.contains(*entity)),
+        };
         let existing = boards
             .iter_mut()
             .find(|(_, label)| label.vendor_unit_id == board.vendor_unit_id);
         match existing {
-            // Ownership decides the sign's palette and kicker, so a late-known
-            // local account rebuilds the board instead of patching it.
-            Some((entity, label)) if label.own != own => {
-                commands.entity(entity).despawn();
-                spawn_board(&mut commands, &font, board, own, target);
-            }
-            Some((_, mut label)) => {
-                label.target = target;
-                if label.shop_id != board.shop_id {
-                    label.shop_id.clone_from(&board.shop_id);
-                    if let Ok(mut text) = titles.get_mut(label.title) {
-                        text.0.clone_from(&board.title);
-                    }
+            Some((_, label)) if *label == wanted => {}
+            Some((_, mut label)) if same_sign(&label, &wanted) => label.target = wanted.target,
+            existing => {
+                if let Some((entity, _)) = existing {
+                    commands.entity(entity).despawn();
                 }
-            }
-            None => {
-                spawn_board(&mut commands, &font, board, own, target);
+                commands
+                    .spawn_scene(self::board(wanted.title.clone(), wanted.own))
+                    .insert(wanted);
             }
         }
     }
@@ -379,6 +276,11 @@ fn sync_vending_boards(
             commands.entity(entity).despawn();
         }
     }
+}
+
+/// Whether two labels draw the same sign, whatever they point at.
+fn same_sign(a: &VendingBoardLabel, b: &VendingBoardLabel) -> bool {
+    (&a.shop_id, &a.title, a.own) == (&b.shop_id, &b.title, b.own)
 }
 
 /// Projects each visible board onto its vendor's head; a board without a
@@ -421,12 +323,14 @@ fn despawn_all_boards(mut commands: Commands, boards: Query<Entity, With<Vending
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::scene::ScenePlugin;
     use net_contract::dto::VendingBoard;
     use net_contract::events::{VendingIngress, VendingIngressPayload};
     use net_contract::state::ZoneSessionGeneration;
 
     const VENDOR: u64 = 5;
     const OWN: u32 = 42;
+    const LONG_TITLE: &str = "S> MVP cards, Bloody Branch, whisper me for bulk";
 
     fn board(shop_id: &str, title: &str) -> VendingBoard {
         VendingBoard {
@@ -438,10 +342,11 @@ mod tests {
 
     fn app(own_char_id: Option<u32>) -> App {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .insert_resource(VendingState::default())
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.insert_resource(VendingState::default())
             .insert_resource(EntityRegistry::default())
-            .insert_resource(WorldspaceFont(Handle::default()))
             .init_resource::<UiScale>()
             .add_message::<VendingIntent>();
         if let Some(char_id) = own_char_id {
@@ -484,6 +389,22 @@ mod tests {
             .collect()
     }
 
+    fn texts(app: &mut App) -> Vec<String> {
+        let world = app.world_mut();
+        let mut query = world.query::<&Text>();
+        query.iter(world).map(|text| text.0.clone()).collect()
+    }
+
+    fn label(own: bool, target: Option<Entity>) -> VendingBoardLabel {
+        VendingBoardLabel {
+            vendor_unit_id: VENDOR,
+            shop_id: "shop-1".into(),
+            title: "Potions".into(),
+            own,
+            target,
+        }
+    }
+
     #[test]
     fn a_board_without_its_vendor_is_cached_but_not_clickable() {
         let mut app = app(Some(OWN));
@@ -494,13 +415,7 @@ mod tests {
         assert_eq!(boards.len(), 1, "the board is cached");
         assert!(boards[0].1.target.is_none());
         assert_eq!(board_intent(&boards[0].1), None);
-        let mut visibility = app.world_mut().query::<&Visibility>();
-        assert!(
-            visibility
-                .iter(app.world())
-                .all(|visibility| *visibility != Visibility::Visible),
-            "an unresolved board is never shown"
-        );
+        assert!(all_hidden(&mut app), "an unresolved board is never shown");
     }
 
     #[test]
@@ -512,12 +427,11 @@ mod tests {
             .register_entity(VENDOR as u32, target);
         show(&mut app, board("shop-1", "Potions"));
         app.update();
+        app.update();
 
-        assert_eq!(
-            boards(&mut app)[0].1.target,
-            Some(target),
-            "the vendor resolves"
-        );
+        let shown = boards(&mut app);
+        assert_eq!(shown.len(), 1, "resolving the vendor keeps the same board");
+        assert_eq!(shown[0].1.target, Some(target), "the vendor resolves");
 
         // A camera with no viewport cannot project, so the board stays hidden.
         app.world_mut().spawn(Camera3d::default());
@@ -531,22 +445,21 @@ mod tests {
     }
 
     #[test]
-    fn replaced_shop_ids_update_the_existing_board_and_browse_the_display() {
+    fn a_replaced_shop_replaces_the_sign_and_browses_the_new_one() {
         let mut app = app(Some(OWN));
         show(&mut app, board("shop-1", "Potions"));
         app.update();
-        let first = boards(&mut app);
-        assert_eq!(first.len(), 1);
+        assert_eq!(boards(&mut app).len(), 1);
+        assert!(texts(&mut app).iter().any(|title| title == "Potions"));
 
         show(&mut app, board("shop-2", "Scrolls"));
         app.update();
         let second = boards(&mut app);
         assert_eq!(second.len(), 1, "one board per vendor");
-        assert_eq!(second[0].0, first[0].0, "the board is reused");
         assert_eq!(second[0].1.shop_id, "shop-2");
-        let mut texts = app.world_mut().query::<&Text>();
-        let titles: Vec<String> = texts.iter(app.world()).map(|text| text.0.clone()).collect();
+        let titles = texts(&mut app);
         assert!(titles.iter().any(|title| title == "Scrolls"));
+        assert!(!titles.iter().any(|title| title == "Potions"));
     }
 
     #[test]
@@ -566,6 +479,7 @@ mod tests {
         );
         app.update();
         assert!(boards(&mut app).is_empty());
+        assert!(texts(&mut app).is_empty(), "the sign goes with its board");
 
         show(&mut app, board("shop-3", "Potions"));
         app.update();
@@ -577,47 +491,32 @@ mod tests {
 
     #[test]
     fn own_and_remote_boards_open_different_flows() {
-        let mut label = VendingBoardLabel {
-            vendor_unit_id: VENDOR,
-            shop_id: "shop-1".into(),
-            own: false,
-            target: None,
-            title: Entity::PLACEHOLDER,
-        };
-        assert_eq!(board_intent(&label), None);
+        assert_eq!(board_intent(&label(false, None)), None);
 
-        let target = Entity::PLACEHOLDER;
-        label.target = Some(target);
+        let target = Some(Entity::PLACEHOLDER);
         assert_eq!(
-            board_intent(&label),
+            board_intent(&label(false, target)),
             Some(VendingIntent::Browse {
                 vendor_unit_id: VENDOR,
                 shop_id: "shop-1".into(),
             })
         );
-
-        label.own = true;
-        assert_eq!(board_intent(&label), Some(VendingIntent::EnterSeller));
+        assert_eq!(
+            board_intent(&label(true, target)),
+            Some(VendingIntent::EnterSeller)
+        );
     }
 
     #[test]
-    fn the_owner_board_is_labelled_and_every_plate_blocks_lower_clicks() {
+    fn the_plate_blocks_the_world_click_behind_it() {
         let mut app = app(Some(OWN));
-        app.world_mut()
-            .resource_mut::<EntityRegistry>()
-            .set_local_player(Entity::PLACEHOLDER, VENDOR as u32);
         show(&mut app, board("shop-1", "Potions"));
         app.update();
 
-        let boards = boards(&mut app);
-        assert!(boards[0].1.own);
-        let mut plates = app.world_mut().query::<&Pickable>();
-        assert!(
-            plates
-                .iter(app.world())
-                .any(|pickable| pickable.should_block_lower),
-            "the clickable plate blocks the world click behind it"
-        );
+        let world = app.world_mut();
+        let mut plates = world.query_filtered::<&Pickable, With<VendingBoardPlate>>();
+        let plate = plates.single(world).expect("one plate");
+        assert!(plate.should_block_lower && plate.is_hoverable);
     }
 
     #[test]
@@ -637,12 +536,11 @@ mod tests {
     }
 
     #[test]
-    fn a_board_rebuilds_as_the_owner_sign_once_the_local_account_is_known() {
+    fn a_board_becomes_the_owner_sign_once_the_local_account_is_known() {
         let mut app = app(None);
         show(&mut app, board("shop-1", "Potions"));
         app.update();
-        let before = boards(&mut app);
-        assert!(!before[0].1.own);
+        assert!(!boards(&mut app)[0].1.own);
 
         app.world_mut()
             .resource_mut::<EntityRegistry>()
@@ -651,7 +549,53 @@ mod tests {
         let after = boards(&mut app);
         assert_eq!(after.len(), 1, "still one board per vendor");
         assert!(after[0].1.own);
-        let mut texts = app.world_mut().query::<&Text>();
-        assert!(texts.iter(app.world()).any(|text| text.0 == "MY SHOP"));
+    }
+
+    #[test]
+    fn hovering_a_sign_shows_the_whole_title_until_the_pointer_leaves() {
+        let mut app = app(Some(OWN));
+        let board = app
+            .world_mut()
+            .spawn(VendingBoardLabel {
+                title: LONG_TITLE.into(),
+                ..label(false, None)
+            })
+            .observe(show_board_title)
+            .observe(hide_board_title)
+            .id();
+        let window = app.world_mut().spawn_empty().id();
+        let pointer = |window| {
+            use bevy::camera::NormalizedRenderTarget;
+            use bevy::picking::pointer::{Location, PointerId};
+            use bevy::window::WindowRef;
+            Pointer::new(
+                PointerId::Mouse,
+                Location {
+                    target: NormalizedRenderTarget::Window(
+                        WindowRef::Primary.normalize(Some(window)).unwrap(),
+                    ),
+                    position: Vec2::ZERO,
+                },
+            )
+        };
+        let hit = bevy::picking::backend::HitData::new(board, 0.0, None, None);
+
+        app.world_mut().trigger(PointerOver {
+            entity: board,
+            pointer: pointer(window),
+            hit: hit.clone(),
+        });
+        app.world_mut().flush();
+        let shown = texts(&mut app);
+        assert!(shown.iter().any(|text| text == LONG_TITLE), "{shown:?}");
+        assert!(shown.iter().any(|text| text == "Click to browse"));
+
+        app.world_mut().trigger(PointerOut {
+            entity: board,
+            pointer: pointer(window),
+            hit,
+        });
+        app.world_mut().flush();
+        assert!(texts(&mut app).is_empty());
     }
 }

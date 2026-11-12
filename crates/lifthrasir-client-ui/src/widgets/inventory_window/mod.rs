@@ -405,6 +405,71 @@ pub(crate) fn cell_view(item: &Item, item_db: Option<&ItemDb>, selected: Option<
     }
 }
 
+/// An item held outside the bag: a cart slot or a vending listing.
+#[derive(Clone, Copy)]
+pub(crate) struct LooseItem<'a> {
+    pub nameid: u32,
+    pub identified: bool,
+    pub refine: u32,
+    pub cards: &'a [u32],
+    pub amount: u32,
+}
+
+impl LooseItem<'_> {
+    /// Card slots of an identified item. An unidentified one hides them.
+    fn card_slots(&self, item_db: Option<&ItemDb>) -> u8 {
+        if !self.identified {
+            return 0;
+        }
+        item_db
+            .and_then(|db| db.slot_count(self.nameid))
+            .unwrap_or(0)
+    }
+
+    fn refine(&self) -> u8 {
+        self.refine.min(u8::MAX.into()) as u8
+    }
+
+    /// The name as a window shows it, as in `+7 Blade [3]`.
+    pub(crate) fn name(&self, item_db: Option<&ItemDb>) -> String {
+        let name = item_db
+            .and_then(|db| db.name(self.nameid, self.identified))
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("Item #{}", self.nameid));
+        decorated_name(&name, self.refine(), self.card_slots(item_db))
+    }
+
+    /// What a slot holding the item draws, with the selection ring when `selected`.
+    pub(crate) fn cell(&self, item_db: Option<&ItemDb>, selected: bool) -> CellView {
+        let refine = self.refine();
+        let ring = if selected {
+            Ring::Selected
+        } else if self.identified && item_edge_grade(refine, false) == EdgeGrade::Rare {
+            Ring::Rare
+        } else {
+            Ring::None
+        };
+        CellView {
+            index: 0,
+            icon: item_db
+                .and_then(|db| db.icon_resource(self.nameid, self.identified))
+                .map(item_icon_path),
+            amount: self.amount.min(u16::MAX.into()) as u16,
+            refine,
+            identified: self.identified,
+            damaged: false,
+            favorite: false,
+            pips: self
+                .cards
+                .iter()
+                .take(self.card_slots(item_db).into())
+                .map(|&card| card != 0)
+                .collect(),
+            ring,
+        }
+    }
+}
+
 fn selection_view(item: &Item, item_db: Option<&ItemDb>) -> SelectionView {
     let action = ItemAction::for_bag_item(item).map(|action| action.kind);
     let carried = (item.amount > 1).then(|| format!("{} carried", thousands(item.amount.into())));

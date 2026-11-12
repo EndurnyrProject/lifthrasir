@@ -1,46 +1,57 @@
-//! Idiomatic BSN chrome for the pushcart window (mirrors the inventory/shop
-//! windows). [`window`] builds the persistent chrome — root, titlebar, and an
-//! empty body region — as one `bsn!` tree; [`body`] renders one of two mount
-//! states and is respawned by [`rebuild_body`](super::rebuild_body) on every
-//! mount-state / [`Cart`](lifthrasir_client::domain::cart::Cart) change.
+//! The Pushcart window scenes: the frame [`build`] spawns once and the body
+//! [`rebuild_body`](super::rebuild_body) projects from a [`BodyView`]. Sizes follow
+//! the `Pushcart` artboard of the Lifthrasir Widgets design.
 //!
-//! The mounted [`body`] projects the live `Inventory` + `Cart` into two sprite-
-//! well panes, a detail strip (selected sprite/name/type + quantity stepper +
-//! Move button), and a footer of body/cart weight meters, cart slot usage, and
-//! zeny. Every view-model is a pure function of owned data, prepared before the
-//! `bsn!` block, so the projection is unit-testable without spawning the tree.
+//! Every view-model is a pure function of owned data, prepared before the `bsn!`
+//! block, so the projection is unit-testable without spawning the tree.
 
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
-use bevy::scene::EntityScene;
-use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
-use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
+use bevy_feathers::controls::FeathersScrollbar;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
-use lifthrasir_assets::paths::item_icon_path;
 use lifthrasir_client::domain::cart::Cart;
 use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
 use lifthrasir_client::domain::inventory::Inventory;
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{
+    chrome_text, close_window, drag_window, glyph_icon, ignore_picking,
+};
+use lifthrasir_ui::widgets::primitives::{
+    BUTTON_SHADOW, ButtonArt, HoverColors, WINDOW_SHADOW, button_with, close_button, diamond,
+    inset, window_title_bar, window_titled,
+};
 use net_contract::events::CartMountRejection;
 
-use lifthrasir_ui::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
-use lifthrasir_ui::widgets::chrome::{
-    body_container, chrome_text, glyph_icon, ignore_picking, titlebar,
+use crate::screens::shared::{
+    QTY_DIGITS, Ring, flush_button, meter, number_field, overline, row_button, slot_frame,
+    small_button, thousands, usable, weight_meter,
 };
-
+use crate::widgets::inventory_window::scene::{CellView, slot_marks};
+use crate::widgets::inventory_window::{self, LooseItem, cell_view};
 use crate::widgets::pushcart_window::{
-    CART_MAX_SLOTS, CartCell, CartWindowBody, CartWindowRoot, CartWindowTitlebar,
-    MountToggleButton, QtyButton, SetUpShopButton, Side, move_enabled, on_cell_click,
-    on_mount_toggle, on_move, on_qty_step, on_set_up_shop,
+    CART_MAX_SLOTS, CartAmountField, CartCell, CartMoveLabel, CartPane, CartUi, CartWindowBody,
+    CartWindowRoot, CartWindowTitlebar, MountToggleButton, QtyButton, SetUpShopButton, Side,
+    move_enabled, move_label, on_cell_click, on_mount_toggle, on_move, on_qty_all, on_qty_step,
+    on_set_up_shop,
 };
 
-const WINDOW_LEFT: f32 = 360.0;
-const WINDOW_TOP: f32 = 130.0;
-const WINDOW_WIDTH: f32 = 520.0;
-const CELL_SIZE: f32 = 32.0;
-/// Fixed height of each pane's scrollable grid, so the window never grows with
-/// content — the grid scrolls internally instead.
-const PANE_HEIGHT: f32 = 200.0;
+const WINDOW_LEFT: f32 = 200.0;
+const WINDOW_TOP: f32 = 40.0;
+const WINDOW_WIDTH: f32 = 864.0;
+const PANE_WIDTH: f32 = 356.0;
+/// Fixed height of each pane's grid, so the window never grows with its content.
+const PANE_HEIGHT: f32 = 290.0;
+const COLUMNS: usize = 6;
+/// Slots a pane draws at least: five whole rows.
+const MIN_SLOTS: usize = 30;
+const SLOT: f32 = 50.0;
+const ICON: f32 = 36.0;
+/// Six slots and five gaps must fit the 328px a pane leaves inside its padding.
+const SLOT_GAP: f32 = 5.0;
+const ROW_GAP: f32 = 7.0;
+const SELECTION_SLOT: f32 = 42.0;
+const SELECTION_ICON: f32 = 30.0;
 
 /// Spawn the whole window as one scene and parent it under `parent` with a single
 /// insert.
@@ -51,88 +62,202 @@ pub fn build(commands: &mut Commands, parent: Entity) {
 fn window() -> impl Scene {
     bsn! {
         CartWindowRoot
+        @window_titled()
         Node {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
+            width: px(WINDOW_WIDTH + 2.0 * WINDOW_SHADOW),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
-            border: px(1),
-            border_radius: BorderRadius::all(px(13)),
         }
-        ThemeBackgroundColor({TOKEN_WINDOW_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         Pickable
         Children [
-            @titlebar::<CartWindowTitlebar, CartWindowRoot>("cart", "Pushcart") --
-            @body_container::<CartWindowBody>(UiRect {
-                left: Val::Px(14.0),
-                right: Val::Px(14.0),
-                top: Val::Px(12.0),
-                bottom: Val::Px(14.0),
+            CartWindowTitlebar
+            @window_title_bar("Pushcart", bsn! {
+                @close_button()
+                on(close_window::<CartWindowRoot>)
             })
+            Pickable
+            on(drag_window::<CartWindowTitlebar, CartWindowRoot>)
+            --
+            CartWindowBody
+            Node {
+                flex_direction: FlexDirection::Column,
+                margin: {UiRect::new(px(0), px(0), px(10), px(8))},
+            }
+            @ignore_picking()
         ]
     }
 }
 
-/// The swappable body: the mount prompt when the local player has no cart, or
-/// the mounted Bag<->Cart view when they do. Exactly one branch renders. The
-/// mounted branch needs the local player's [`CharacterStatus`] for the footer;
-/// its absence (guarded loudly upstream in [`rebuild_body`](super::rebuild_body))
-/// collapses the mounted view to nothing rather than fabricating a footer.
-pub fn body(
-    mounted: bool,
+/// The selected item as the bar under the panes shows it.
+pub(crate) struct SelectionView {
+    pub side: Side,
+    pub cell: CellView,
+    pub name: String,
+    pub meta: String,
+    /// How many the selected slot holds.
+    pub stack: u16,
+}
+
+/// The mounted body: both panes, the selection and the read-outs under them.
+pub(crate) struct MountedView {
+    pub bag: Vec<CellView>,
+    pub cart: Vec<CellView>,
+    pub selection: Option<SelectionView>,
+    pub qty: u16,
+    pub can_move: bool,
+    /// Carried weight and its limit.
+    pub weight: (u32, u32),
+    pub cart_weight: (u32, u32),
+    pub zeny: u32,
+    /// Scroll offsets of the bag pane and the cart pane.
+    pub scroll: [Vec2; 2],
+}
+
+/// What the body draws: the mount prompt with the last rejection, or the mounted view.
+pub(crate) enum BodyView {
+    Prompt(Option<CartMountRejection>),
+    Mounted(Box<MountedView>),
+}
+
+/// The Bag pane's slots: every item that is not worn (worn equipment lives on the
+/// Character window). A missing `ItemDb` entry yields a slot with no icon.
+pub(crate) fn bag_cells(
     inventory: &Inventory,
-    cart: &Cart,
-    cart_ui: &super::CartUi,
-    status: Option<&CharacterStatus>,
     item_db: Option<&ItemDb>,
-) -> impl Scene + use<> {
-    let prompt = (!mounted).then(|| EntityScene(mount_prompt(cart_ui.mount_error)));
-    let mounted_view = mounted
-        .then_some(status)
-        .flatten()
-        .map(|status| EntityScene(mounted_body(inventory, cart, cart_ui, status, item_db)));
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
-        @ignore_picking()
-        Children [ {prompt} -- {mounted_view} ]
+    selected: Option<(Side, u16)>,
+) -> Vec<CellView> {
+    let selected = selected
+        .filter(|(side, _)| *side == Side::Bag)
+        .map(|(_, index)| index);
+    inventory
+        .iter()
+        .filter(|item| !item.is_equipped())
+        .map(|item| cell_view(item, item_db, selected))
+        .collect()
+}
+
+fn cart_item(item: &net_contract::dto::CartItem) -> LooseItem<'_> {
+    LooseItem {
+        nameid: item.nameid,
+        identified: item.identified,
+        refine: item.refine,
+        cards: &item.cards,
+        amount: item.amount,
     }
 }
 
-/// Shown when the local player has no cart: a line of copy, a single
-/// "Mount Pushcart" button that sends `MountCart { mount: true }`, and — after a
-/// rejected mount — a warning line explaining why the last attempt failed.
+/// The Cart pane's slots, in cart-index order.
+pub(crate) fn cart_cells(
+    cart: &Cart,
+    item_db: Option<&ItemDb>,
+    selected: Option<(Side, u16)>,
+) -> Vec<CellView> {
+    cart.iter()
+        .map(|item| {
+            let index = item.index as u16;
+            CellView {
+                index,
+                ..cart_item(item).cell(item_db, selected == Some((Side::Cart, index)))
+            }
+        })
+        .collect()
+}
+
+/// The selection bar's view, resolved from whichever container the selection is in.
+/// `None` when nothing is selected or the slot has vanished after a server move.
+pub(crate) fn selection_view(
+    selected: Option<(Side, u16)>,
+    inventory: &Inventory,
+    cart: &Cart,
+    item_db: Option<&ItemDb>,
+) -> Option<SelectionView> {
+    let (side, index) = selected?;
+    let (cell, name, place, stack) = match side {
+        Side::Bag => {
+            let item = inventory.get(index)?;
+            (
+                cell_view(item, item_db, None),
+                inventory_window::item_name(item, item_db),
+                "In your bag",
+                item.amount,
+            )
+        }
+        Side::Cart => {
+            let slot = cart_item(cart.get(index)?);
+            (
+                slot.cell(item_db, false),
+                slot.name(item_db),
+                "In your cart",
+                slot.amount.min(u16::MAX.into()) as u16,
+            )
+        }
+    };
+    Some(SelectionView {
+        side,
+        cell,
+        name,
+        meta: format!("{place} \u{b7} {}", thousands(stack.into())),
+        stack,
+    })
+}
+
+pub(crate) fn mounted_view(
+    inventory: &Inventory,
+    cart: &Cart,
+    cart_ui: &CartUi,
+    status: &CharacterStatus,
+    item_db: Option<&ItemDb>,
+) -> MountedView {
+    MountedView {
+        bag: bag_cells(inventory, item_db, cart_ui.selected),
+        cart: cart_cells(cart, item_db, cart_ui.selected),
+        selection: selection_view(cart_ui.selected, inventory, cart, item_db),
+        qty: cart_ui.qty,
+        can_move: move_enabled(cart_ui.selected, cart_ui.qty, inventory, cart),
+        weight: (status.weight, status.max_weight),
+        cart_weight: (cart.current_weight(), cart.max_weight()),
+        zeny: status.zeny,
+        scroll: [Vec2::ZERO; 2],
+    }
+}
+
+/// The swappable body. Exactly one branch renders.
+pub(crate) fn body(view: BodyView) -> impl Scene {
+    let content: Vec<Box<dyn Scene>> = vec![match view {
+        BodyView::Prompt(error) => Box::new(mount_prompt(error)),
+        BodyView::Mounted(view) => Box::new(mounted_body(*view)),
+    }];
+    bsn! {
+        Node { flex_direction: FlexDirection::Column }
+        @ignore_picking()
+        Children [ {content} ]
+    }
+}
+
+/// Shown when the local player has no cart: a line of copy, the Mount Pushcart
+/// button and, after a rejected mount, why the last attempt failed.
 fn mount_prompt(error: Option<CartMountRejection>) -> impl Scene {
-    let hint = error.map(|reason| {
-        EntityScene(chrome_text(
-            mount_error_text(reason),
-            11.0,
-            lifthrasir_ui::theme::WARN,
-        ))
-    });
+    let hint =
+        error.map(|reason| chrome_text(mount_error_text(reason), 12.0, ro_dark::STATUS_FULL));
+    let hint: Vec<_> = hint.into_iter().collect();
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            row_gap: px(10),
-            padding: {UiRect::vertical(px(10))},
+            row_gap: px(12),
+            padding: {UiRect::vertical(px(28))},
         }
         @ignore_picking()
         Children [
-            @chrome_text("You have no pushcart mounted.".to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) --
-            @FeathersButton { @caption: bsn! { @chrome_text("Mount Pushcart".to_string(), 13.0, lifthrasir_ui::theme::TEXT) } }
+            @chrome_text("You have no pushcart mounted.".into(), 13.0, ro_dark::BODY)
+            --
+            @flush_button(ButtonArt::PRIMARY, "Mount Pushcart")
+            Node { width: px(160.0 + 2.0 * BUTTON_SHADOW), flex_grow: 0.0, flex_shrink: 0.0 }
             MountToggleButton { mount: true }
-            Node {
-                height: px(32),
-                padding: {UiRect::horizontal(px(18))},
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border_radius: BorderRadius::all(px(7)),
-            }
-            BackgroundColor(lifthrasir_ui::theme::EMERALD_INK)
             on(on_mount_toggle)
             --
             {hint}
@@ -148,289 +273,116 @@ fn mount_error_text(reason: CartMountRejection) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Mounted body: Bag | mover | Cart panes, a detail strip, and the footer meters.
-// `bsn!` scenes own their data, so every view-model below is prepared as owned
-// values *before* entering a `bsn!` block — no live resource reference crosses
-// into one.
-// ---------------------------------------------------------------------------
-
-/// One pane cell's owned view-model. `side` + `index` become the [`CartCell`] so
-/// a click knows which container and slot it selected.
-pub(crate) struct CellView {
-    side: Side,
-    index: u16,
-    icon: Option<String>,
-    amount: u16,
-    refine: u8,
-    selected: bool,
-}
-
-/// The selected item's owned view-model for the detail strip. `type_label` is
-/// `None` for cart items, whose DTO carries no `item_type`.
-pub(crate) struct DetailView {
-    icon: Option<String>,
-    name: String,
-    type_label: Option<String>,
-}
-
-/// The footer's owned view-model: both weight meters, cart slot usage, and zeny.
-pub(crate) struct FooterView {
-    body_weight: u32,
-    body_max: u32,
-    cart_weight: u32,
-    cart_max: u32,
-    cart_slots: usize,
-    zeny: u32,
-}
-
-fn item_icon(item_db: Option<&ItemDb>, nameid: u32, identified: bool) -> Option<String> {
-    item_db
-        .and_then(|db| db.icon_resource(nameid, identified))
-        .map(item_icon_path)
-}
-
-fn item_name(item_db: Option<&ItemDb>, nameid: u32, identified: bool) -> String {
-    item_db
-        .and_then(|db| db.name(nameid, identified))
-        .map(str::to_string)
-        .unwrap_or_else(|| format!("#{nameid}"))
-}
-
-/// The Bag pane's cells: every non-worn inventory item (worn equipment lives in
-/// the equipment window, not the bag). A missing `ItemDb` entry yields a cell
-/// with no icon — never a panic.
-pub(crate) fn bag_cells(
-    inventory: &Inventory,
-    item_db: Option<&ItemDb>,
-    selected: Option<(Side, u16)>,
-) -> Vec<CellView> {
-    inventory
-        .iter()
-        .filter(|item| !item.is_equipped())
-        .map(|item| CellView {
-            side: Side::Bag,
-            index: item.index,
-            icon: item_icon(item_db, item.item_id, item.identified),
-            amount: item.amount,
-            refine: item.refine,
-            selected: selected == Some((Side::Bag, item.index)),
-        })
-        .collect()
-}
-
-/// The Cart pane's cells, in cart-index order.
-pub(crate) fn cart_cells(
-    cart: &Cart,
-    item_db: Option<&ItemDb>,
-    selected: Option<(Side, u16)>,
-) -> Vec<CellView> {
-    cart.iter()
-        .map(|item| {
-            let index = item.index as u16;
-            CellView {
-                side: Side::Cart,
-                index,
-                icon: item_icon(item_db, item.nameid, item.identified),
-                amount: item.amount.min(u16::MAX as u32) as u16,
-                refine: item.refine.min(u8::MAX as u32) as u8,
-                selected: selected == Some((Side::Cart, index)),
-            }
-        })
-        .collect()
-}
-
-/// The detail view-model for the current selection, resolved from whichever
-/// container it belongs to. `None` when nothing is selected or the slot has
-/// vanished (a stale selection after a server move).
-pub(crate) fn detail_view(
-    selected: Option<(Side, u16)>,
-    inventory: &Inventory,
-    cart: &Cart,
-    item_db: Option<&ItemDb>,
-) -> Option<DetailView> {
-    let (side, index) = selected?;
-    match side {
-        Side::Bag => {
-            let item = inventory.get(index)?;
-            Some(DetailView {
-                icon: item_icon(item_db, item.item_id, item.identified),
-                name: item_name(item_db, item.item_id, item.identified),
-                type_label: Some(item.type_label().to_string()),
-            })
-        }
-        Side::Cart => {
-            let item = cart.get(index)?;
-            Some(DetailView {
-                icon: item_icon(item_db, item.nameid, item.identified),
-                name: item_name(item_db, item.nameid, item.identified),
-                type_label: None,
-            })
-        }
-    }
-}
-
-pub(crate) fn footer_view(cart: &Cart, status: &CharacterStatus) -> FooterView {
-    FooterView {
-        body_weight: status.weight,
-        body_max: status.max_weight,
-        cart_weight: cart.current_weight(),
-        cart_max: cart.max_weight(),
-        cart_slots: cart.len(),
-        zeny: status.zeny,
-    }
-}
-
-/// Shown while the cart is mounted: the Bag<->Cart panes, the detail strip, the
-/// footer meters, an optional unmount hint, and the Unmount button. The unmount
-/// button stays clickable but its handler drops a non-empty unmount; the dimmed
-/// look here mirrors that guard.
-fn mounted_body(
-    inventory: &Inventory,
-    cart: &Cart,
-    cart_ui: &super::CartUi,
-    status: &CharacterStatus,
-    item_db: Option<&ItemDb>,
-) -> impl Scene + use<> {
-    let bag = bag_cells(inventory, item_db, cart_ui.selected);
-    let cart_items = cart_cells(cart, item_db, cart_ui.selected);
-    let detail = detail_view(cart_ui.selected, inventory, cart, item_db);
-    let footer_data = footer_view(cart, status);
-    let can_move = move_enabled(cart_ui.selected, cart_ui.qty, inventory, cart);
-    let cart_empty = cart.is_empty();
-    let qty = cart_ui.qty;
-
-    let hint = (!cart_empty).then(|| {
-        EntityScene(chrome_text(
-            "Empty the cart before unmounting.".to_string(),
-            11.0,
-            lifthrasir_ui::theme::WARN,
-        ))
-    });
+/// Shown while the cart is mounted: the panes around the move arrows, the selection
+/// bar, then Unmount, the zeny and Set Up Shop.
+fn mounted_body(view: MountedView) -> impl Scene {
+    let [bag_scroll, cart_scroll] = view.scroll;
+    let side = view.selection.as_ref().map(|selection| selection.side);
+    let can_move = view.can_move;
+    let cart_empty = view.cart.is_empty();
+    let (cart_weight, cart_max) = view.cart_weight;
+    let full = u64::from(cart_weight) * 100 / u64::from(cart_max.max(1));
+    let cart_status = (format!("{full}% full"), ro_dark::MUTED);
+    let bag_count = format!("{} / {}", view.bag.len(), inventory_window::CAPACITY);
+    let cart_count = format!("{} / {CART_MAX_SLOTS}", view.cart.len());
+    let (weight, max_weight) = view.weight;
     bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
+        Node { flex_direction: FlexDirection::Column, row_gap: px(14) }
         @ignore_picking()
         Children [
-            @panes_row(bag, cart_items) --
-            @detail_strip(detail, qty, can_move) --
-            @footer(footer_data) --
-            {hint} --
-            Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+            Node { column_gap: px(16), align_items: AlignItems::Stretch }
             @ignore_picking()
             Children [
-                @set_up_shop_button() --
-                @unmount_button(cart_empty)
+                Node { width: px(PANE_WIDTH), flex_shrink: 0.0, flex_direction: FlexDirection::Column }
+                @ignore_picking()
+                Children [
+                    @pane(Side::Bag, bag_count, view.bag, bag_scroll)
+                    --
+                    @weight_meter(weight, max_weight)
+                ]
+                --
+                @move_column(side, can_move)
+                --
+                Node { width: px(PANE_WIDTH), flex_shrink: 0.0, flex_direction: FlexDirection::Column }
+                @ignore_picking()
+                Children [
+                    @pane(Side::Cart, cart_count, view.cart, cart_scroll)
+                    --
+                    @meter("Cart weight", view.cart_weight, cart_status, ro_dark::BASE_EXP, false)
+                ]
             ]
+            --
+            @selection_bar(view.selection, view.qty, can_move)
+            --
+            @footer(view.zeny, cart_empty)
         ]
     }
 }
 
-/// "Set Up Shop": asks the domain for the seller flow; the editor appears only
-/// once the server grants a paid setup.
-fn set_up_shop_button() -> impl Scene {
-    bsn! {
-        @FeathersButton { @caption: bsn! { @chrome_text("Set Up Shop".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
-        SetUpShopButton
-        Node {
-            height: px(30),
-            align_self: AlignSelf::FlexStart,
-            padding: {UiRect::horizontal(px(16))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::EMERALD_INK)
-        on(on_set_up_shop)
-    }
-}
-
-fn unmount_button(cart_empty: bool) -> impl Scene {
-    let label_color = if cart_empty {
-        lifthrasir_ui::theme::TEXT
-    } else {
-        lifthrasir_ui::theme::TEXT_FAINT
+/// One pane: its caption over a fixed-height scrolling grid of [`COLUMNS`]-wide rows.
+/// Rows are explicit, so no slot can wrap at a fractional UI scale.
+fn pane(side: Side, count: String, cells: Vec<CellView>, scroll: Vec2) -> impl Scene {
+    let (title, hint) = match side {
+        Side::Bag => ("BAG", "Carried on you"),
+        Side::Cart => ("CART", "Sellable from here"),
     };
-    bsn! {
-        @FeathersButton { @caption: bsn! { @chrome_text("Unmount".to_string(), 12.0, label_color) } }
-        MountToggleButton { mount: false }
-        Node {
-            height: px(30),
-            align_self: AlignSelf::FlexStart,
-            padding: {UiRect::horizontal(px(16))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        on(on_mount_toggle)
+    let total = (cells.len() + 1).next_multiple_of(COLUMNS).max(MIN_SLOTS);
+    let mut slots = cells
+        .into_iter()
+        .map(Some)
+        .chain(std::iter::repeat_with(|| None))
+        .take(total)
+        .map(|cell| slot(side, cell))
+        .peekable();
+    let mut rows = Vec::new();
+    while slots.peek().is_some() {
+        rows.push(slot_row(slots.by_ref().take(COLUMNS).collect()));
     }
-}
-
-/// The Bag pane, mover column, and Cart pane in a row.
-fn panes_row(bag: Vec<CellView>, cart: Vec<CellView>) -> impl Scene {
-    let bag_count = bag.len();
-    let cart_count = cart.len();
     bsn! {
-        Node { flex_direction: FlexDirection::Row, column_gap: px(10), align_items: AlignItems::Stretch }
+        Node { flex_direction: FlexDirection::Column, margin: {UiRect::bottom(px(10))} }
         @ignore_picking()
         Children [
-            @pane("Bag".to_string(), bag_count.to_string(), bag) --
-            @mover_column() --
-            @pane("Cart".to_string(), format!("{cart_count} / {CART_MAX_SLOTS}"), cart)
-        ]
-    }
-}
-
-/// One pane: a header (title + count) over a fixed-height, wheel-scrollable grid
-/// of wrapped cells with a [`FeathersScrollbar`] pinned right. The `#grid` id is
-/// scoped to this call, so both panes reuse it without collision.
-fn pane(title: String, subtitle: String, cells: Vec<CellView>) -> impl Scene {
-    let empty = cells.is_empty();
-    let items: Vec<_> = cells.into_iter().map(cell).collect();
-    let empty_msg = empty.then(|| EntityScene(muted_text("Empty".to_string())));
-    bsn! {
-        Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
-            min_width: px(0),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(6),
-        }
-        @ignore_picking()
-        Children [
-            @pane_head(title, subtitle) --
             Node {
-                height: px(PANE_HEIGHT),
-                position_type: PositionType::Relative,
-                border: px(1),
-                border_radius: BorderRadius::all(px(8)),
+                height: px(22),
+                margin: {UiRect::bottom(px(6))},
+                align_items: AlignItems::Center,
+                column_gap: px(8),
             }
-            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.18)})
-            BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
+            @ignore_picking()
+            Children [
+                @overline(title.into(), ro_dark::ACCENT)
+                --
+                @chrome_text(count, 12.0, ro_dark::STRONG)
+                Node { flex_grow: 1.0 }
+                --
+                @chrome_text(hint.into(), 11.0, ro_dark::MUTED)
+            ]
+            --
+            @inset()
+            Node { height: px(PANE_HEIGHT), position_type: PositionType::Relative }
             @ignore_picking()
             Children [
                 #grid
+                CartPane(side)
+                ScrollArea
+                ScrollPosition(scroll)
+                Pickable
                 Node {
                     position_type: PositionType::Absolute,
                     left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(ROW_GAP),
+                    padding: {UiRect::new(px(12), px(14), px(12), px(12))},
                     overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    align_content: AlignContent::FlexStart,
-                    column_gap: px(6),
-                    row_gap: px(6),
-                    padding: {UiRect { left: Val::Px(8.0), right: Val::Px(13.0), top: Val::Px(8.0), bottom: Val::Px(8.0) }},
                 }
-                ScrollArea
-                Pickable
-                Children [ {items} -- {empty_msg} ]
+                Children [ {rows} ]
                 --
                 @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
                 Node {
                     position_type: PositionType::Absolute,
-                    right: px(3),
-                    top: px(4),
-                    bottom: px(4),
+                    right: px(4),
+                    top: px(8),
+                    bottom: px(8),
                     width: px(6),
                 }
             ]
@@ -438,341 +390,245 @@ fn pane(title: String, subtitle: String, cells: Vec<CellView>) -> impl Scene {
     }
 }
 
-fn pane_head(title: String, subtitle: String) -> impl Scene {
+fn slot_row(slots: Vec<Box<dyn Scene>>) -> impl Scene {
+    bsn! {
+        Node { column_gap: px(SLOT_GAP), flex_shrink: 0.0 }
+        @ignore_picking()
+        Children [ {slots} ]
+    }
+}
+
+/// A filled slot selects on click, moves its whole stack on a double-click and
+/// inspects on a right-click. An empty one is inert.
+fn slot(side: Side, cell: Option<CellView>) -> Box<dyn Scene> {
+    let Some(view) = cell else {
+        return Box::new(bsn! { @slot_frame(SLOT, Ring::None) @ignore_picking() });
+    };
+    let (index, ring) = (view.index, view.ring);
+    let (stroke, _, _) = ring.style();
+    let hover = match ring {
+        Ring::None => (ro_dark::SLOT_HOVER, ro_dark::BUTTON_STROKE),
+        Ring::Rare | Ring::Selected => (ro_dark::SLOT_HOVER, stroke),
+    };
+    let colors = HoverColors {
+        rest: (ro_dark::SLOT, stroke),
+        hover,
+    };
+    let marks = slot_marks(&view, ICON, true);
+    Box::new(bsn! {
+        CartCell { side: {side}, index: {index} }
+        Hovered
+        colors
+        @slot_frame(SLOT, ring)
+        Pickable
+        on(on_cell_click)
+        Children [ {marks} ]
+    })
+}
+
+/// The arrows between the panes. The one pointing away from the selected item's pane
+/// is lit and moves it, exactly like the Move button.
+fn move_column(selected: Option<Side>, can_move: bool) -> impl Scene {
+    let to_cart = can_move && selected == Some(Side::Bag);
+    let to_bag = can_move && selected == Some(Side::Cart);
     bsn! {
         Node {
-            flex_direction: FlexDirection::Row,
+            width: px(72),
+            flex_shrink: 0.0,
+            flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
+            justify_content: JustifyContent::Center,
+            row_gap: px(16),
         }
         @ignore_picking()
         Children [
-            @chrome_text(title, 12.0, lifthrasir_ui::theme::TEXT) --
-            @chrome_text(subtitle, 10.0, lifthrasir_ui::theme::TEXT_FAINT)
+            @move_arrow("chevr", "To cart", to_cart)
+            --
+            @diamond(6.0, ro_dark::DIVIDER, ro_dark::DIVIDER)
+            --
+            @move_arrow("chevl", "To bag", to_bag)
         ]
     }
 }
 
-/// The between-panes flow indicator: a bidirectional pair of chevrons. Purely
-/// decorative (the Move button in the detail strip performs the move); it never
-/// swallows clicks.
-fn mover_column() -> impl Scene {
+fn move_arrow(icon: &'static str, label: &'static str, lit: bool) -> impl Scene {
+    let art = if lit {
+        ButtonArt::PRIMARY
+    } else {
+        ButtonArt::NORMAL
+    };
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            row_gap: px(8),
-            width: px(24),
-            flex_shrink: 0.0,
+            row_gap: px(5),
         }
         @ignore_picking()
         Children [
-            @glyph_icon("chevr", 16.0, lifthrasir_ui::theme::TEXT_DIM) --
-            @glyph_icon("chevl", 16.0, lifthrasir_ui::theme::TEXT_DIM)
-        ]
-    }
-}
-
-/// One pane cell: a bordered icon well carrying its [`CartCell`], with amount and
-/// refine badges baked in. Selection highlight is baked at build time.
-fn cell(view: CellView) -> impl Scene {
-    let (bg, border) = if view.selected {
-        (
-            lifthrasir_ui::theme::EMERALD_INK,
-            lifthrasir_ui::theme::EMERALD,
-        )
-    } else {
-        (
-            lifthrasir_ui::theme::FIELD,
-            lifthrasir_ui::theme::GOLD_FAINT,
-        )
-    };
-    let icon = view.icon.map(|path| EntityScene(cell_icon(path)));
-    let amount = (view.amount > 1).then(|| EntityScene(amount_badge(view.amount.to_string())));
-    let refine = (view.refine > 0).then(|| EntityScene(refine_badge(format!("+{}", view.refine))));
-    bsn! {
-        CartCell { side: {view.side}, index: {view.index}}
-        Node {
-            width: px(CELL_SIZE),
-            height: px(CELL_SIZE),
-            position_type: PositionType::Relative,
-            border: px(1),
-            border_radius: BorderRadius::all(px(5)),
-        }
-        BackgroundColor(bg)
-        BorderColor::all(border)
-        Pickable
-        on(on_cell_click)
-        Children [ {icon} -- {amount} -- {refine} ]
-    }
-}
-
-/// A contained item icon filling its cell.
-fn cell_icon(path: String) -> impl Scene {
-    bsn! {
-        ImageNode { image: {path} }
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(0), top: px(0), right: px(0), bottom: px(0),
-            width: percent(100),
-            height: percent(100),
-        }
-        @ignore_picking()
-    }
-}
-
-/// The stack-amount badge, pinned to the cell's bottom-right.
-fn amount_badge(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(9.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT)
-        Node { position_type: PositionType::Absolute, right: px(1), bottom: px(0) }
-        @ignore_picking()
-    }
-}
-
-/// The refine badge, pinned to the cell's top-left.
-fn refine_badge(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(9.0)},
-        }
-        TextColor(lifthrasir_ui::theme::GOLD)
-        Node { position_type: PositionType::Absolute, left: px(1), top: px(0) }
-        @ignore_picking()
-    }
-}
-
-/// The detail strip: the selected item's sprite/name/type, the quantity stepper
-/// bound to `CartUi.qty`, and the Move button. With nothing selected it shows a
-/// prompt and a disabled Move button.
-fn detail_strip(detail: Option<DetailView>, qty: u16, can_move: bool) -> impl Scene {
-    let icon = detail
-        .as_ref()
-        .and_then(|view| view.icon.clone())
-        .map(|path| EntityScene(cell_icon(path)));
-    let name = detail
-        .as_ref()
-        .map(|view| view.name.clone())
-        .unwrap_or_else(|| "Select an item to move".to_string());
-    let name_color = if detail.is_some() {
-        lifthrasir_ui::theme::TEXT
-    } else {
-        lifthrasir_ui::theme::TEXT_DIM
-    };
-    let type_label = detail
-        .as_ref()
-        .and_then(|view| view.type_label.clone())
-        .map(|text| EntityScene(chrome_text(text, 10.0, lifthrasir_ui::theme::TEXT_DIM)));
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(10),
-            padding: {UiRect::axes(px(12), px(10))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::GOLD_FAINT)
-        @ignore_picking()
-        Children [
+            @button_with(art, glyph_icon(icon, 18.0, ro_dark::BUTTON_LABEL))
             Node {
-                width: px(40),
-                height: px(40),
+                width: px(56.0 + 2.0 * BUTTON_SHADOW),
+                height: px(44.0 + 2.0 * BUTTON_SHADOW),
+                flex_grow: 0.0,
                 flex_shrink: 0.0,
-                position_type: PositionType::Relative,
-                border: px(1),
-                border_radius: BorderRadius::all(px(6)),
+                margin: {UiRect::all(px(-BUTTON_SHADOW))},
             }
-            BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.40)})
-            BorderColor::all(lifthrasir_ui::theme::STROKE)
-            @ignore_picking()
-            Children [ {icon} ]
+            @usable(lit, Color::WHITE)
+            on(on_move)
             --
-            Node { flex_grow: 1.0, min_width: px(0), flex_direction: FlexDirection::Column, row_gap: px(2) }
-            @ignore_picking()
-            Children [ @chrome_text(name, 12.5, name_color) -- {type_label} ]
-            --
-            @stepper(qty) --
-            @move_button(can_move)
+            @chrome_text(label.into(), 11.0, ro_dark::MUTED)
         ]
     }
 }
 
-/// The quantity stepper: minus / value / plus, driving `CartUi.qty`.
-fn stepper(qty: u16) -> impl Scene {
+/// The bar under the panes: the selected item with its amount and Move, or a hint.
+fn selection_bar(selection: Option<SelectionView>, qty: u16, can_move: bool) -> impl Scene {
+    let content = match selection {
+        Some(view) => selected_item(view, qty, can_move),
+        None => vec![Box::new(chrome_text(
+            "Select an item \u{b7} Double-click moves the whole stack".into(),
+            12.0,
+            ro_dark::MUTED,
+        )) as Box<dyn Scene>],
+    };
     bsn! {
+        @inset()
         Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Stretch,
-            height: px(30),
-            flex_shrink: 0.0,
-            border: px(1),
-            border_radius: BorderRadius::all(px(7)),
+            height: px(60),
+            padding: {UiRect::new(px(10), px(12), px(0), px(0))},
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            column_gap: px(12),
         }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
         @ignore_picking()
-        Children [
-            @stepper_button("minus", false) --
-            @stepper_value(qty) --
-            @stepper_button("plus", true)
-        ]
+        Children [ {content} ]
     }
 }
 
-fn stepper_button(icon_name: &'static str, inc: bool) -> impl Scene {
+/// The selected item's slot, name and meta line, the amount controls of a stack, then
+/// the Move button.
+fn selected_item(view: SelectionView, qty: u16, can_move: bool) -> Vec<Box<dyn Scene>> {
+    let ring = view.cell.ring;
+    let name_color = if ring == Ring::Rare {
+        ro_dark::RARE_RING
+    } else {
+        ro_dark::STRONG
+    };
+    let marks = slot_marks(&view.cell, SELECTION_ICON, false);
+    let label = move_label(view.side, qty);
+    let mut content: Vec<Box<dyn Scene>> = vec![
+        Box::new(bsn! {
+            @slot_frame(SELECTION_SLOT, ring)
+            @ignore_picking()
+            Children [ {marks} ]
+        }),
+        Box::new(bsn! {
+            Node {
+                flex_direction: FlexDirection::Column,
+                flex_grow: 1.0,
+                flex_basis: px(0),
+                min_width: px(0),
+                overflow: {Overflow::clip()},
+            }
+            @ignore_picking()
+            Children [
+                @chrome_text(view.name, 13.0, name_color)
+                TextLayout { linebreak: LineBreak::NoWrap }
+                --
+                @chrome_text(view.meta, 11.0, ro_dark::MUTED)
+                TextLayout { linebreak: LineBreak::NoWrap }
+            ]
+        }),
+    ];
+    if view.stack > 1 {
+        content.push(Box::new(step_button("minus", false)));
+        content.push(Box::new(bsn! {
+            @number_field(qty.to_string(), QTY_DIGITS)
+            CartAmountField
+            TextLayout { justify: Justify::Center }
+            Node { width: px(60) }
+        }));
+        content.push(Box::new(step_button("plus", true)));
+        content.push(Box::new(bsn! {
+            @row_button(ButtonArt::NORMAL, "All", 40.0)
+            on(on_qty_all)
+        }));
+    }
+    content.push(Box::new(bsn! {
+        @button_with(ButtonArt::PRIMARY, bsn! {
+            CartMoveLabel
+            @chrome_text(label, 13.0, ro_dark::BUTTON_LABEL)
+        })
+        Node {
+            width: px(160.0 + 2.0 * BUTTON_SHADOW),
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            margin: {UiRect::all(px(-BUTTON_SHADOW))},
+        }
+        @usable(can_move, Color::WHITE)
+        on(on_move)
+    }));
+    content
+}
+
+fn step_button(icon: &'static str, inc: bool) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { @glyph_icon(icon_name, 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
+        @small_button(icon, 24.0)
         QtyButton { inc }
-        Node { width: px(26), height: px(28) }
         on(on_qty_step)
     }
 }
 
-fn stepper_value(qty: u16) -> impl Scene {
-    bsn! {
-        Text({qty.to_string()})
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT)
-        TextLayout { justify: Justify::Center }
-        Node {
-            width: px(36),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-        }
-        @ignore_picking()
-    }
-}
-
-/// The Move button: emerald when a move is allowed, dimmed field when the client
-/// caps disable it. The handler re-checks the same guard, so a click on a dimmed
-/// button is a no-op rather than a doomed request.
-fn move_button(enabled: bool) -> impl Scene {
-    let bg = if enabled {
-        lifthrasir_ui::theme::EMERALD
+/// Unmount, the zeny balance and the way into the seller flow. Unmount is greyed out
+/// until the cart is empty, because the server rejects a loaded unmount.
+fn footer(zeny: u32, cart_empty: bool) -> impl Scene {
+    let zeny = format!("{} z", thousands(zeny.into()));
+    let hint = if cart_empty {
+        ""
     } else {
-        lifthrasir_ui::theme::FIELD
+        "Empty the cart before unmounting"
     };
     bsn! {
-        @FeathersButton { @caption: bsn! { @chrome_text("Move".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
-        Node {
-            height: px(30),
-            flex_shrink: 0.0,
-            padding: {UiRect::horizontal(px(16))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor(bg)
-        on(on_move)
-    }
-}
-
-/// The footer: the body-weight meter, the cart-weight meter, cart slot usage,
-/// and the zeny balance.
-fn footer(view: FooterView) -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(14),
-            padding: {UiRect::axes(px(2), px(4))},
-            border: {UiRect { top: Val::Px(1.0), ..default() }},
-        }
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
+        Node { align_items: AlignItems::Center, column_gap: px(12) }
         @ignore_picking()
         Children [
-            @meter("Weight".to_string(), view.body_weight, view.body_max, lifthrasir_ui::theme::EMERALD) --
-            @meter("Cart".to_string(), view.cart_weight, view.cart_max, lifthrasir_ui::theme::GOLD) --
-            @slot_display(view.cart_slots) --
-            @zeny_display(view.zeny)
-        ]
-    }
-}
-
-/// A labeled weight meter: a `label` / `current/max` header over a fill bar. A
-/// zero `max` (server cap not yet received) renders an empty track.
-fn meter(label: String, current: u32, max: u32, fill: Color) -> impl Scene {
-    let ratio = if max == 0 {
-        0.0
-    } else {
-        (current as f32 / max as f32).clamp(0.0, 1.0)
-    };
-    let value = format!("{current} / {max}");
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(3), flex_grow: 1.0, flex_basis: px(0), min_width: px(0) }
-        @ignore_picking()
-        Children [
-            Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween }
+            @flush_button(ButtonArt::NORMAL, "Unmount")
+            Node { width: px(92.0 + 2.0 * BUTTON_SHADOW), flex_grow: 0.0, flex_shrink: 0.0 }
+            @usable(cart_empty, Color::WHITE)
+            MountToggleButton { mount: false }
+            on(on_mount_toggle)
+            --
+            Node { align_items: AlignItems::Baseline, column_gap: px(6), flex_shrink: 0.0 }
             @ignore_picking()
             Children [
-                @chrome_text(label, 9.5, lifthrasir_ui::theme::TEXT_DIM) --
-                @chrome_text(value, 9.5, lifthrasir_ui::theme::TEXT)
+                @chrome_text("Zeny".into(), 12.0, ro_dark::MUTED)
+                --
+                @chrome_text(zeny, 12.0, ro_dark::BRONZE_LIGHT)
             ]
             --
-            Node { height: px(6), border_radius: BorderRadius::all(px(3)) }
-            BackgroundColor(lifthrasir_ui::theme::FIELD)
+            Node { flex_grow: 1.0 }
             @ignore_picking()
-            Children [
-                Node { width: {Val::Percent(ratio * 100.0)}, height: percent(100), border_radius: BorderRadius::all(px(3)) }
-                BackgroundColor(fill)
+            --
+            @chrome_text(hint.into(), 11.0, ro_dark::MUTED)
+            --
+            @button_with(ButtonArt::PRIMARY, bsn! {
+                Node { align_items: AlignItems::Center, column_gap: px(8) }
                 @ignore_picking()
-            ]
-        ]
-    }
-}
-
-/// The cart slot usage readout: a stacked "SLOTS" label over `used / 100`.
-fn slot_display(used: usize) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(1), align_items: AlignItems::FlexEnd }
-        @ignore_picking()
-        Children [
-            @chrome_text("SLOTS".to_string(), 9.0, lifthrasir_ui::theme::TEXT_DIM) --
-            @chrome_text(format!("{used} / {CART_MAX_SLOTS}"), 12.0, lifthrasir_ui::theme::TEXT)
-        ]
-    }
-}
-
-/// The footer's zeny display: a coin glyph beside the gold balance.
-fn zeny_display(zeny: u32) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(6) }
-        @ignore_picking()
-        Children [
-            @glyph_icon("coin", 14.0, lifthrasir_ui::theme::GOLD) --
-            Text({format!("{zeny}z")})
-            TextFont {
-                font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-                font_size: {FontSize::Px(12.0)},
+                Children [
+                    @glyph_icon("bag", 14.0, ro_dark::BUTTON_LABEL)
+                    --
+                    @chrome_text("Set Up Shop".into(), 13.0, ro_dark::BUTTON_LABEL)
+                ]
+            })
+            Node {
+                width: px(132.0 + 2.0 * BUTTON_SHADOW),
+                flex_grow: 0.0,
+                flex_shrink: 0.0,
+                margin: {UiRect::all(px(-BUTTON_SHADOW))},
             }
-            TextColor(lifthrasir_ui::theme::GOLD)
-            @ignore_picking()
+            SetUpShopButton
+            on(on_set_up_shop)
         ]
-    }
-}
-
-fn muted_text(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(12.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_FAINT)
-        @ignore_picking()
     }
 }
 
@@ -792,13 +648,11 @@ mod tests {
         app
     }
 
-    fn bag_item(index: u16, item_id: u32, amount: u16, refine: u8) -> Item {
+    fn bag_item(index: u16, item_id: u32, amount: u16) -> Item {
         Item {
             index,
             item_id,
-            item_type: 0,
             amount,
-            refine,
             identified: true,
             ..Default::default()
         }
@@ -832,123 +686,116 @@ mod tests {
         ItemDb::from_item_data(data)
     }
 
+    fn mounted(inventory: &Inventory, cart: &Cart, cart_ui: &CartUi) -> BodyView {
+        let status = CharacterStatus::default();
+        BodyView::Mounted(Box::new(mounted_view(
+            inventory, cart, cart_ui, &status, None,
+        )))
+    }
+
+    fn spawn_body(app: &mut App, view: BodyView) {
+        app.world_mut()
+            .spawn_scene(body(view))
+            .expect("body spawns");
+        app.update();
+    }
+
+    fn texts(app: &mut App) -> Vec<String> {
+        let world = app.world_mut();
+        let mut query = world.query::<&Text>();
+        query.iter(world).map(|text| text.0.clone()).collect()
+    }
+
+    fn mount_buttons(app: &mut App) -> Vec<bool> {
+        let world = app.world_mut();
+        let mut query = world.query::<&MountToggleButton>();
+        query.iter(world).map(|button| button.mount).collect()
+    }
+
     #[test]
-    fn window_spawns_root_and_body() {
+    fn window_spawns_one_root_and_one_body() {
         let mut app = test_app();
         app.world_mut()
             .spawn_scene(window())
             .expect("window spawns");
         app.update();
 
-        let roots = app
-            .world_mut()
-            .query_filtered::<(), With<CartWindowRoot>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(roots, 1, "exactly one CartWindowRoot");
-
-        let bodies = app
-            .world_mut()
-            .query_filtered::<(), With<CartWindowBody>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(bodies, 1, "exactly one CartWindowBody");
+        let world = app.world_mut();
+        let mut roots = world.query_filtered::<(), With<CartWindowRoot>>();
+        let mut bodies = world.query_filtered::<(), With<CartWindowBody>>();
+        assert_eq!(roots.iter(world).count(), 1);
+        assert_eq!(bodies.iter(world).count(), 1);
     }
 
     #[test]
-    fn not_mounted_body_carries_a_mount_button() {
+    fn the_prompt_offers_to_mount_and_explains_a_rejection() {
         let mut app = test_app();
-        let inv = Inventory::default();
-        let cart = Cart::default();
-        let ui = super::super::CartUi::default();
-        app.world_mut()
-            .spawn_scene(body(false, &inv, &cart, &ui, None, None))
-            .expect("body spawns");
-        app.update();
+        spawn_body(&mut app, BodyView::Prompt(None));
+        assert_eq!(mount_buttons(&mut app), vec![true]);
+        let rejection = "You have not learned Pushcart.";
+        assert!(!texts(&mut app).iter().any(|text| text == rejection));
 
-        let mounts: Vec<bool> = app
-            .world_mut()
-            .query::<&MountToggleButton>()
-            .iter(app.world())
-            .map(|button| button.mount)
+        let mut app = test_app();
+        let error = Some(CartMountRejection::SkillNotLearned);
+        spawn_body(&mut app, BodyView::Prompt(error));
+        assert!(texts(&mut app).iter().any(|text| text == rejection));
+    }
+
+    #[test]
+    fn the_mounted_body_draws_whole_rows_of_slots_and_the_unmount_button() {
+        let mut app = test_app();
+        let mut inventory = Inventory::default();
+        inventory.upsert(bag_item(2, 501, 5));
+        let mut cart = Cart::default();
+        cart.upsert(cart_dto(4, 12));
+        spawn_body(&mut app, mounted(&inventory, &cart, &CartUi::default()));
+
+        assert_eq!(mount_buttons(&mut app), vec![false]);
+        let world = app.world_mut();
+        let mut cells = world.query::<&CartCell>();
+        let mut filled: Vec<(Side, u16)> = cells
+            .iter(world)
+            .map(|cell| (cell.side, cell.index))
             .collect();
-        assert_eq!(mounts, vec![true]);
+        filled.sort_by_key(|(_, index)| *index);
+        assert_eq!(filled, vec![(Side::Bag, 2), (Side::Cart, 4)]);
+        let mut panes = world.query::<(&CartPane, &Children)>();
+        for (_, rows) in panes.iter(world) {
+            assert_eq!(rows.len(), MIN_SLOTS / COLUMNS, "five rows of six");
+        }
+        let shown = texts(&mut app);
+        assert!(shown.iter().any(|text| text == "1 / 100"), "{shown:?}");
     }
 
     #[test]
-    fn mount_prompt_renders_rejection_hint() {
-        let mut app = test_app();
-        let inv = Inventory::default();
+    fn a_selected_stack_gets_the_amount_controls_and_a_single_item_does_not() {
+        let mut inventory = Inventory::default();
+        inventory.upsert(bag_item(2, 501, 5));
+        inventory.upsert(bag_item(3, 501, 1));
         let cart = Cart::default();
-        let ui = super::super::CartUi {
-            mount_error: Some(CartMountRejection::SkillNotLearned),
-            ..Default::default()
+        let amount_fields = |selected| {
+            let mut app = test_app();
+            let cart_ui = CartUi {
+                selected: Some((Side::Bag, selected)),
+                qty: 1,
+                mount_error: None,
+            };
+            spawn_body(&mut app, mounted(&inventory, &cart, &cart_ui));
+            let world = app.world_mut();
+            let mut fields = world.query_filtered::<(), With<CartAmountField>>();
+            let mut labels = world.query_filtered::<&Text, With<CartMoveLabel>>();
+            let label = labels.single(world).expect("move label").0.clone();
+            (fields.iter(world).count(), label)
         };
-        app.world_mut()
-            .spawn_scene(body(false, &inv, &cart, &ui, None, None))
-            .expect("body spawns");
-        app.update();
 
-        let texts: Vec<String> = app
-            .world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|text| text.0.clone())
-            .collect();
-        assert!(
-            texts.iter().any(|t| t == "You have not learned Pushcart."),
-            "rejection hint text present, got {texts:?}"
-        );
+        assert_eq!(amount_fields(2), (1, "Move 1 to cart".to_string()));
+        assert_eq!(amount_fields(3), (0, "Move 1 to cart".to_string()));
     }
 
     #[test]
-    fn mount_prompt_without_error_has_no_hint() {
-        let mut app = test_app();
-        let inv = Inventory::default();
-        let cart = Cart::default();
-        let ui = super::super::CartUi::default();
-        app.world_mut()
-            .spawn_scene(body(false, &inv, &cart, &ui, None, None))
-            .expect("body spawns");
-        app.update();
-
-        let texts: Vec<String> = app
-            .world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|text| text.0.clone())
-            .collect();
-        assert!(
-            !texts.iter().any(|t| t == "You have not learned Pushcart."),
-            "no rejection hint without an error, got {texts:?}"
-        );
-    }
-
-    #[test]
-    fn mounted_body_carries_an_unmount_button() {
-        let mut app = test_app();
-        let inv = Inventory::default();
-        let cart = Cart::default();
-        let ui = super::super::CartUi::default();
-        let status = CharacterStatus::default();
-        app.world_mut()
-            .spawn_scene(body(true, &inv, &cart, &ui, Some(&status), None))
-            .expect("body spawns");
-        app.update();
-
-        let mounts: Vec<bool> = app
-            .world_mut()
-            .query::<&MountToggleButton>()
-            .iter(app.world())
-            .map(|button| button.mount)
-            .collect();
-        assert_eq!(mounts, vec![false]);
-    }
-
-    #[test]
-    fn bag_cells_projects_unworn_items_with_selection() {
+    fn bag_cells_leave_out_worn_items_and_ring_the_selection() {
         let mut inv = Inventory::default();
-        inv.upsert(bag_item(2, 501, 5, 0));
+        inv.upsert(bag_item(2, 501, 5));
         inv.upsert(Item {
             index: 3,
             wear_state: 1,
@@ -956,85 +803,82 @@ mod tests {
             ..Default::default()
         });
         let db = potion_db();
+
         let cells = bag_cells(&inv, Some(&db), Some((Side::Bag, 2)));
-
         assert_eq!(cells.len(), 1, "worn equipment excluded from the bag pane");
-        assert_eq!(cells[0].index, 2);
-        assert_eq!(cells[0].amount, 5);
-        assert!(cells[0].selected);
+        assert_eq!((cells[0].index, cells[0].amount), (2, 5));
+        assert_eq!(cells[0].ring, Ring::Selected);
         assert!(cells[0].icon.is_some());
+
+        let cells = bag_cells(&inv, None, Some((Side::Cart, 2)));
+        assert_eq!(
+            cells[0].ring,
+            Ring::None,
+            "the cart's selection is not the bag's"
+        );
+        assert!(cells[0].icon.is_none(), "no catalogue, no icon, no panic");
     }
 
     #[test]
-    fn bag_cells_without_db_renders_iconless_cell_no_panic() {
-        let mut inv = Inventory::default();
-        inv.upsert(bag_item(2, 501, 1, 0));
-        let cells = bag_cells(&inv, None, None);
-        assert_eq!(cells.len(), 1);
-        assert!(cells[0].icon.is_none());
-    }
-
-    #[test]
-    fn cart_cells_projects_items_with_selection() {
+    fn cart_cells_keep_their_cart_index_and_ring_the_selection() {
         let mut cart = Cart::default();
         cart.upsert(cart_dto(4, 12));
-        let db = potion_db();
-        let cells = cart_cells(&cart, Some(&db), Some((Side::Cart, 4)));
+        cart.upsert(cart_dto(7, 1));
+        let cells = cart_cells(&cart, Some(&potion_db()), Some((Side::Cart, 4)));
 
-        assert_eq!(cells.len(), 1);
-        assert_eq!(cells[0].index, 4);
-        assert_eq!(cells[0].amount, 12);
-        assert!(cells[0].selected);
-        assert_eq!(cells[0].side, Side::Cart);
+        assert_eq!(cells.len(), 2);
+        assert_eq!((cells[0].index, cells[0].amount), (4, 12));
+        assert_eq!(cells[0].ring, Ring::Selected);
+        assert_eq!((cells[1].index, cells[1].ring), (7, Ring::None));
     }
 
     #[test]
-    fn detail_view_resolves_bag_and_cart_selections() {
+    fn selection_view_resolves_bag_and_cart_selections() {
         let db = potion_db();
         let mut inv = Inventory::default();
-        inv.upsert(bag_item(2, 501, 5, 0));
+        inv.upsert(bag_item(2, 501, 5));
         let mut cart = Cart::default();
         cart.upsert(cart_dto(4, 3));
 
-        let bag = detail_view(Some((Side::Bag, 2)), &inv, &cart, Some(&db)).unwrap();
+        let bag = selection_view(Some((Side::Bag, 2)), &inv, &cart, Some(&db)).unwrap();
         assert_eq!(bag.name, "Red Potion");
-        assert_eq!(bag.type_label, Some("Usable".to_string()));
+        assert_eq!(bag.meta, "In your bag \u{b7} 5");
+        assert_eq!(bag.stack, 5);
 
-        let cart_detail = detail_view(Some((Side::Cart, 4)), &inv, &cart, Some(&db)).unwrap();
-        assert_eq!(cart_detail.name, "Red Potion");
-        assert_eq!(cart_detail.type_label, None);
+        let in_cart = selection_view(Some((Side::Cart, 4)), &inv, &cart, Some(&db)).unwrap();
+        assert_eq!(in_cart.name, "Red Potion");
+        assert_eq!(in_cart.meta, "In your cart \u{b7} 3");
 
-        assert!(detail_view(None, &inv, &cart, Some(&db)).is_none());
+        assert!(selection_view(None, &inv, &cart, Some(&db)).is_none());
+        assert!(
+            selection_view(Some((Side::Cart, 9)), &inv, &cart, Some(&db)).is_none(),
+            "a slot that left the cart has nothing to show"
+        );
+        let unnamed = selection_view(Some((Side::Bag, 2)), &inv, &cart, None).unwrap();
+        assert_eq!(unnamed.name, "Item #501");
     }
 
     #[test]
-    fn detail_view_falls_back_to_nameid_without_db() {
-        let mut inv = Inventory::default();
-        inv.upsert(bag_item(2, 777, 1, 0));
-        let cart = Cart::default();
-        let view = detail_view(Some((Side::Bag, 2)), &inv, &cart, None).unwrap();
-        assert_eq!(view.name, "#777");
-    }
-
-    #[test]
-    fn footer_view_projects_weights_slots_and_zeny() {
+    fn mounted_view_projects_weights_and_zeny() {
         let mut cart = Cart::default();
         cart.set_weights(120, 8000);
-        cart.upsert(cart_dto(4, 1));
-        cart.upsert(cart_dto(5, 1));
         let status = CharacterStatus {
             weight: 500,
             max_weight: 12000,
             zeny: 4200,
             ..Default::default()
         };
-        let view = footer_view(&cart, &status);
+        let view = mounted_view(
+            &Inventory::default(),
+            &cart,
+            &CartUi::default(),
+            &status,
+            None,
+        );
 
-        assert_eq!(view.body_weight, 500);
-        assert_eq!(view.body_max, 12000);
-        assert_eq!(view.cart_weight, 120);
-        assert_eq!(view.cart_max, 8000);
-        assert_eq!(view.cart_slots, 2);
+        assert_eq!(view.weight, (500, 12000));
+        assert_eq!(view.cart_weight, (120, 8000));
         assert_eq!(view.zeny, 4200);
+        assert!(!view.can_move, "nothing is selected");
     }
 }

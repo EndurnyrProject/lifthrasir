@@ -1,4 +1,4 @@
-//! Vending window regressions: draft rules, affordances, structure, and feedback.
+//! Vending window regressions: draft rules, buttons, bodies, and feedback.
 
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
@@ -7,6 +7,7 @@ use bevy::text::EditableText;
 use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
 use lifthrasir_client::domain::cart::Cart;
+use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use lifthrasir_client::domain::vending::{
     RevealVendingSeller, VendingIntent, VendingNotice, VendingState,
 };
@@ -18,14 +19,14 @@ use net_contract::dto::{
 use net_contract::events::{ChatHeard, VendingIngress, VendingIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
 
-use super::drag::{DragKind, DragSource, DropAction, DropZone, VendingDrag};
+use super::buyer::BuyerBasket;
 use super::feedback::vending_notice_text;
 use super::scene;
 use super::{
-    DraftFieldKind, DraftRow, SellerDraft, VendingDraftField, VendingModeNote, VendingRowRemove,
-    VendingTitleField, VendingUi, VendingWindowRoot, cancel_on_escape, deliver_vending_feedback,
-    on_cancel_setup, on_close_shop, on_open_shop, on_row_removed, rebuild_content, sync_texts,
-    sync_window_state,
+    DraftFieldKind, DraftRow, SellerDraft, SetupReadout, Surface, VendingAction, VendingDraftField,
+    VendingItem, VendingOpenButton, VendingQtyField, VendingTitleField, VendingUi,
+    VendingWindowRoot, cancel_on_escape, deliver_vending_feedback, focus_new_price_field,
+    on_item_inspect, on_vending_button, rebuild_content, sync_setup_readouts, sync_window_state,
 };
 
 const SETUP_ID: &str = "setup-1";
@@ -95,41 +96,78 @@ fn setup() -> VendingSetup {
     }
 }
 
-fn snapshot() -> VendingSnapshot {
-    VendingSnapshot {
-        vendor_unit_id: 5,
-        shop_id: SHOP_ID.into(),
-        title: "Potions".into(),
-        items: vec![VendingListing {
-            index: 2,
-            nameid: 501,
-            type_: 0,
-            amount: 2,
-            identified: true,
-            attribute: 0,
-            refine: 0,
-            cards: vec![],
-            options: vec![],
-            price: 500,
-            signer_name: String::new(),
-            creator_id: 0,
-            creator_kind: net_contract::dto::VendingCreatorKind::None,
-            enchant_grade: 0,
-        }],
-        total_earned: 1_500,
+fn listing(index: u32, amount: u32, price: u32) -> VendingListing {
+    VendingListing {
+        index,
+        nameid: 501,
+        type_: 0,
+        amount,
+        identified: true,
+        attribute: 0,
+        refine: 0,
+        cards: vec![],
+        options: vec![],
+        price,
+        signer_name: String::new(),
+        creator_id: 0,
+        creator_kind: net_contract::dto::VendingCreatorKind::None,
+        enchant_grade: 0,
     }
 }
 
-fn state_with(payload: VendingIngressPayload) -> VendingState {
-    let mut state = VendingState::default();
-    state.apply(&VendingIngress {
+fn snapshot() -> VendingSnapshot {
+    VendingSnapshot {
+        vendor_unit_id: VENDOR_ID,
+        shop_id: SHOP_ID.into(),
+        title: "Potions".into(),
+        items: vec![listing(2, 2, 500)],
+        total_earned: 0,
+    }
+}
+
+fn ingress(payload: VendingIngressPayload) -> VendingIngress {
+    VendingIngress {
         generation: ZoneSessionGeneration::default(),
         payload,
-    });
+    }
+}
+
+fn setup_state() -> VendingState {
+    let mut state = VendingState::default();
+    state.apply(&ingress(VendingIngressPayload::SetupReady(setup())));
     state
 }
 
-fn draft(rows: &[(u32, u32, u32)]) -> SellerDraft {
+/// The seller with an accepted, open shop.
+fn open_state() -> VendingState {
+    let mut state = setup_state();
+    let request_id = state.begin_open(SETUP_ID, 0.0).expect("open request");
+    state.apply(&ingress(VendingIngressPayload::OpenResult {
+        request_id,
+        setup_id: SETUP_ID.into(),
+        setup_active: false,
+        outcome: VendingOpenOutcome::Success,
+        snapshot: Some(snapshot()),
+    }));
+    state
+}
+
+fn browse_state(items: Vec<VendingListing>) -> VendingState {
+    let mut state = VendingState::default();
+    state.begin_browse(VENDOR_ID).expect("browse request");
+    state.apply(&ingress(VendingIngressPayload::ListResult {
+        request_id: 1,
+        vendor_unit_id: VENDOR_ID,
+        outcome: net_contract::dto::VendingListOutcome::Success,
+        snapshot: Some(VendingSnapshot {
+            items,
+            ..snapshot()
+        }),
+    }));
+    state
+}
+
+fn draft(rows: &[(u32, u32, Option<u32>)]) -> SellerDraft {
     SellerDraft {
         title: "Potions".to_string(),
         rows: rows
@@ -151,11 +189,10 @@ fn app(state: VendingState) -> App {
     app.insert_resource(state)
         .insert_resource(cart())
         .insert_resource(item_db())
-        .insert_resource(SellerDraft::default())
-        .init_resource::<super::buyer::BuyerBasket>()
-        .insert_resource(VendingUi::default())
-        .init_resource::<VendingDrag>()
-        .init_resource::<super::drag::LastVendingClick>()
+        .init_resource::<EntityRegistry>()
+        .init_resource::<SellerDraft>()
+        .init_resource::<BuyerBasket>()
+        .init_resource::<VendingUi>()
         .init_resource::<InputFocus>()
         .init_resource::<ButtonInput<KeyCode>>()
         .add_message::<VendingIntent>()
@@ -166,6 +203,16 @@ fn app(state: VendingState) -> App {
     app
 }
 
+fn press(app: &mut App, action: VendingAction) {
+    let button = app
+        .world_mut()
+        .spawn(action)
+        .observe(on_vending_button)
+        .id();
+    app.world_mut().trigger(Activate { entity: button });
+    app.world_mut().flush();
+}
+
 fn intents(app: &mut App) -> Vec<VendingIntent> {
     app.world_mut()
         .resource_mut::<Messages<VendingIntent>>()
@@ -173,17 +220,120 @@ fn intents(app: &mut App) -> Vec<VendingIntent> {
         .collect()
 }
 
-fn chat(app: &mut App) -> Vec<String> {
+fn with_zeny(app: &mut App, zeny: u32) {
+    app.world_mut().spawn((
+        lifthrasir_client::domain::entities::markers::LocalPlayer,
+        lifthrasir_client::domain::entities::character::components::status::CharacterStatus {
+            zeny,
+            ..Default::default()
+        },
+    ));
+}
+
+fn draft_rows(app: &App) -> Vec<DraftRow> {
+    app.world().resource::<SellerDraft>().rows.clone()
+}
+
+fn basket_quantity(app: &App, index: u32) -> u32 {
+    app.world().resource::<BuyerBasket>().quantity(index)
+}
+
+/// Spawns the frame and runs the systems that fill and follow it.
+fn spawn_window(app: &mut App) {
+    app.add_systems(
+        Update,
+        (
+            sync_window_state,
+            rebuild_content,
+            focus_new_price_field,
+            sync_setup_readouts,
+        )
+            .chain(),
+    );
     app.world_mut()
-        .resource_mut::<Messages<ChatHeard>>()
-        .drain()
-        .map(|line| line.message.clone())
+        .spawn_scene(scene::window())
+        .expect("vending window scene spawns");
+    app.update();
+}
+
+fn count<M: Component>(app: &mut App) -> usize {
+    app.world_mut()
+        .query_filtered::<(), With<M>>()
+        .iter(app.world())
+        .count()
+}
+
+fn hidden(app: &mut App) -> bool {
+    let world = app.world_mut();
+    world
+        .query_filtered::<&Visibility, With<VendingWindowRoot>>()
+        .iter(world)
+        .all(|visibility| *visibility == Visibility::Hidden)
+}
+
+fn texts(app: &mut App) -> Vec<String> {
+    let world = app.world_mut();
+    let mut query = world.query::<&Text>();
+    query.iter(world).map(|text| text.0.clone()).collect()
+}
+
+fn readout(app: &mut App, wanted: SetupReadout) -> String {
+    let world = app.world_mut();
+    let mut query = world.query::<(&SetupReadout, &Text)>();
+    query
+        .iter(world)
+        .find(|(readout, _)| **readout == wanted)
+        .map(|(_, text)| text.0.clone())
+        .unwrap_or_else(|| panic!("no {wanted:?} read-out"))
+}
+
+fn items(app: &mut App, surface: Surface) -> Vec<Entity> {
+    let world = app.world_mut();
+    let mut query = world.query::<(Entity, &VendingItem)>();
+    query
+        .iter(world)
+        .filter(|(_, item)| item.surface == surface)
+        .map(|(entity, _)| entity)
         .collect()
 }
 
+fn draft_field(app: &mut App, cart_index: u32, kind: DraftFieldKind) -> Entity {
+    let world = app.world_mut();
+    let mut query = world.query::<(Entity, &VendingDraftField)>();
+    query
+        .iter(world)
+        .find(|(_, field)| field.cart_index == cart_index && field.kind == kind)
+        .map(|(entity, _)| entity)
+        .unwrap_or_else(|| panic!("no {kind:?} field for slot {cart_index}"))
+}
+
+fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
+    use bevy::camera::NormalizedRenderTarget;
+    use bevy::picking::backend::HitData;
+    use bevy::picking::pointer::{Location, PointerId};
+    use bevy::window::WindowRef;
+
+    PointerClick {
+        entity: target,
+        pointer: Pointer::new(
+            PointerId::Mouse,
+            Location {
+                target: NormalizedRenderTarget::Window(
+                    WindowRef::Primary.normalize(Some(window)).unwrap(),
+                ),
+                position: Vec2::ZERO,
+            },
+        ),
+        button,
+        hit: HitData::new(target, 0.0, None, None),
+        duration: std::time::Duration::ZERO,
+        count: 1,
+    }
+}
+
 #[test]
-fn offers_follow_draft_order() {
-    let draft = draft(&[(3, 1, 900), (2, 2, 250)]);
+fn offers_follow_draft_order_and_leave_out_unpriced_rows() {
+    let draft = draft(&[(3, 1, Some(900)), (9, 1, None), (2, 2, Some(250))]);
     let offers = draft.offers();
 
     assert_eq!(offers.len(), 2);
@@ -198,7 +348,7 @@ fn offers_follow_draft_order() {
 }
 
 #[test]
-fn add_lists_the_whole_stack_once_within_the_slot_cap() {
+fn add_lists_the_whole_stack_unpriced_once_within_the_slot_cap() {
     let mut draft = SellerDraft::default();
     let live = setup();
 
@@ -208,9 +358,9 @@ fn add_lists_the_whole_stack_once_within_the_slot_cap() {
         vec![DraftRow {
             cart_index: 2,
             amount: 3,
-            price: 0
+            price: None
         }],
-        "the whole stack at the minimum price"
+        "the whole stack, waiting for a price"
     );
     assert_eq!(draft.add(2, 3, &live), Ok(false), "already listed");
     assert!(draft.add(9, 1, &live).is_err(), "not a sellable slot");
@@ -228,49 +378,10 @@ fn add_lists_the_whole_stack_once_within_the_slot_cap() {
 }
 
 #[test]
-fn each_drop_zone_accepts_only_its_own_payload() {
-    let kinds = [
-        DragKind::Stock,
-        DragKind::Draft,
-        DragKind::Listing,
-        DragKind::Basket,
-    ];
-    let zones = [
-        DropZone::SetupListings,
-        DropZone::CartStock,
-        DropZone::Basket,
-        DropZone::VendorListing,
-    ];
-    for zone in zones {
-        for kind in kinds {
-            let action = super::drag::drop_action(zone, DragSource { kind, index: 7 });
-            let expected = match (zone, kind) {
-                (DropZone::SetupListings, DragKind::Stock) => Some(DropAction::List(7)),
-                (DropZone::CartStock, DragKind::Draft) => Some(DropAction::Unlist(7)),
-                (DropZone::Basket, DragKind::Listing) => Some(DropAction::AddToBasket(7)),
-                (DropZone::VendorListing, DragKind::Basket) => {
-                    Some(DropAction::RemoveFromBasket(7))
-                }
-                _ => None,
-            };
-            assert_eq!(action, expected, "{zone:?} <- {kind:?}");
-        }
-    }
-
-    let shortcut = |kind| super::drag::shortcut_action(DragSource { kind, index: 7 });
-    assert_eq!(shortcut(DragKind::Stock), Some(DropAction::List(7)));
-    assert_eq!(
-        shortcut(DragKind::Listing),
-        Some(DropAction::AddToBasket(7))
-    );
-    assert_eq!(shortcut(DragKind::Draft), None, "rows have no double-click");
-    assert_eq!(shortcut(DragKind::Basket), None);
-}
-
-#[test]
 fn validation_rejects_counts_slots_quantities_and_prices() {
     let cart = cart();
     let live = setup();
+    let free = Some(0);
 
     assert!(draft(&[]).validate(&live, &cart).is_err(), "no listings");
 
@@ -279,28 +390,32 @@ fn validation_rejects_counts_slots_quantities_and_prices() {
         .map(|index| DraftRow {
             cart_index: index,
             amount: 1,
-            price: 0,
+            price: free,
         })
         .collect();
     assert!(too_many.validate(&live, &cart).is_err(), "over max slots");
 
     assert!(
-        draft(&[(2, 1, 0), (2, 1, 0)])
+        draft(&[(2, 1, free), (2, 1, free)])
             .validate(&live, &cart)
             .is_err(),
         "duplicate slot"
     );
     assert!(
-        draft(&[(9, 1, 0)]).validate(&live, &cart).is_err(),
+        draft(&[(9, 1, free)]).validate(&live, &cart).is_err(),
         "slot is not sellable"
     );
     assert!(
-        draft(&[(2, 0, 0)]).validate(&live, &cart).is_err(),
+        draft(&[(2, 0, free)]).validate(&live, &cart).is_err(),
         "zero quantity"
     );
     assert!(
-        draft(&[(2, 4, 0)]).validate(&live, &cart).is_err(),
+        draft(&[(2, 4, free)]).validate(&live, &cart).is_err(),
         "quantity over stock"
+    );
+    assert!(
+        draft(&[(2, 1, None)]).validate(&live, &cart).is_err(),
+        "no price typed"
     );
 
     let capped = VendingSetup {
@@ -308,32 +423,21 @@ fn validation_rejects_counts_slots_quantities_and_prices() {
         max_unit_price: 5_000,
         ..live.clone()
     };
+    let priced = |price| draft(&[(2, 1, Some(price))]).validate(&capped, &cart);
+    assert!(priced(99).is_err(), "price below the accepted minimum");
+    assert!(priced(5_001).is_err(), "price above the accepted maximum");
+    assert!(priced(100).is_ok(), "inclusive minimum");
+    assert!(priced(5_000).is_ok(), "inclusive maximum");
     assert!(
-        draft(&[(2, 1, 99)]).validate(&capped, &cart).is_err(),
-        "price below the accepted minimum"
-    );
-    assert!(
-        draft(&[(2, 1, 5_001)]).validate(&capped, &cart).is_err(),
-        "price above the accepted maximum"
-    );
-    assert!(
-        draft(&[(2, 1, 100)]).validate(&capped, &cart).is_ok(),
-        "inclusive minimum"
-    );
-    assert!(
-        draft(&[(2, 1, 5_000)]).validate(&capped, &cart).is_ok(),
-        "inclusive maximum"
-    );
-    assert!(
-        draft(&[(2, 1, 0)]).validate(&live, &cart).is_ok(),
-        "zero price is allowed by policy"
+        draft(&[(2, 1, free)]).validate(&live, &cart).is_ok(),
+        "a typed zero price is allowed by policy"
     );
 }
 
 #[test]
 fn validation_rejects_empty_control_and_oversized_titles() {
     let cart = cart();
-    let mut draft = draft(&[(2, 1, 0)]);
+    let mut draft = draft(&[(2, 1, Some(0))]);
 
     draft.title = "   ".into();
     assert!(draft.validate(&setup(), &cart).is_err(), "blank title");
@@ -365,230 +469,51 @@ fn titles_are_clamped_on_a_character_boundary() {
     assert!(super::clamp_title("\u{4fbf}\u{5229}\u{5e97}", 4).is_char_boundary(3));
 }
 
-fn spawn_window(app: &mut App) {
-    app.add_systems(
-        Update,
-        (
-            sync_window_state,
-            rebuild_content,
-            super::source::rebuild_source,
-            super::focus_new_price_field,
-            sync_texts,
-        )
-            .chain(),
-    );
-    app.world_mut()
-        .spawn_scene(scene::window())
-        .expect("vending window scene spawns");
-    app.update();
-}
-
-fn count<M: Component>(app: &mut App) -> usize {
-    app.world_mut()
-        .query_filtered::<(), With<M>>()
-        .iter(app.world())
-        .count()
-}
-
-fn all_hidden(world: &mut World) -> bool {
-    world
-        .query_filtered::<&Visibility, With<VendingWindowRoot>>()
-        .iter(world)
-        .all(|visibility| *visibility == Visibility::Hidden)
-}
-
-fn texts<M: Component>(app: &mut App) -> Vec<String> {
-    let world = app.world_mut();
-    let mut query = world.query_filtered::<&Text, With<M>>();
-    query.iter(world).map(|text| text.0.clone()).collect()
-}
-
-fn source_entity(app: &mut App, kind: DragKind, index: u32) -> Entity {
-    let world = app.world_mut();
-    world
-        .query::<(Entity, &DragSource)>()
-        .iter(world)
-        .find(|(_, source)| **source == DragSource { kind, index })
-        .map(|(entity, _)| entity)
-        .unwrap_or_else(|| panic!("no {kind:?} source for {index}"))
-}
-
-fn sources(app: &mut App, kind: DragKind) -> usize {
-    let world = app.world_mut();
-    world
-        .query::<&DragSource>()
-        .iter(world)
-        .filter(|source| source.kind == kind)
-        .count()
-}
-
-fn zone_entity(app: &mut App, zone: DropZone) -> Entity {
-    let world = app.world_mut();
-    world
-        .query::<(Entity, &DropZone)>()
-        .iter(world)
-        .find(|(_, found)| **found == zone)
-        .map(|(entity, _)| entity)
-        .unwrap_or_else(|| panic!("no {zone:?} zone"))
-}
-
-fn draft_rows(app: &App) -> Vec<DraftRow> {
-    app.world().resource::<SellerDraft>().rows.clone()
-}
-
 #[test]
-fn dragging_stock_onto_the_listings_lists_it_and_back_unlists_it() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+fn listing_a_slot_drafts_it_and_focuses_its_price_and_unlisting_removes_it() {
+    let mut app = app(setup_state());
     spawn_window(&mut app);
-    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
 
-    let stock = source_entity(&mut app, DragKind::Stock, 2);
-    app.world_mut().trigger(drag_start(stock, window));
-    assert_eq!(
-        app.world().resource::<VendingDrag>().payload,
-        Some(DragSource {
-            kind: DragKind::Stock,
-            index: 2
-        })
-    );
-
-    // The drop lands on the hint inside the zone and bubbles up to it.
-    let zone = zone_entity(&mut app, DropZone::SetupListings);
-    let hint = app
-        .world()
-        .entity(zone)
-        .get::<Children>()
-        .expect("drop hint")[0];
-    app.world_mut().trigger(drag_drop(hint, stock, window));
+    press(&mut app, VendingAction::List(2));
     assert_eq!(
         draft_rows(&app),
         vec![DraftRow {
             cart_index: 2,
             amount: 3,
-            price: 0
+            price: None
         }]
     );
+    press(&mut app, VendingAction::List(2));
+    assert_eq!(draft_rows(&app).len(), 1, "a slot is listed once");
 
     app.update();
-    let price = {
-        let world = app.world_mut();
-        world
-            .query::<(Entity, &VendingDraftField)>()
-            .iter(world)
-            .find(|(_, field)| field.cart_index == 2 && field.kind == DraftFieldKind::Price)
-            .map(|(entity, _)| entity)
-            .expect("price field")
-    };
+    let price = draft_field(&mut app, 2, DraftFieldKind::Price);
     assert_eq!(
         app.world().resource::<InputFocus>().get(),
         Some(price),
         "the new row's price takes focus"
     );
 
-    let handle = source_entity(&mut app, DragKind::Draft, 2);
-    app.world_mut().trigger(drag_start(handle, window));
-    let stock_panel = zone_entity(&mut app, DropZone::CartStock);
-    app.world_mut()
-        .trigger(drag_drop(stock_panel, handle, window));
-    assert!(draft_rows(&app).is_empty(), "dropped back on the stock");
+    press(&mut app, VendingAction::Unlist(2));
+    assert!(draft_rows(&app).is_empty());
 }
 
 #[test]
-fn a_double_clicked_stock_cell_lists_it_like_a_drop() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    spawn_window(&mut app);
-    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    let stock = source_entity(&mut app, DragKind::Stock, 3);
-
-    app.world_mut()
-        .trigger(click_event(stock, window, PointerButton::Primary));
-    assert!(draft_rows(&app).is_empty(), "a single click only selects");
-
-    app.world_mut()
-        .trigger(click_event(stock, window, PointerButton::Primary));
-    assert_eq!(
-        draft_rows(&app),
-        vec![DraftRow {
-            cart_index: 3,
-            amount: 1,
-            price: 0
-        }]
-    );
-}
-
-#[test]
-fn a_full_shop_refuses_a_drop_with_a_message() {
+fn a_full_shop_refuses_a_listing_with_a_message() {
     let full = VendingSetup {
         max_slots: 1,
         ..setup()
     };
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(full)));
-    spawn_window(&mut app);
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
-    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    let stock = source_entity(&mut app, DragKind::Stock, 3);
+    let mut state = VendingState::default();
+    state.apply(&ingress(VendingIngressPayload::SetupReady(full)));
+    let mut app = app(state);
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, Some(0))]).rows;
 
-    app.world_mut()
-        .trigger(click_event(stock, window, PointerButton::Primary));
-    app.world_mut()
-        .trigger(click_event(stock, window, PointerButton::Primary));
+    press(&mut app, VendingAction::List(3));
     assert_eq!(draft_rows(&app).len(), 1);
     assert_eq!(
         app.world().resource::<VendingUi>().error(),
         Some("A shop can list at most 1 items.")
-    );
-}
-
-#[test]
-fn a_released_button_ends_any_drag() {
-    let mut app = app(VendingState::default());
-    app.add_systems(Update, super::drag::end_drag_on_release);
-    let payload = Some(DragSource::default());
-
-    app.init_resource::<ButtonInput<MouseButton>>();
-    app.world_mut()
-        .resource_mut::<ButtonInput<MouseButton>>()
-        .press(MouseButton::Left);
-    app.world_mut().resource_mut::<VendingDrag>().payload = payload;
-    app.update();
-    assert_eq!(app.world().resource::<VendingDrag>().payload, payload);
-
-    app.world_mut()
-        .resource_mut::<ButtonInput<MouseButton>>()
-        .release(MouseButton::Left);
-    app.update();
-    assert_eq!(app.world().resource::<VendingDrag>().payload, None);
-}
-
-#[test]
-fn a_drafted_row_can_be_removed() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    app.world_mut().resource_mut::<SellerDraft>().rows = vec![
-        DraftRow {
-            cart_index: 2,
-            amount: 2,
-            price: 100,
-        },
-        DraftRow {
-            cart_index: 3,
-            amount: 1,
-            price: 0,
-        },
-    ];
-    let remove = app
-        .world_mut()
-        .spawn(VendingRowRemove { cart_index: 2 })
-        .observe(on_row_removed)
-        .id();
-
-    app.world_mut().trigger(Activate { entity: remove });
-    assert_eq!(
-        app.world().resource::<SellerDraft>().rows,
-        vec![DraftRow {
-            cart_index: 3,
-            amount: 1,
-            price: 0
-        }]
     );
 }
 
@@ -615,12 +540,11 @@ fn spawn_fields(app: &mut App, title: &str, rows: &[(u32, &str, &str)]) {
 
 #[test]
 fn typed_title_quantity_and_price_reach_the_open_intent() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0), (3, 1, 0)]).rows;
-    spawn_fields(&mut app, "Potions", &[(2, "3", "450"), (3, "1", "0")]);
-    let submit = app.world_mut().spawn_empty().observe(on_open_shop).id();
+    let mut app = app(setup_state());
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, None), (3, 1, None)]).rows;
+    spawn_fields(&mut app, " Potions ", &[(2, "3", "450"), (3, "1", "0")]);
 
-    app.world_mut().trigger(Activate { entity: submit });
+    press(&mut app, VendingAction::OpenShop);
 
     let intents = intents(&mut app);
     assert_eq!(intents.len(), 1);
@@ -647,39 +571,44 @@ fn typed_title_quantity_and_price_reach_the_open_intent() {
 }
 
 #[test]
-fn an_invalid_draft_reports_instead_of_submitting() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
+fn an_invalid_or_unpriced_draft_reports_instead_of_submitting() {
+    let mut app = app(setup_state());
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, Some(0))]).rows;
     spawn_fields(&mut app, "Potions", &[(2, "4", "0")]);
-    let submit = app.world_mut().spawn_empty().observe(on_open_shop).id();
-
-    app.world_mut().trigger(Activate { entity: submit });
-
+    press(&mut app, VendingAction::OpenShop);
     assert!(intents(&mut app).is_empty());
     assert_eq!(
         app.world().resource::<VendingUi>().error(),
         Some("Quantity must be between 1 and 3.")
     );
+
+    let mut app = self::app(setup_state());
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, Some(500))]).rows;
+    spawn_fields(&mut app, "Potions", &[(2, "1", "")]);
+    press(&mut app, VendingAction::OpenShop);
+    assert!(intents(&mut app).is_empty(), "an emptied price never opens");
+    assert_eq!(
+        app.world().resource::<VendingUi>().error(),
+        Some("Set a price for every listing.")
+    );
 }
 
 #[test]
 fn submission_waits_for_an_unanswered_open() {
-    let mut state = state_with(VendingIngressPayload::SetupReady(setup()));
+    let mut state = setup_state();
     assert!(state.begin_open(SETUP_ID, 0.0).is_some());
     let mut app = app(state);
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, Some(0))]).rows;
     spawn_fields(&mut app, "Potions", &[(2, "1", "0")]);
-    let submit = app.world_mut().spawn_empty().observe(on_open_shop).id();
 
-    app.world_mut().trigger(Activate { entity: submit });
+    press(&mut app, VendingAction::OpenShop);
     assert!(intents(&mut app).is_empty());
 }
 
 #[test]
-fn cancel_and_escape_cancel_preparation_but_never_close_an_active_shop() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    let cancel = app.world_mut().spawn_empty().observe(on_cancel_setup).id();
-    app.world_mut().trigger(Activate { entity: cancel });
+fn cancel_close_and_escape_cancel_preparation_exactly_once() {
+    let mut app = app(setup_state());
+    press(&mut app, VendingAction::CancelSetup);
     assert_eq!(
         intents(&mut app),
         vec![VendingIntent::Close {
@@ -687,6 +616,8 @@ fn cancel_and_escape_cancel_preparation_but_never_close_an_active_shop() {
         }]
     );
 
+    press(&mut app, VendingAction::CloseWindow);
+    app.world_mut().resource_mut::<VendingUi>().visible = true;
     app.world_mut()
         .resource_mut::<ButtonInput<KeyCode>>()
         .press(KeyCode::Escape);
@@ -700,75 +631,36 @@ fn cancel_and_escape_cancel_preparation_but_never_close_an_active_shop() {
 
 #[test]
 fn escape_and_close_hide_an_active_shop_without_closing_it() {
-    let mut app = app(state_with(VendingIngressPayload::OpenResult {
-        request_id: 1,
-        setup_id: SETUP_ID.into(),
-        setup_active: false,
-        outcome: VendingOpenOutcome::Success,
-        snapshot: Some(snapshot()),
-    }));
-    let mut state = VendingState::default();
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::SetupReady(setup()),
-    });
-    let request_id = state.begin_open(SETUP_ID, 0.0).expect("open request");
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::OpenResult {
-            request_id,
-            setup_id: SETUP_ID.into(),
-            setup_active: false,
-            outcome: VendingOpenOutcome::Success,
-            snapshot: Some(snapshot()),
-        },
-    });
-    *app.world_mut().resource_mut::<VendingState>() = state;
-    app.world_mut().resource_mut::<VendingUi>().visible = true;
+    let mut app = app(open_state());
+    app.add_systems(Update, cancel_on_escape);
 
+    app.world_mut().resource_mut::<VendingUi>().visible = true;
     app.world_mut()
         .resource_mut::<ButtonInput<KeyCode>>()
         .press(KeyCode::Escape);
-    app.add_systems(Update, cancel_on_escape);
     app.update();
+    assert!(!app.world().resource::<VendingUi>().is_visible());
 
+    app.world_mut().resource_mut::<VendingUi>().visible = true;
+    press(&mut app, VendingAction::CloseWindow);
+    assert!(!app.world().resource::<VendingUi>().is_visible());
     assert!(
         intents(&mut app).is_empty(),
-        "escape must not close the shop"
+        "hiding must not close the shop"
     );
-    assert!(!app.world().resource::<VendingUi>().is_visible());
 }
 
 #[test]
-fn explicit_close_waits_for_the_result() {
-    let mut app = app(state_with(VendingIngressPayload::OpenResult {
-        request_id: 1,
-        setup_id: SETUP_ID.into(),
-        setup_active: false,
-        outcome: VendingOpenOutcome::Success,
-        snapshot: Some(snapshot()),
-    }));
-    let mut state = VendingState::default();
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::SetupReady(setup()),
-    });
-    let request_id = state.begin_open(SETUP_ID, 0.0).expect("open request");
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::OpenResult {
-            request_id,
-            setup_id: SETUP_ID.into(),
-            setup_active: false,
-            outcome: VendingOpenOutcome::Success,
-            snapshot: Some(snapshot()),
-        },
-    });
-    *app.world_mut().resource_mut::<VendingState>() = state;
-    app.world_mut().resource_mut::<VendingUi>().visible = true;
+fn closing_a_shop_asks_first_and_then_waits_for_the_result() {
+    let mut app = app(open_state());
 
-    let close = app.world_mut().spawn_empty().observe(on_close_shop).id();
-    app.world_mut().trigger(Activate { entity: close });
+    press(&mut app, VendingAction::AskClose);
+    assert!(intents(&mut app).is_empty(), "the prompt sends nothing");
+    press(&mut app, VendingAction::KeepOpen);
+    assert!(intents(&mut app).is_empty());
+
+    press(&mut app, VendingAction::AskClose);
+    press(&mut app, VendingAction::CloseShop);
     assert_eq!(
         intents(&mut app),
         vec![VendingIntent::Close {
@@ -776,11 +668,30 @@ fn explicit_close_waits_for_the_result() {
         }]
     );
 
-    app.world_mut().trigger(Activate { entity: close });
+    press(&mut app, VendingAction::CloseShop);
     assert!(
         intents(&mut app).is_empty(),
         "a second close waits for the result"
     );
+}
+
+#[test]
+fn a_settled_close_makes_the_affordance_usable_again() {
+    let mut app = app(setup_state());
+    app.add_systems(Update, sync_window_state);
+
+    press(&mut app, VendingAction::CancelSetup);
+    assert_eq!(intents(&mut app).len(), 1);
+    press(&mut app, VendingAction::CancelSetup);
+    assert!(
+        intents(&mut app).is_empty(),
+        "one cancel waits for the result"
+    );
+
+    // Nothing is pending in the domain here, so the next frame re-enables it.
+    app.update();
+    press(&mut app, VendingAction::CancelSetup);
+    assert_eq!(intents(&mut app).len(), 1);
 }
 
 #[test]
@@ -795,6 +706,13 @@ fn notices_become_exactly_one_chat_line_each() {
     app.world_mut()
         .resource_mut::<Messages<VendingNotice>>()
         .write(notice.clone());
+    let chat = |app: &mut App| -> Vec<String> {
+        app.world_mut()
+            .resource_mut::<Messages<ChatHeard>>()
+            .drain()
+            .map(|line| line.message.clone())
+            .collect()
+    };
 
     app.update();
     assert_eq!(chat(&mut app), vec![vending_notice_text(&notice)]);
@@ -808,52 +726,50 @@ fn the_editor_only_appears_with_an_authoritative_setup() {
     let mut idle = app(VendingState::default());
     spawn_window(&mut idle);
     assert!(!idle.world().resource::<VendingUi>().is_visible());
-    assert_eq!(sources(&mut idle, DragKind::Stock), 0);
-    assert!(all_hidden(idle.world_mut()));
+    assert!(items(&mut idle, Surface::Cart).is_empty());
+    assert!(hidden(&mut idle));
 
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+    let mut app = app(setup_state());
     spawn_window(&mut app);
-    assert_eq!(
-        texts::<VendingModeNote>(&mut app),
-        vec!["SP already paid: 30"]
-    );
-    assert_eq!(texts::<super::VendingTitle>(&mut app), vec!["Set Up Shop"]);
-    assert!(!all_hidden(app.world_mut()));
+    assert!(!hidden(&mut app));
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|text| text == "Set Up Shop"), "{shown:?}");
+    assert!(shown.iter().any(|text| text == "30 SP \u{b7} Already paid"));
 }
 
 #[test]
-fn one_stock_cell_per_sellable_slot_and_one_row_per_drafted_slot() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+fn one_stock_row_per_cart_slot_and_one_listing_per_drafted_slot() {
+    let mut app = app(setup_state());
     spawn_window(&mut app);
-    assert_eq!(sources(&mut app, DragKind::Stock), 2, "both sellable slots");
+    assert_eq!(items(&mut app, Surface::Cart).len(), 2, "both cart slots");
     assert_eq!(count::<VendingDraftField>(&mut app), 0);
 
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, None)]).rows;
     app.update();
-    assert_eq!(count::<VendingRowRemove>(&mut app), 1);
+    assert_eq!(items(&mut app, Surface::Cart).len(), 3, "and its listing");
     assert_eq!(
         count::<VendingDraftField>(&mut app),
         2,
         "quantity and price"
     );
 
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0), (3, 1, 0)]).rows;
+    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, None), (3, 1, None)]).rows;
     app.update();
-    assert_eq!(count::<VendingRowRemove>(&mut app), 2);
     assert_eq!(count::<VendingDraftField>(&mut app), 4);
 }
 
 #[test]
-fn typed_fields_survive_unrelated_updates() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
+fn typed_fields_survive_unrelated_updates_and_carry_over_a_relisting() {
+    let mut app = app(setup_state());
     spawn_window(&mut app);
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
+    press(&mut app, VendingAction::List(2));
     app.update();
-
-    let mut field = app
-        .world_mut()
-        .query_filtered::<Entity, With<VendingDraftField>>();
-    let before: Vec<Entity> = field.iter(app.world()).collect();
+    let fields = |app: &mut App| -> Vec<Entity> {
+        let world = app.world_mut();
+        let mut query = world.query_filtered::<Entity, With<VendingDraftField>>();
+        query.iter(world).collect()
+    };
+    let before = fields(&mut app);
     assert_eq!(before.len(), 2);
 
     // An unrelated cart edit must not respawn (and unfocus) the typed fields.
@@ -861,34 +777,81 @@ fn typed_fields_survive_unrelated_updates() {
         .resource_mut::<Cart>()
         .upsert(cart_item(7, 501, 9));
     app.update();
-
-    let mut field = app
-        .world_mut()
-        .query_filtered::<Entity, With<VendingDraftField>>();
-    let after: Vec<Entity> = field.iter(app.world()).collect();
     assert_eq!(
-        after, before,
+        fields(&mut app),
+        before,
         "typed fields are kept while the set is stable"
     );
+
+    // Listing another slot respawns the body, which must keep what was typed.
+    let price = draft_field(&mut app, 2, DraftFieldKind::Price);
+    *app.world_mut().get_mut::<EditableText>(price).unwrap() = EditableText::new("450");
+    press(&mut app, VendingAction::List(3));
+    app.update();
+    assert_eq!(draft_rows(&app)[0].price, Some(450));
+    let price = draft_field(&mut app, 2, DraftFieldKind::Price);
+    let typed = app.world().get::<EditableText>(price).unwrap();
+    assert_eq!(typed.value().to_string(), "450");
 }
 
 #[test]
-fn an_accepted_shop_replaces_the_editor_with_the_monitor() {
-    let mut state = state_with(VendingIngressPayload::SetupReady(setup()));
-    let request_id = state.begin_open(SETUP_ID, 0.0).expect("open request");
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::OpenResult {
-            request_id,
-            setup_id: SETUP_ID.into(),
-            setup_active: false,
-            outcome: VendingOpenOutcome::Success,
-            snapshot: Some(snapshot()),
-        },
-    });
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::SaleReport {
+fn setup_readouts_and_the_open_button_follow_what_is_typed() {
+    let mut app = app(setup_state());
+    spawn_window(&mut app);
+    press(&mut app, VendingAction::List(2));
+    app.update();
+    let open = |app: &mut App| -> bool {
+        let world = app.world_mut();
+        let mut query = world.query_filtered::<&Pickable, With<VendingOpenButton>>();
+        query.single(world).expect("open button").is_hoverable
+    };
+
+    assert_eq!(
+        readout(&mut app, SetupReadout::Status),
+        "Give your shop a name"
+    );
+    assert_eq!(readout(&mut app, SetupReadout::Note(2)), "Set a price");
+    assert_eq!(readout(&mut app, SetupReadout::Sign), "Your shop name");
+    assert!(!open(&mut app));
+
+    let title = {
+        let world = app.world_mut();
+        let mut query = world.query_filtered::<Entity, With<VendingTitleField>>();
+        query.single(world).expect("title field")
+    };
+    *app.world_mut().get_mut::<EditableText>(title).unwrap() = EditableText::new("Potions");
+    let price = draft_field(&mut app, 2, DraftFieldKind::Price);
+    *app.world_mut().get_mut::<EditableText>(price).unwrap() = EditableText::new("2000000");
+    app.update();
+
+    assert_eq!(readout(&mut app, SetupReadout::Status), "Ready to open");
+    assert_eq!(readout(&mut app, SetupReadout::Sign), "Potions");
+    assert_eq!(readout(&mut app, SetupReadout::TitleCount), "7 / 79");
+    assert_eq!(readout(&mut app, SetupReadout::Note(2)), "3 in cart");
+    assert_eq!(readout(&mut app, SetupReadout::Words(2)), "2 million");
+    assert_eq!(readout(&mut app, SetupReadout::Total(2)), "6,000,000 z");
+    assert_eq!(readout(&mut app, SetupReadout::Potential), "6,000,000 z");
+    assert!(open(&mut app));
+}
+
+#[test]
+fn an_accepted_shop_shows_its_stock_and_follows_its_sales() {
+    let mut app = app(open_state());
+    spawn_window(&mut app);
+    app.world_mut().resource_mut::<VendingUi>().visible = true;
+    app.update();
+
+    assert_eq!(count::<VendingDraftField>(&mut app), 0);
+    assert_eq!(items(&mut app, Surface::Shop).len(), 1);
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|text| text == "Your Shop"), "{shown:?}");
+    assert!(shown.iter().any(|text| text == "Red Potion"));
+    assert!(shown.iter().any(|text| text == "0 of 2 sold"));
+    assert!(shown.iter().any(|text| text == "No sales yet"));
+
+    app.world_mut()
+        .resource_mut::<VendingState>()
+        .apply(&ingress(VendingIngressPayload::SaleReport {
             shop_id: SHOP_ID.into(),
             index: 2,
             nameid: 501,
@@ -896,185 +859,62 @@ fn an_accepted_shop_replaces_the_editor_with_the_monitor() {
             zeny_gained: 500,
             buyer_name: "Thor".into(),
             sale_sequence: 1,
-            total_earned: 1_500,
-        },
-    });
-
-    let mut app = app(state);
-    spawn_window(&mut app);
-    app.world_mut().resource_mut::<SellerDraft>().rows = draft(&[(2, 1, 0)]).rows;
+            total_earned: 500,
+        }));
     app.update();
-
-    assert_eq!(
-        sources(&mut app, DragKind::Stock),
-        0,
-        "monitor is read-only"
-    );
-    assert_eq!(count::<VendingDraftField>(&mut app), 0);
-    assert_eq!(texts::<VendingModeNote>(&mut app), vec!["Earned 1500z"]);
-    assert_eq!(texts::<super::VendingTitle>(&mut app), vec!["My Shop"]);
-
-    let world = app.world_mut();
-    let mut query = world.query::<&Text>();
-    let rendered: Vec<String> = query.iter(world).map(|text| text.0.clone()).collect();
-    assert!(rendered.iter().any(|line| line == "Red Potion"));
-    assert!(rendered.iter().any(|line| line.contains("500z")));
-    assert!(
-        rendered.iter().any(|line| line.contains("Thor")),
-        "recent sales are listed"
-    );
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|text| text == "1 of 2 sold"), "{shown:?}");
+    assert!(shown.iter().any(|text| text == "Thor"));
+    assert!(shown.iter().any(|text| text == "+500 z"));
+    assert!(shown.iter().any(|text| text == "1 item"), "one left");
 }
 
 #[test]
-fn a_settled_close_makes_the_affordance_usable_again() {
-    let mut state = VendingState::default();
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::SetupReady(setup()),
-    });
-    let mut app = app(state);
-    app.add_systems(Update, sync_window_state);
+fn a_closed_shop_shows_its_summary_until_it_is_dismissed() {
+    let mut app = app(open_state());
+    spawn_window(&mut app);
+    let request_id = app
+        .world_mut()
+        .resource_mut::<VendingState>()
+        .begin_close(&VendingCloseTarget::Shop(SHOP_ID.into()), 0.0)
+        .expect("close request");
+    app.world_mut()
+        .resource_mut::<VendingState>()
+        .apply(&ingress(VendingIngressPayload::CloseResult {
+            request_id,
+            target: VendingCloseTarget::Shop(SHOP_ID.into()),
+            outcome: VendingCloseOutcome::ShopClosed,
+        }));
+    app.update();
 
-    let cancel = app.world_mut().spawn_empty().observe(on_cancel_setup).id();
-    app.world_mut().trigger(Activate { entity: cancel });
-    assert_eq!(intents(&mut app).len(), 1);
-
-    app.world_mut().trigger(Activate { entity: cancel });
+    assert!(!hidden(&mut app), "the summary opens by itself");
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|text| text == "Shop closed."), "{shown:?}");
     assert!(
-        intents(&mut app).is_empty(),
-        "one cancel waits for the result"
+        shown
+            .iter()
+            .any(|text| text == "You earned 0 z. 2 unsold items went back to your cart.")
     );
 
-    // Nothing is pending in the domain here, so the next frame re-enables it.
+    press(&mut app, VendingAction::SetUpAgain);
+    assert_eq!(intents(&mut app), vec![VendingIntent::EnterSeller]);
     app.update();
-    app.world_mut().trigger(Activate { entity: cancel });
-    assert_eq!(intents(&mut app).len(), 1);
-}
-
-fn browse_state(items: Vec<VendingListing>) -> VendingState {
-    let mut state = VendingState::default();
-    state.begin_browse(VENDOR_ID).expect("browse request");
-    state.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::ListResult {
-            request_id: 1,
-            vendor_unit_id: VENDOR_ID,
-            outcome: net_contract::dto::VendingListOutcome::Success,
-            snapshot: Some(VendingSnapshot {
-                vendor_unit_id: VENDOR_ID,
-                shop_id: SHOP_ID.into(),
-                title: "Potions".into(),
-                items,
-                total_earned: 0,
-            }),
-        },
-    });
-    state
-}
-
-fn buyable(index: u32, amount: u32, price: u32) -> VendingListing {
-    VendingListing {
-        index,
-        nameid: 501,
-        type_: 0,
-        amount,
-        identified: true,
-        attribute: 0,
-        refine: 0,
-        cards: vec![],
-        options: vec![],
-        price,
-        signer_name: String::new(),
-        creator_id: 0,
-        creator_kind: net_contract::dto::VendingCreatorKind::None,
-        enchant_grade: 0,
-    }
-}
-
-fn with_zeny(app: &mut App, zeny: u32) {
-    app.world_mut().spawn((
-        lifthrasir_client::domain::entities::markers::LocalPlayer,
-        lifthrasir_client::domain::entities::character::components::status::CharacterStatus {
-            zeny,
-            ..Default::default()
-        },
-    ));
-}
-
-fn click_event(target: Entity, window: Entity, button: PointerButton) -> PointerClick {
-    use bevy::camera::NormalizedRenderTarget;
-    use bevy::picking::backend::HitData;
-    use bevy::picking::pointer::{Location, PointerId};
-    use bevy::window::WindowRef;
-
-    PointerClick {
-        entity: target,
-        pointer: Pointer::new(
-            PointerId::Mouse,
-            Location {
-                target: NormalizedRenderTarget::Window(
-                    WindowRef::Primary.normalize(Some(window)).unwrap(),
-                ),
-                position: Vec2::ZERO,
-            },
-        ),
-        button,
-        hit: HitData::new(target, 0.0, None, None),
-        duration: std::time::Duration::ZERO,
-        count: 1,
-    }
-}
-
-fn primary_pointer(window: Entity) -> Pointer {
-    use bevy::camera::NormalizedRenderTarget;
-    use bevy::picking::pointer::{Location, PointerId};
-    use bevy::window::WindowRef;
-
-    Pointer::new(
-        PointerId::Mouse,
-        Location {
-            target: NormalizedRenderTarget::Window(
-                WindowRef::Primary.normalize(Some(window)).unwrap(),
-            ),
-            position: Vec2::ZERO,
-        },
-    )
-}
-
-fn drag_start(target: Entity, window: Entity) -> PointerDragStart {
-    PointerDragStart {
-        entity: target,
-        pointer: primary_pointer(window),
-        button: PointerButton::Primary,
-        hit: bevy::picking::backend::HitData::new(target, 0.0, None, None),
-    }
-}
-
-fn drag_drop(target: Entity, dropped: Entity, window: Entity) -> PointerDragDrop {
-    PointerDragDrop {
-        entity: target,
-        pointer: primary_pointer(window),
-        button: PointerButton::Primary,
-        dropped,
-        hit: bevy::picking::backend::HitData::new(target, 0.0, None, None),
-    }
+    app.update();
+    assert!(hidden(&mut app), "a dismissed summary stays away");
 }
 
 #[test]
 fn checkout_emits_one_confirmed_basket_quoted_from_the_shop() {
-    let mut app = app(browse_state(vec![buyable(2, 3, 500), buyable(3, 1, 750)]));
+    let mut app = app(browse_state(vec![listing(2, 3, 500), listing(3, 1, 750)]));
     with_zeny(&mut app, 2_000);
     app.add_systems(Update, super::sync_browse_basket);
     app.update();
 
-    for (index, up) in [(2, true), (2, true), (3, true)] {
-        let step = app
-            .world_mut()
-            .spawn(super::BasketStep { index, up })
-            .observe(super::on_basket_step)
-            .id();
-        app.world_mut().trigger(Activate { entity: step });
-    }
+    // Row 2 has "2" typed, row 3 has no field and adds one.
+    app.world_mut()
+        .spawn((VendingQtyField(2), EditableText::new("2")));
+    press(&mut app, VendingAction::AddRow(2));
+    press(&mut app, VendingAction::AddRow(3));
     let shop = app
         .world()
         .resource::<VendingState>()
@@ -1082,19 +922,11 @@ fn checkout_emits_one_confirmed_basket_quoted_from_the_shop() {
         .unwrap()
         .clone();
     assert_eq!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .total(&shop),
+        app.world().resource::<BuyerBasket>().total(&shop),
         Some(1_750)
     );
 
-    let checkout = app
-        .world_mut()
-        .spawn_empty()
-        .observe(super::on_checkout)
-        .id();
-    app.world_mut().trigger(Activate { entity: checkout });
-
+    press(&mut app, VendingAction::Buy);
     let written = intents(&mut app);
     assert_eq!(written.len(), 1);
     let VendingIntent::Purchase {
@@ -1131,36 +963,23 @@ fn checkout_emits_one_confirmed_basket_quoted_from_the_shop() {
             .begin_purchase(VENDOR_ID, SHOP_ID, 0.0)
             .is_some()
     );
-    app.world_mut().trigger(Activate { entity: checkout });
+    press(&mut app, VendingAction::Buy);
     assert!(intents(&mut app).is_empty());
 }
 
 #[test]
 fn checkout_refuses_an_empty_basket_and_short_funds() {
-    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    let mut app = app(browse_state(vec![listing(2, 3, 500)]));
     with_zeny(&mut app, 200);
-    let checkout = app
-        .world_mut()
-        .spawn_empty()
-        .observe(super::on_checkout)
-        .id();
-    app.world_mut().trigger(Activate { entity: checkout });
+    press(&mut app, VendingAction::Buy);
     assert!(intents(&mut app).is_empty());
     assert_eq!(
         app.world().resource::<VendingUi>().error(),
         Some("Choose at least one item.")
     );
 
-    let shop = app
-        .world()
-        .resource::<VendingState>()
-        .browse()
-        .unwrap()
-        .clone();
-    app.world_mut()
-        .resource_mut::<super::buyer::BuyerBasket>()
-        .set_quantity(&shop, 2, 1);
-    app.world_mut().trigger(Activate { entity: checkout });
+    press(&mut app, VendingAction::AddRow(2));
+    press(&mut app, VendingAction::Buy);
     assert!(intents(&mut app).is_empty(), "200z cannot buy a 500z item");
     assert_eq!(
         app.world().resource::<VendingUi>().error(),
@@ -1169,72 +988,113 @@ fn checkout_refuses_an_empty_basket_and_short_funds() {
 }
 
 #[test]
+fn a_large_total_asks_before_it_is_sent() {
+    let mut app = app(browse_state(vec![listing(2, 3, 600_000)]));
+    with_zeny(&mut app, 5_000_000);
+    app.world_mut()
+        .spawn((VendingQtyField(2), EditableText::new("2")));
+    press(&mut app, VendingAction::AddRow(2));
+
+    press(&mut app, VendingAction::Buy);
+    assert!(
+        intents(&mut app).is_empty(),
+        "1,200,000 z needs a second look"
+    );
+    assert!(app.world().resource::<VendingUi>().confirm);
+
+    press(&mut app, VendingAction::BackFromConfirm);
+    assert!(!app.world().resource::<VendingUi>().confirm);
+    press(&mut app, VendingAction::Buy);
+    press(&mut app, VendingAction::BuyNow);
+    assert_eq!(intents(&mut app).len(), 1);
+    assert!(!app.world().resource::<VendingUi>().confirm);
+}
+
+#[test]
+fn the_row_stepper_and_add_stay_inside_what_the_basket_has_not_taken() {
+    let mut app = app(browse_state(vec![listing(2, 3, 500)]));
+    let field = app
+        .world_mut()
+        .spawn((VendingQtyField(2), EditableText::new("1")))
+        .id();
+    app.update();
+    let typed = |app: &App| {
+        let text = app.world().get::<EditableText>(field).unwrap();
+        text.value().to_string()
+    };
+
+    for _ in 0..5 {
+        press(&mut app, VendingAction::RowInc(2));
+    }
+    assert_eq!(typed(&app), "3", "capped at the listing's stock");
+    press(&mut app, VendingAction::RowDec(2));
+    assert_eq!(typed(&app), "2");
+    assert_eq!(basket_quantity(&app, 2), 0, "stepping stages nothing");
+
+    press(&mut app, VendingAction::AddRow(2));
+    press(&mut app, VendingAction::AddRow(2));
+    assert_eq!(basket_quantity(&app, 2), 3, "never more than is for sale");
+
+    press(&mut app, VendingAction::RemoveLine(2));
+    assert_eq!(basket_quantity(&app, 2), 0);
+}
+
+#[test]
+fn staging_is_inert_while_a_purchase_is_pending() {
+    let mut app = app(browse_state(vec![listing(2, 3, 500)]));
+    assert!(
+        app.world_mut()
+            .resource_mut::<VendingState>()
+            .begin_purchase(VENDOR_ID, SHOP_ID, 0.0)
+            .is_some()
+    );
+
+    press(&mut app, VendingAction::AddRow(2));
+    assert_eq!(basket_quantity(&app, 2), 0);
+}
+
+#[test]
 fn a_settled_success_clears_the_basket_and_a_failure_keeps_it() {
-    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    let mut app = app(browse_state(vec![listing(2, 3, 500)]));
     app.add_systems(
         Update,
         (super::sync_browse_basket, super::settle_buyer_basket).chain(),
     );
     app.update();
-    let shop = app
-        .world()
-        .resource::<VendingState>()
-        .browse()
-        .unwrap()
-        .clone();
-    app.world_mut()
-        .resource_mut::<super::buyer::BuyerBasket>()
-        .set_quantity(&shop, 2, 2);
-    assert_eq!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .lines()
-            .len(),
-        1
-    );
+    press(&mut app, VendingAction::AddRow(2));
+    assert_eq!(basket_quantity(&app, 2), 1);
 
-    app.world_mut()
-        .resource_mut::<Messages<VendingNotice>>()
-        .write(VendingNotice::Purchase {
-            request_id: 4,
-            vendor_unit_id: VENDOR_ID,
-            shop_id: SHOP_ID.into(),
-            outcome: VendingPurchaseOutcome::NotEnoughZeny,
-        });
-    app.update();
+    let settle = |app: &mut App, request_id, outcome| {
+        app.world_mut()
+            .resource_mut::<Messages<VendingNotice>>()
+            .write(VendingNotice::Purchase {
+                request_id,
+                vendor_unit_id: VENDOR_ID,
+                shop_id: SHOP_ID.into(),
+                outcome,
+            });
+        app.update();
+    };
+    settle(&mut app, 4, VendingPurchaseOutcome::NotEnoughZeny);
     assert_eq!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .lines()
-            .len(),
+        basket_quantity(&app, 2),
         1,
         "a failed checkout keeps the basket"
     );
 
-    app.world_mut()
-        .resource_mut::<Messages<VendingNotice>>()
-        .write(VendingNotice::Purchase {
-            request_id: 5,
-            vendor_unit_id: VENDOR_ID,
-            shop_id: SHOP_ID.into(),
-            outcome: VendingPurchaseOutcome::Success,
-        });
-    app.update();
+    settle(&mut app, 5, VendingPurchaseOutcome::Success);
     assert!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .is_empty(),
+        app.world().resource::<BuyerBasket>().is_empty(),
         "a completed checkout clears the basket"
     );
 }
 
 #[test]
 fn a_refreshed_shop_clamps_the_basket_and_explains_it() {
-    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+    let mut app = app(browse_state(vec![listing(2, 3, 500)]));
     with_zeny(&mut app, 2_000);
     app.add_systems(Update, super::sync_browse_basket);
     app.update();
-
     let shop = app
         .world()
         .resource::<VendingState>()
@@ -1242,7 +1102,7 @@ fn a_refreshed_shop_clamps_the_basket_and_explains_it() {
         .unwrap()
         .clone();
     app.world_mut()
-        .resource_mut::<super::buyer::BuyerBasket>()
+        .resource_mut::<BuyerBasket>()
         .set_quantity(&shop, 2, 3);
 
     let refresh = app
@@ -1250,114 +1110,59 @@ fn a_refreshed_shop_clamps_the_basket_and_explains_it() {
         .resource_mut::<VendingState>()
         .begin_browse(VENDOR_ID)
         .expect("refresh request");
-    {
-        let mut state = app.world_mut().resource_mut::<VendingState>();
-        state.apply(&VendingIngress {
-            generation: ZoneSessionGeneration::default(),
-            payload: VendingIngressPayload::ListResult {
-                request_id: refresh,
-                vendor_unit_id: VENDOR_ID,
-                outcome: net_contract::dto::VendingListOutcome::Success,
-                snapshot: Some(VendingSnapshot {
-                    vendor_unit_id: VENDOR_ID,
-                    shop_id: SHOP_ID.into(),
-                    title: "Potions".into(),
-                    items: vec![buyable(2, 1, 500)],
-                    total_earned: 0,
-                }),
-            },
-        });
-    }
+    app.world_mut()
+        .resource_mut::<VendingState>()
+        .apply(&ingress(VendingIngressPayload::ListResult {
+            request_id: refresh,
+            vendor_unit_id: VENDOR_ID,
+            outcome: net_contract::dto::VendingListOutcome::Success,
+            snapshot: Some(VendingSnapshot {
+                items: vec![listing(2, 1, 500)],
+                ..snapshot()
+            }),
+        }));
     app.update();
 
+    assert_eq!(basket_quantity(&app, 2), 1, "reduced stock is clamped");
     assert_eq!(
-        app.world()
-            .resource::<super::buyer::BuyerBasket>()
-            .quantity(2),
-        1,
-        "reduced stock is clamped"
-    );
-    assert_eq!(
-        app.world().resource::<VendingUi>().error(),
+        app.world().resource::<VendingUi>().change.as_deref(),
         Some("Only 1 of Item #501 remain.")
     );
-}
-
-fn basket_quantity(app: &App, index: u32) -> u32 {
-    app.world()
-        .resource::<super::buyer::BuyerBasket>()
-        .quantity(index)
+    press(&mut app, VendingAction::AckChange);
+    assert_eq!(app.world().resource::<VendingUi>().change, None);
 }
 
 #[test]
-fn a_listing_double_click_stages_and_right_click_inspects_without_bag_actions() {
-    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
+fn a_browsed_shop_lists_its_stock_beside_the_basket() {
+    let mut app = app(browse_state(vec![listing(2, 3, 500), listing(3, 0, 750)]));
+    with_zeny(&mut app, 2_000);
     spawn_window(&mut app);
-    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    let listing = source_entity(&mut app, DragKind::Listing, 2);
-
-    app.world_mut()
-        .trigger(click_event(listing, window, PointerButton::Primary));
-    assert_eq!(basket_quantity(&app, 2), 0, "a single click only selects");
-    app.world_mut()
-        .trigger(click_event(listing, window, PointerButton::Primary));
-    assert_eq!(basket_quantity(&app, 2), 1);
-
-    app.world_mut()
-        .trigger(click_event(listing, window, PointerButton::Secondary));
-    let written: Vec<super::ShowInfoModal> = app
-        .world_mut()
-        .resource_mut::<Messages<super::ShowInfoModal>>()
-        .drain()
-        .collect();
-    assert_eq!(written.len(), 1);
-    let super::InfoContent::Item { view, action } = &written[0].content else {
-        panic!("expected an item view");
-    };
-    assert_eq!(view.name, "Red Potion");
-    assert_eq!(view.meta[0], ("Price".to_string(), "500z".to_string()));
-    assert!(action.is_none(), "vendor stock offers no bag action");
-}
-
-#[test]
-fn dragging_listings_into_the_basket_stages_up_to_stock_and_back_removes() {
-    let mut app = app(browse_state(vec![buyable(2, 2, 500)]));
-    spawn_window(&mut app);
-    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    let listing = source_entity(&mut app, DragKind::Listing, 2);
-    let basket = zone_entity(&mut app, DropZone::Basket);
-
-    for _ in 0..3 {
-        app.world_mut().trigger(drag_start(listing, window));
-        app.world_mut().trigger(drag_drop(basket, listing, window));
-    }
-    assert_eq!(basket_quantity(&app, 2), 2, "capped at the listing's stock");
-
+    app.world_mut().resource_mut::<VendingUi>().visible = true;
     app.update();
-    let handle = source_entity(&mut app, DragKind::Basket, 2);
-    app.world_mut().trigger(drag_start(handle, window));
-    let vendor = zone_entity(&mut app, DropZone::VendorListing);
-    app.world_mut().trigger(drag_drop(vendor, handle, window));
-    assert_eq!(basket_quantity(&app, 2), 0, "dropped back on the shop");
-}
 
-#[test]
-fn staging_is_inert_while_a_purchase_is_pending() {
-    let mut app = app(browse_state(vec![buyable(2, 3, 500)]));
-    spawn_window(&mut app);
-    let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    assert!(
-        app.world_mut()
-            .resource_mut::<VendingState>()
-            .begin_purchase(VENDOR_ID, SHOP_ID, 0.0)
-            .is_some()
+    assert_eq!(items(&mut app, Surface::Listing).len(), 2);
+    assert_eq!(
+        count::<VendingQtyField>(&mut app),
+        1,
+        "sold-out rows have none"
     );
-    let listing = source_entity(&mut app, DragKind::Listing, 2);
-    let basket = zone_entity(&mut app, DropZone::Basket);
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|text| text == "Shop"), "{shown:?}");
+    assert!(shown.iter().any(|text| text == "1 listing"));
+    assert!(shown.iter().any(|text| text == "Sold out"));
+    assert!(shown.iter().any(|text| text == "Buy"));
 
-    app.world_mut().trigger(drag_start(listing, window));
-    app.world_mut().trigger(drag_drop(basket, listing, window));
-    assert_eq!(basket_quantity(&app, 2), 0);
+    press(&mut app, VendingAction::AddRow(2));
+    app.update();
+    assert_eq!(
+        items(&mut app, Surface::Listing).len(),
+        3,
+        "and a basket line"
+    );
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|text| text == "1 in cart"), "{shown:?}");
+    assert!(shown.iter().any(|text| text == "Buy for 500 z"));
+    assert!(shown.iter().any(|text| text == "1,500 z"), "zeny after");
 }
 
 #[test]
@@ -1367,58 +1172,58 @@ fn right_click_details_resolve_every_vending_surface() {
     let mut buckler = cart_item(3, 2104, 1);
     buckler.cards = vec![4001];
     cart.upsert(buckler);
-    let source = |kind, index| DragSource { kind, index };
+    let item = |surface, index| VendingItem { surface, index };
 
     let seller = VendingState::default();
-    for kind in [DragKind::Stock, DragKind::Draft] {
-        let view = super::inspect_view(source(kind, 3), &seller, &cart, &item_db, None)
-            .expect("cart item details");
-        assert_eq!(view.name, "Buckler");
-        assert_eq!(view.cards, vec!["Card #4001".to_string()], "{kind:?}");
-    }
+    let view = super::inspect_view(item(Surface::Cart, 3), &seller, &cart, &item_db, None)
+        .expect("cart item details");
+    assert_eq!(view.name, "Buckler");
+    assert_eq!(view.cards, vec!["Card #4001".to_string()]);
     assert!(
-        super::inspect_view(source(DragKind::Stock, 9), &seller, &cart, &item_db, None).is_none(),
+        super::inspect_view(item(Surface::Cart, 9), &seller, &cart, &item_db, None).is_none(),
         "an empty cart slot has no details"
     );
 
-    let buyer = browse_state(vec![buyable(2, 3, 500)]);
-    for kind in [DragKind::Listing, DragKind::Basket] {
-        let view = super::inspect_view(source(kind, 2), &buyer, &cart, &item_db, None)
-            .expect("vendor listing details");
-        assert_eq!(view.name, "Red Potion");
-        assert_eq!(view.meta[0], ("Price".to_string(), "500z".to_string()));
-    }
+    let buyer = browse_state(vec![listing(2, 3, 500)]);
+    let view = super::inspect_view(item(Surface::Listing, 2), &buyer, &cart, &item_db, None)
+        .expect("vendor listing details");
+    assert_eq!(view.name, "Red Potion");
+    assert_eq!(view.meta[0], ("Price".to_string(), "500z".to_string()));
 
-    let mut own = state_with(VendingIngressPayload::SetupReady(setup()));
-    let request_id = own.begin_open(SETUP_ID, 0.0).expect("open request");
-    own.apply(&VendingIngress {
-        generation: ZoneSessionGeneration::default(),
-        payload: VendingIngressPayload::OpenResult {
-            request_id,
-            setup_id: SETUP_ID.into(),
-            setup_active: false,
-            outcome: VendingOpenOutcome::Success,
-            snapshot: Some(snapshot()),
-        },
-    });
-    let view = super::inspect_view(source(DragKind::Shop, 2), &own, &cart, &item_db, None)
+    let own = open_state();
+    let view = super::inspect_view(item(Surface::Shop, 2), &own, &cart, &item_db, None)
         .expect("own shop listing details");
     assert_eq!(view.name, "Red Potion");
     assert!(
-        super::inspect_view(source(DragKind::Listing, 2), &own, &cart, &item_db, None).is_none(),
+        super::inspect_view(item(Surface::Listing, 2), &own, &cart, &item_db, None).is_none(),
         "the seller is not browsing anyone"
     );
 }
 
 #[test]
-fn right_clicking_a_stock_cell_opens_its_details_without_actions() {
-    let mut app = app(state_with(VendingIngressPayload::SetupReady(setup())));
-    spawn_window(&mut app);
+fn right_clicking_a_row_opens_its_details_without_actions_or_side_effects() {
+    let mut app = app(setup_state());
     let window = app.world_mut().spawn(bevy::window::Window::default()).id();
-    let stock = source_entity(&mut app, DragKind::Stock, 2);
+    let row = app
+        .world_mut()
+        .spawn(VendingItem {
+            surface: Surface::Cart,
+            index: 2,
+        })
+        .observe(on_item_inspect)
+        .id();
 
     app.world_mut()
-        .trigger(click_event(stock, window, PointerButton::Secondary));
+        .trigger(click_event(row, window, PointerButton::Primary));
+    assert!(
+        app.world()
+            .resource::<Messages<super::ShowInfoModal>>()
+            .is_empty(),
+        "a primary click inspects nothing"
+    );
+
+    app.world_mut()
+        .trigger(click_event(row, window, PointerButton::Secondary));
     let written: Vec<super::ShowInfoModal> = app
         .world_mut()
         .resource_mut::<Messages<super::ShowInfoModal>>()

@@ -92,22 +92,6 @@ impl BuyerBasket {
         }
     }
 
-    /// Steps one line up or down inside `1..=stock`.
-    pub fn step(&mut self, snapshot: &VendingSnapshot, index: u32, up: bool) {
-        let Some(listing) = listing(snapshot, index) else {
-            return;
-        };
-        let current = self.quantity(index);
-        if up {
-            let next = current.checked_add(1).unwrap_or(current);
-            if next <= listing.amount {
-                self.set_quantity(snapshot, index, next);
-            }
-        } else if current > 0 {
-            self.set_quantity(snapshot, index, current - 1);
-        }
-    }
-
     /// Re-applies the basket to a freshly loaded snapshot of the same shop:
     /// vanished rows and changed prices are dropped, reduced stock is clamped,
     /// and every change is explained. Nothing is re-priced or re-confirmed.
@@ -158,12 +142,6 @@ impl BuyerBasket {
         }
         self.lines = kept;
         messages
-    }
-
-    /// Short guidance when the basket costs more than the buyer holds.
-    pub fn guidance(&self, snapshot: &VendingSnapshot, zeny: u64) -> Option<String> {
-        let total = self.total(snapshot)?;
-        (total > zeny).then(|| format!("You need {} more zeny.", total - zeny))
     }
 }
 
@@ -225,8 +203,8 @@ mod tests {
         let mut basket = BuyerBasket::default();
         basket.bind(VENDOR, SHOP);
         let shop = shop();
-        basket.step(&shop, 2, true);
-        basket.step(&shop, 3, true);
+        basket.set_quantity(&shop, 2, 1);
+        basket.set_quantity(&shop, 3, 1);
 
         assert_eq!(basket.lines().len(), 2, "same nameid stays two listings");
         assert_eq!(basket.quantity(2), 1);
@@ -239,29 +217,24 @@ mod tests {
         basket.bind(VENDOR, SHOP);
         let shop = shop();
 
-        for _ in 0..5 {
-            basket.step(&shop, 2, true);
-        }
+        basket.set_quantity(&shop, 2, 99);
         assert_eq!(basket.quantity(2), 3, "capped at the listed amount");
 
-        basket.step(&shop, 2, false);
+        basket.set_quantity(&shop, 2, 2);
         assert_eq!(basket.quantity(2), 2);
-        basket.set_quantity(&shop, 2, 99);
-        assert_eq!(basket.quantity(2), 3);
         basket.set_quantity(&shop, 2, 0);
         assert_eq!(basket.quantity(2), 0, "zero removes the line");
         assert!(basket.is_empty());
     }
 
     #[test]
-    fn zero_price_stock_totals_zero_and_is_affordable() {
+    fn zero_price_stock_totals_zero() {
         let mut basket = BuyerBasket::default();
         basket.bind(VENDOR, SHOP);
         let shop = shop();
-        basket.step(&shop, 4, true);
+        basket.set_quantity(&shop, 4, 1);
 
         assert_eq!(basket.total(&shop), Some(0));
-        assert_eq!(basket.guidance(&shop, 0), None);
     }
 
     #[test]
@@ -269,9 +242,8 @@ mod tests {
         let mut basket = BuyerBasket::default();
         basket.bind(VENDOR, SHOP);
         let shop = shop();
-        basket.step(&shop, 2, true);
-        basket.step(&shop, 2, true);
-        basket.step(&shop, 4, true);
+        basket.set_quantity(&shop, 2, 2);
+        basket.set_quantity(&shop, 4, 1);
 
         assert_eq!(basket.total(&shop), Some(1_000));
         let lines = basket.to_buy_lines(&shop);
@@ -308,25 +280,11 @@ mod tests {
     }
 
     #[test]
-    fn guidance_explains_how_much_more_zeny_is_needed() {
-        let mut basket = BuyerBasket::default();
-        basket.bind(VENDOR, SHOP);
-        let shop = shop();
-        basket.step(&shop, 2, true);
-
-        assert_eq!(basket.guidance(&shop, 500), None);
-        assert_eq!(
-            basket.guidance(&shop, 200),
-            Some("You need 300 more zeny.".to_string())
-        );
-    }
-
-    #[test]
     fn binding_to_another_shop_never_carries_a_basket_across() {
         let mut basket = BuyerBasket::default();
         basket.bind(VENDOR, SHOP);
         let shop = shop();
-        basket.step(&shop, 2, true);
+        basket.set_quantity(&shop, 2, 1);
 
         basket.bind(VENDOR, SHOP);
         assert_eq!(basket.quantity(2), 1, "same shop keeps the basket");

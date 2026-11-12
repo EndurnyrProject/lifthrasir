@@ -12,12 +12,13 @@ use bevy::ui_widgets::Activate;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::cart::Cart;
+use lifthrasir_client::domain::entities::registry::EntityRegistry;
 use lifthrasir_client::domain::vending::{
     RevealVendingSeller, VendingIntent, VendingPlugin, VendingState,
 };
 use lifthrasir_client_ui::widgets::vending_window::buyer::BuyerBasket;
 use lifthrasir_client_ui::widgets::vending_window::{
-    VendingTitleField, VendingUi, VendingWindowPlugin, on_close_button, scene,
+    VendingAction, VendingTitleField, VendingUi, VendingWindowPlugin, on_vending_button, scene,
 };
 use net_contract::commands::{
     ListVendingRequested, OpenVendingRequested, PurchaseVendingRequested,
@@ -89,6 +90,7 @@ fn app() -> App {
     app.init_asset::<Font>();
     app.init_resource::<Cart>()
         .init_resource::<ItemDb>()
+        .init_resource::<EntityRegistry>()
         .init_resource::<InputFocus>()
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<UiScale>()
@@ -136,6 +138,17 @@ fn chat(app: &mut App) -> Vec<String> {
 
 fn state(app: &App) -> &VendingState {
     app.world().resource::<VendingState>()
+}
+
+/// Presses the title bar's close button.
+fn close_window(app: &mut App) {
+    let button = app
+        .world_mut()
+        .spawn(VendingAction::CloseWindow)
+        .observe(on_vending_button)
+        .id();
+    app.world_mut().trigger(Activate { entity: button });
+    app.world_mut().flush();
 }
 
 #[test]
@@ -298,8 +311,7 @@ fn closing_hides_an_active_shop_and_cancels_only_preparation() {
     let mut app = app();
     push(&mut app, VendingIngressPayload::SetupReady(setup()));
 
-    let button = app.world_mut().spawn_empty().observe(on_close_button).id();
-    app.world_mut().trigger(Activate { entity: button });
+    close_window(&mut app);
     let mut intents = app.world_mut().resource_mut::<Messages<VendingIntent>>();
     let written: Vec<VendingIntent> = intents.drain().collect();
     assert!(
@@ -396,8 +408,7 @@ fn a_loaded_vendor_shop_opens_the_buyer_window_every_time() {
         "a loaded vendor shop must open the buyer window"
     );
 
-    let button = app.world_mut().spawn_empty().observe(on_close_button).id();
-    app.world_mut().trigger(Activate { entity: button });
+    close_window(&mut app);
     assert!(!app.world().resource::<VendingUi>().is_visible());
 
     browse(&mut app);

@@ -6,12 +6,13 @@ use bevy::prelude::*;
 use lifthrasir_client::domain::cart::Cart;
 use net_contract::dto::{VendingOffer, VendingSetup};
 
-/// One listed cart slot with its drafted quantity and price.
+/// One listed cart slot with its drafted quantity and price. The price stays `None`
+/// until the seller types one, so a forgotten field can never list an item for free.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DraftRow {
     pub cart_index: u32,
     pub amount: u32,
-    pub price: u32,
+    pub price: Option<u32>,
 }
 
 /// The seller's unsent listings. Holds no authoritative inventory or zeny.
@@ -22,14 +23,16 @@ pub struct SellerDraft {
 }
 
 impl SellerDraft {
-    /// The listings as they will be submitted, in draft order.
+    /// The priced listings as they will be submitted, in draft order.
     pub fn offers(&self) -> Vec<VendingOffer> {
         self.rows
             .iter()
-            .map(|row| VendingOffer {
-                cart_index: row.cart_index,
-                amount: row.amount,
-                price: row.price,
+            .filter_map(|row| {
+                Some(VendingOffer {
+                    cart_index: row.cart_index,
+                    amount: row.amount,
+                    price: row.price?,
+                })
             })
             .collect()
     }
@@ -38,7 +41,7 @@ impl SellerDraft {
         self.rows.iter().find(|row| row.cart_index == cart_index)
     }
 
-    /// Lists one sellable slot with its whole stack at the minimum price.
+    /// Lists one sellable slot with its whole stack and no price yet.
     ///
     /// Returns `Ok(false)` when the slot is already listed, and an error for a
     /// slot the setup does not allow or a full shop.
@@ -63,7 +66,7 @@ impl SellerDraft {
         self.rows.push(DraftRow {
             cart_index,
             amount: stock,
-            price: setup.min_unit_price,
+            price: None,
         });
         Ok(true)
     }
@@ -121,10 +124,13 @@ impl SellerDraft {
             if row.amount == 0 || row.amount > item.amount {
                 return Err(format!("Quantity must be between 1 and {}.", item.amount));
             }
-            if row.price < setup.min_unit_price {
+            let Some(price) = row.price else {
+                return Err("Set a price for every listing.".to_string());
+            };
+            if price < setup.min_unit_price {
                 return Err(format!("Price must be at least {}.", setup.min_unit_price));
             }
-            if row.price > setup.max_unit_price {
+            if price > setup.max_unit_price {
                 return Err(format!("Price must be at most {}.", setup.max_unit_price));
             }
         }

@@ -5,10 +5,9 @@
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::{Button, ControlOrientation, ScrollArea, TextInput};
+use bevy::ui_widgets::{Button, ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
-use lifthrasir_ui::theme::{self, ro_dark};
+use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{
     BUTTON_SHADOW, ButtonArt, HoverColors, INPUT_SHADOW, WINDOW_SHADOW, button_with, close_button,
@@ -16,8 +15,8 @@ use lifthrasir_ui::widgets::primitives::{
 };
 
 use crate::screens::shared::{
-    DANGER_TINT, Ring, chip, link, overline, row_button, search_field, slot_frame, small_button,
-    thousands, usable, weight_meter,
+    DANGER_TINT, QTY_DIGITS, Ring, chip, link, number_field, overline, row_button, search_field,
+    slot_frame, small_button, thousands, usable, weight_meter,
 };
 use crate::widgets::inventory_window::CAPACITY;
 use crate::widgets::inventory_window::scene::slot_marks;
@@ -44,8 +43,6 @@ const CART_ICON: f32 = 22.0;
 const PRICE_COLUMN: f32 = 74.0;
 const CONTROL_COLUMN: f32 = 168.0;
 const STEP_BUTTON: f32 = 24.0;
-/// A stack never holds more than 30,000, so five digits cover every quantity.
-const QTY_DIGITS: usize = 5;
 
 /// The whole window: the frame, the title bar, the search field and the four empty
 /// [`ShopMount`]s.
@@ -421,31 +418,11 @@ fn step_button(icon: &'static str, action: ShopButtonAction) -> impl Scene {
 /// The typed quantity of a row. It lives in the field alone: the row's stepper edits
 /// it and Add reads it.
 fn qty_field(key: u32, qty: u32) -> impl Scene {
-    let field = EditableText {
-        max_characters: Some(QTY_DIGITS),
-        ..EditableText::new(qty.to_string())
-    };
     bsn! {
+        @number_field(qty.to_string(), QTY_DIGITS)
         ShopQtyField(key)
-        field
-        TextInput
-        EditableTextFilter::new(|c| c.is_ascii_digit())
-        TextFont {
-            font: FontSourceTemplate::Handle(theme::FONT_BODY),
-            font_size: {FontSize::Px(13.0)},
-        }
-        TextColor(ro_dark::BODY)
         TextLayout { justify: Justify::Center }
-        Node {
-            width: px(46),
-            height: px(24),
-            flex_shrink: 0.0,
-            padding: {UiRect::axes(px(4), px(2))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(5)),
-        }
-        BackgroundColor(ro_dark::INSET)
-        BorderColor::all(ro_dark::SLOT_STROKE)
+        Node { width: px(46) }
     }
 }
 
