@@ -44,25 +44,6 @@ pub const FONT_PROSE: &str = "ro://fonts/spectral-medium.ttf";
 /// Asset directory for the SVG glyph icons extracted from the Endurnir mockups.
 pub const ICON_DIR: &str = "ro://ui/icons/";
 
-/// A square UI icon loaded from `assets/data/ui/icons/<name>.svg`. The icons ship as white
-/// glyphs, so `color` is what sets their final tint (emerald play, crimson trash, …).
-/// `Pickable::IGNORE` keeps the glyph from swallowing clicks on its host button.
-pub fn icon(assets: &AssetServer, name: &str, size: f32, color: Color) -> impl Bundle + use<> {
-    (
-        ImageNode {
-            image: assets.load(format!("{ICON_DIR}{name}.svg")),
-            color,
-            ..default()
-        },
-        Node {
-            width: Val::Px(size),
-            height: Val::Px(size),
-            ..default()
-        },
-        Pickable::IGNORE,
-    )
-}
-
 /// A plain text label. `Pickable::IGNORE` keeps it from blocking hover/clicks on the
 /// row that hosts it. Pass `""` for labels whose text is filled in by a later system.
 pub fn label(text: impl Into<String>, font: Handle<Font>, size: f32, color: Color) -> impl Bundle {

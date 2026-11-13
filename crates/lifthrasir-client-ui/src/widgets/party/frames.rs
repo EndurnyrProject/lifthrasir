@@ -14,8 +14,8 @@ use super::view::{FrameView, FramesView, ReadoutPart};
 use super::{PartyAction, PartyHost, on_party_button};
 
 const LEFT: f32 = 16.0;
-/// NOTE: clears the status frame above at its full size. Anchor the frames to that
-/// frame once the HUD has a layout that can stack them.
+/// NOTE: clears the status bar above at its full size with one row of status effects.
+/// Anchor the frames to that bar once the HUD has a layout that can stack them.
 const TOP: f32 = 236.0;
 const WIDTH: f32 = 250.0;
 

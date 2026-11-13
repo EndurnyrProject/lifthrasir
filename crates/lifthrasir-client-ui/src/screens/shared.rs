@@ -3,18 +3,20 @@
 
 use bevy::color::{Luminance, Mix};
 use bevy::input_focus::InputFocus;
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
 use bevy::text::{
     EditableText, EditableTextFilter, FontSize, FontSourceTemplate, LetterSpacing, TextEdit,
 };
 use bevy::ui::ShadowStyle;
-use bevy::ui_widgets::TextInput;
+use bevy::ui_widgets::{Button, TextInput};
 use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::placeholder::Placeholder;
 use lifthrasir_ui::widgets::primitives::{
-    BUTTON_SHADOW, ButtonArt, INPUT_SHADOW, PRIMITIVES_DIR, button, button_with, input_frame,
+    BUTTON_SHADOW, ButtonArt, HoverColors, INPUT_SHADOW, PRIMITIVES_DIR, button, button_with,
+    input_frame,
 };
 
 /// Art tint of a button that cannot be used.
@@ -137,6 +139,77 @@ pub fn key_cap(key: &'static str) -> impl Scene {
         BackgroundColor({Color::BLACK.with_alpha(0.25)})
         @ignore_picking()
         Children [ @chrome_text(key.into(), 10.0, ro_dark::BUTTON_LABEL) ]
+    }
+}
+
+/// A 22px framed icon button for HUD plates, showing the `ui/icons/<icon>.svg` glyph.
+/// The caller attaches the `Activate` observer.
+pub fn plate_button(icon: &'static str) -> impl Scene {
+    let colors = HoverColors {
+        rest: (ro_dark::TAB_INACTIVE, ro_dark::MUTED_BRONZE),
+        hover: (ro_dark::BUTTON, ro_dark::BRONZE_HIGHLIGHT),
+    };
+    bsn! {
+        Button
+        Hovered
+        colors
+        Node {
+            width: px(22),
+            height: px(22),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(4)),
+        }
+        BackgroundColor(ro_dark::TAB_INACTIVE)
+        BorderColor::all(ro_dark::MUTED_BRONZE)
+        Pickable
+        Children [ @glyph_icon(icon, 12.0, ro_dark::LABEL) ]
+    }
+}
+
+/// Stacking order of hover tooltips, above every window.
+const TOOLTIP_Z: i32 = 1500;
+
+/// The box a hover tooltip is written in. The owner places it and fills it.
+pub fn tooltip_frame() -> impl Scene {
+    let shadow = BoxShadow::new(
+        Color::BLACK.with_alpha(0.7),
+        Val::ZERO,
+        px(3),
+        Val::ZERO,
+        px(8),
+    );
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            max_width: px(260),
+            padding: {UiRect::axes(px(10), px(7))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+        }
+        BackgroundColor(ro_dark::TOOLTIP_BODY)
+        BorderColor::all(ro_dark::BUTTON_STROKE)
+        shadow
+        GlobalZIndex(TOOLTIP_Z)
+        @ignore_picking()
+    }
+}
+
+/// A hover tooltip: a `title` in its `tone` over plain `lines`. The owner places it.
+pub fn tooltip(title: String, tone: Color, lines: Vec<String>) -> impl Scene {
+    let lines: Vec<_> = lines
+        .into_iter()
+        .map(|line| chrome_text(line, 11.0, ro_dark::LABEL))
+        .collect();
+    bsn! {
+        @tooltip_frame()
+        Children [
+            @chrome_text(title, 12.0, tone)
+            --
+            {lines}
+        ]
     }
 }
 

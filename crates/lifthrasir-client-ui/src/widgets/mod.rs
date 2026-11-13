@@ -1,15 +1,15 @@
 //! In-game HUD overlay (raw `bevy_ui`).
 //!
 //! A full-screen, pickable-ignored root (so clicks reach the world) hosting the
-//! status-frame and chat-box widgets. Built on `OnEnter(GameState::InGame)` and torn
-//! down by `DespawnOnExit`; the two widget sub-plugins drive their marked elements.
+//! status bar, the chat box and the other HUD widgets. Built on
+//! `OnEnter(GameState::InGame)` and torn down by `DespawnOnExit`; the widget
+//! sub-plugins drive their marked elements.
 
 use bevy::prelude::*;
 use lifthrasir_client::core::state::GameState;
 
 pub mod announcement;
 pub mod card_compounding;
-pub mod character_info;
 pub mod character_window;
 pub mod chat_box;
 pub mod cutin;
@@ -33,6 +33,7 @@ pub mod skill_menu;
 pub mod skill_target_toast;
 pub mod skill_text_input;
 pub mod skills_window;
+pub mod status_bar;
 pub mod status_icons;
 pub mod storage_window;
 pub mod system_dialog;
@@ -46,7 +47,6 @@ impl Plugin for InGameHudPlugin {
         app.add_systems(OnEnter(GameState::InGame), show_hud);
         app.add_plugins((
             announcement::AnnouncementPlugin,
-            character_info::CharacterInfoPlugin,
             character_window::CharacterWindowPlugin,
             chat_box::ChatBoxPlugin,
             emote::EmotePickerPlugin,
@@ -58,6 +58,7 @@ impl Plugin for InGameHudPlugin {
             pushcart_window::PushcartWindowPlugin,
             settings_window::SettingsWindowPlugin,
             shop_window::ShopWindowPlugin,
+            status_bar::StatusBarPlugin,
             status_icons::StatusIconsPlugin,
             storage_window::StorageWindowPlugin,
         ));
@@ -88,7 +89,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
         .id();
 
     announcement::spawn_announcement_layer(&mut commands, root);
-    character_info::spawn_status_frame(&mut commands, root, &asset_server);
+    status_bar::spawn_status_bar(&mut commands, root);
     character_window::shell::build(&mut commands, root);
     chat_box::spawn_chat_box(&mut commands, root);
     emote::spawn_emote_picker(&mut commands, root);
@@ -107,5 +108,4 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     storage_window::scene::build(&mut commands, root);
     trade_window::scene::build(&mut commands, root);
     vending_window::spawn_vending_window(&mut commands, root);
-    status_icons::spawn_status_bar(&mut commands, root);
 }

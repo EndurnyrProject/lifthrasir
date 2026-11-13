@@ -5,8 +5,24 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-/// Side length in px of a single status icon (and its placeholder tile).
-pub const ICON_SIZE: f32 = 32.0;
+/// Room under each icon for its countdown.
+pub const TIMER_ROOM: f32 = 13.0;
+
+/// Side length in px of a status icon (and its placeholder tile): smaller beside the
+/// minified status bar.
+pub fn icon_size(minimal: bool) -> f32 {
+    if minimal { 24.0 } else { 30.0 }
+}
+
+/// The countdown under an icon: `9s`, `1:52`, `2h`.
+pub fn clock(remaining: Duration) -> String {
+    let secs = remaining.as_secs();
+    match secs {
+        3600.. => format!("{}h", secs / 3600),
+        60.. => format!("{}:{:02}", secs / 60, secs % 60),
+        _ => format!("{secs}s"),
+    }
+}
 
 /// A timed status starts blinking once its remaining time drops below this.
 pub const BLINK_THRESHOLD: Duration = Duration::from_secs(8);
@@ -81,6 +97,13 @@ mod tests {
     fn format_remaining_minutes_and_seconds() {
         assert_eq!(format_remaining(Duration::from_secs(4 * 60 + 30)), "4m30s");
         assert_eq!(format_remaining(Duration::from_secs(90)), "1m30s");
+    }
+
+    #[test]
+    fn clock_shortens_with_the_time_left() {
+        assert_eq!(clock(Duration::from_secs(9)), "9s");
+        assert_eq!(clock(Duration::from_secs(112)), "1:52");
+        assert_eq!(clock(Duration::from_secs(2 * 3600 + 5)), "2h");
     }
 
     fn set(items: &[u32]) -> HashSet<u32> {
