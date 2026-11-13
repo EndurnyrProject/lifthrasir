@@ -2977,7 +2977,7 @@ pub struct PartyInviteRequest {
     pub target_name: ::prost::alloc::string::String,
 }
 /// Server -> client, party invite notification shown to the invitee.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PartyInviteNotify {
     #[prost(uint32, tag = "1")]
     pub party_id: u32,
@@ -2985,6 +2985,13 @@ pub struct PartyInviteNotify {
     pub party_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub inviter_name: ::prost::alloc::string::String,
+    /// The inviting party as its members see it (leader, sharing options, roster),
+    /// so the invitee can judge the invite before answering.
+    #[prost(message, optional, tag = "4")]
+    pub party: ::core::option::Option<PartyInfo>,
+    /// Who sent the invite; one of `party.members`.
+    #[prost(uint32, tag = "5")]
+    pub inviter_char_id: u32,
 }
 /// Client -> server, the invitee's accept/decline response to a PartyInviteNotify.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]

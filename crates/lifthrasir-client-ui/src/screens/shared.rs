@@ -81,6 +81,14 @@ pub fn flush_button(art: ButtonArt, label: &'static str) -> impl Scene {
     }
 }
 
+/// A [`flush_button`] whose shape is `width` px wide, for footers and prompts.
+pub fn wide_button(art: ButtonArt, label: &'static str, width: f32) -> impl Scene {
+    bsn! {
+        @flush_button(art, label)
+        Node { width: px(width + 2.0 * BUTTON_SHADOW), flex_grow: 0.0, flex_shrink: 0.0 }
+    }
+}
+
 /// A square art button `size` px wide showing the `ui/icons/<icon>.svg` glyph, laid out
 /// by its shape like [`flush_button`]. The art's corners need `size` to be 16 or more.
 pub fn small_button(icon: &'static str, size: f32) -> impl Scene {

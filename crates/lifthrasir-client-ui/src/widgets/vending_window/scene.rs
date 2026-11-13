@@ -25,8 +25,8 @@ use super::{
     VendingWindowRoot, VendingWindowTitlebar, on_item_inspect, on_vending_button,
 };
 use crate::screens::shared::{
-    DANGER_TINT, QTY_DIGITS, Ring, chip, colored_lines, flush_button, number_field, overline,
-    row_button, shop_sign, sign_title, slot_frame, small_button, thousands, usable,
+    DANGER_TINT, QTY_DIGITS, Ring, chip, colored_lines, number_field, overline, row_button,
+    shop_sign, sign_title, slot_frame, small_button, thousands, usable, wide_button,
 };
 use crate::widgets::inventory_window::scene::{CellView, slot_marks};
 
@@ -280,14 +280,6 @@ fn stat(label: &'static str, value: impl Scene) -> impl Scene {
         Node { flex_direction: FlexDirection::Column, flex_shrink: 0.0 }
         @ignore_picking()
         Children [ @chrome_text(label.into(), 11.0, ro_dark::MUTED) -- @value ]
-    }
-}
-
-/// A footer button `width` px wide.
-fn wide_button(art: ButtonArt, label: &'static str, width: f32) -> impl Scene {
-    bsn! {
-        @flush_button(art, label)
-        Node { width: px(width + 2.0 * BUTTON_SHADOW), flex_grow: 0.0, flex_shrink: 0.0 }
     }
 }
 

@@ -157,6 +157,17 @@ mod tests {
                 party_id: 7,
                 party_name: "Vikings".into(),
                 inviter_name: "Odin".into(),
+                inviter_char_id: 3,
+                party: Some(net::PartyInfo {
+                    leader_char_id: 3,
+                    exp_share: true,
+                    members: vec![net::PartyMember {
+                        char_id: 3,
+                        base_level: 99,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
             }),
         )]);
 
@@ -164,6 +175,10 @@ mod tests {
         let events: Vec<_> = received.iter_current_update_messages().collect();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].inviter_name, "Odin");
+        assert_eq!(events[0].inviter_char_id, 3);
+        assert_eq!(events[0].leader_char_id, 3);
+        assert!(events[0].exp_share);
+        assert_eq!(events[0].members[0].base_level, 99);
     }
 
     #[test]

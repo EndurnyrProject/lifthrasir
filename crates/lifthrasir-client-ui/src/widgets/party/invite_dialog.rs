@@ -1,37 +1,53 @@
-//! Incoming party-invite modal, shown through the shared `system_dialog`.
+//! The party invitation: who invites, the party they invite to, and thirty seconds to
+//! answer, after the `Party Invitation` artboard.
 //!
-//! An inbound [`PartyInviteNotified`] raises the reusable dialog with Accept
-//! (primary) and Decline (secondary), tagged [`SystemDialogKind::PartyInvite`], and
-//! records the invite in [`PendingPartyInvite`]. The dialog reports the press as a
-//! [`SystemDialogChoice`] carrying its kind and correlation; the party handler claims
-//! only the exact pending invite. A 30s TTL clears the pending invite and closes only
-//! its matching dialog, matching the server's auto-decline.
-//!
-//! A monotonically increasing local token prevents an expired choice from claiming a
-//! later party invite. The single-open guard still prevents invites stacking.
+//! An inbound [`PartyInviteNotified`] is projected once into [`PendingPartyInvite`];
+//! `rebuild_party_ui` shows the dialog for as long as it is pending. Join Party,
+//! Decline, `/paccept`, `/pdecline` and the 30 s expiry all end it by clearing the
+//! resource. The dialog does not block the game behind it.
 
 use bevy::prelude::*;
-use lifthrasir_client::presentation::ui::events::{
-    DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
+use bevy::scene::EntityScene;
+use bevy::text::{FontSize, FontSourceTemplate};
+use lifthrasir_client::domain::entities::character::components::status::CharacterStatus;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::guild::GuildState;
+use lifthrasir_ui::theme::{self, ro_dark};
+use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    ButtonArt, PRIMITIVES_DIR, WINDOW_SHADOW, diamond, inset, window_title, window_titled,
 };
-use net_contract::commands::PartyInviteResponded;
 use net_contract::events::PartyInviteNotified;
 
-use crate::widgets::system_dialog::SystemDialogRoot;
+use super::view::{self, InviteMember, InviteView};
+use super::{PartyAction, PartyData, PartyHost, on_party_button};
+use crate::screens::shared::{DISABLED_TINT, colored_lines, overline, wide_button};
+use crate::widgets::system_dialog;
 
-/// Server auto-declines after this; the client mirrors it so a stale dialog never lingers.
+/// The server declines for the invitee after this; the client mirrors it so a dead
+/// invitation never lingers.
 const INVITE_TTL_SECS: f32 = 30.0;
+/// The countdown turns red for its last seconds.
+const LOW_SECS: f32 = 5.0;
+/// Under the death and system dialogs, so a disconnect notice stays on top.
+const DIALOG_Z: i32 = i32::MAX - 4;
 
-/// The invite the on-screen dialog is deciding. `party_id == 0` means "none pending"
-/// (mirroring `PartyState::in_party`); set only while the invite dialog is shown.
+const _: () = assert!(
+    DIALOG_Z < system_dialog::DIALOG_Z,
+    "the party invitation must stack under the system dialog"
+);
+
+const WIDTH: f32 = 524.0;
+/// Width of one of the roster's two columns.
+const ROSTER_COLUMN: f32 = 217.0;
+
+/// The invitation waiting for an answer.
 #[derive(Resource, Default)]
 pub struct PendingPartyInvite {
+    /// `0` while nothing is pending.
     pub party_id: u32,
-    pub party_name: String,
-    pub inviter_name: String,
+    view: Option<InviteView>,
     timer: Timer,
-    correlation: Option<u64>,
-    next_correlation: u64,
 }
 
 impl PendingPartyInvite {
@@ -39,419 +55,556 @@ impl PendingPartyInvite {
         self.party_id != 0
     }
 
-    fn set(&mut self, invite: &PartyInviteNotified) {
-        self.next_correlation = self.next_correlation.wrapping_add(1).max(1);
-        self.party_id = invite.party_id;
-        self.party_name = invite.party_name.clone();
-        self.inviter_name = invite.inviter_name.clone();
+    pub(super) fn view(&self) -> Option<&InviteView> {
+        self.view.as_ref()
+    }
+
+    fn set(&mut self, party_id: u32, view: InviteView) {
+        self.party_id = party_id;
+        self.view = Some(view);
         self.timer = Timer::from_seconds(INVITE_TTL_SECS, TimerMode::Once);
-        self.correlation = Some(self.next_correlation);
     }
 
     pub(crate) fn clear(&mut self) {
-        self.party_id = 0;
-        self.party_name.clear();
-        self.inviter_name.clear();
-        self.timer = Timer::default();
-        self.correlation = None;
+        *self = Self::default();
     }
 }
 
-/// Raise the shared dialog for the latest invite and record it as pending. Drops the
-/// invite when a dialog is already open (mirroring the widget's single-open guard) so
-/// invites never stack; the server's TTL re-offers if it still matters.
-pub fn show_incoming_invite(
+/// Which part of the countdown a node shows.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InviteClock {
+    #[default]
+    Bar,
+    Label,
+}
+
+/// Records the latest invitation. The server keeps one live invitation per player, so
+/// a newer one replaces whatever was pending.
+pub fn receive_invite(
     mut invites: MessageReader<PartyInviteNotified>,
-    existing: Query<(), With<SystemDialogRoot>>,
     mut pending: ResMut<PendingPartyInvite>,
-    mut dialogs: MessageWriter<ShowSystemDialog>,
+    data: PartyData,
+    guild: Res<GuildState>,
+    statuses: Query<&CharacterStatus, With<LocalPlayer>>,
 ) {
     let Some(invite) = invites.read().last() else {
         return;
     };
-    if !existing.is_empty() {
-        return;
-    }
-    pending.set(invite);
-    dialogs.write(ShowSystemDialog {
-        severity: DialogSeverity::Info,
-        kind: SystemDialogKind::PartyInvite,
-        kicker: "Party".into(),
-        title: "Party Invite".into(),
-        message: format!(
-            "{} invites you to {}.",
-            invite.inviter_name, invite.party_name
-        ),
-        code: String::new(),
-        button_label: "Accept".into(),
-        secondary_label: "Decline".into(),
-        confirm_state: None,
-        correlation: pending.correlation,
-    });
+    let view = view::invite(
+        invite,
+        data.jobs.as_deref(),
+        statuses.single().ok().map(|status| status.base_level),
+        guild.member(invite.inviter_char_id).is_some(),
+        data.cells(invite.inviter_char_id),
+    );
+    pending.set(invite.party_id, view);
 }
 
-/// Turn a dialog choice into a party response only when its kind and token match the
-/// pending invite. Unrelated and stale choices remain no-ops.
-pub fn claim_invite_choice(
-    mut choices: MessageReader<SystemDialogChoice>,
-    mut pending: ResMut<PendingPartyInvite>,
-    mut responses: MessageWriter<PartyInviteResponded>,
-) {
+/// Drops the invitation once its time is up.
+pub fn expire_pending_invite(time: Res<Time>, mut pending: ResMut<PendingPartyInvite>) {
     if !pending.is_pending() {
         return;
     }
-    let Some(choice) = choices
-        .read()
-        .filter(|choice| {
-            choice.kind == SystemDialogKind::PartyInvite
-                && choice.correlation == pending.correlation
-        })
-        .last()
-    else {
+    if pending.timer.tick(time.delta()).just_finished() {
+        pending.clear();
+    }
+}
+
+type ClockNode<'a> = (
+    &'a InviteClock,
+    &'a mut Node,
+    Option<&'a mut BackgroundColor>,
+    Option<&'a mut Text>,
+    Option<&'a mut TextColor>,
+);
+
+/// Drains the countdown bar and counts the seconds down beside it.
+pub fn sync_invite_clock(pending: Res<PendingPartyInvite>, mut clocks: Query<ClockNode>) {
+    if !pending.is_pending() {
         return;
+    }
+    let left = pending.timer.remaining_secs();
+    let low = left <= LOW_SECS;
+    for (clock, mut node, fill, text, color) in &mut clocks {
+        match clock {
+            InviteClock::Bar => {
+                node.width = Val::Percent(pending.timer.fraction_remaining() * 100.0);
+                let tone = if low { ro_dark::HP } else { ro_dark::SP };
+                if let Some(mut fill) = fill
+                    && fill.0 != tone
+                {
+                    fill.0 = tone;
+                }
+            }
+            InviteClock::Label => {
+                let label = format!("Expires in {} s", left.ceil() as u32);
+                if let Some(mut text) = text
+                    && text.0 != label
+                {
+                    text.0 = label;
+                }
+                let tone = if low {
+                    ro_dark::STATUS_FULL
+                } else {
+                    ro_dark::MUTED
+                };
+                if let Some(mut color) = color
+                    && color.0 != tone
+                {
+                    color.0 = tone;
+                }
+            }
+        }
+    }
+}
+
+/// The screen-wide region the dialog is centred in. It lets every click through.
+pub(super) fn host() -> impl Scene {
+    bsn! {
+        PartyHost::Invite
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::FlexStart,
+            padding: {UiRect::top(px(96))},
+        }
+        GlobalZIndex({DIALOG_Z})
+        @ignore_picking()
+    }
+}
+
+pub(super) fn dialog(view: InviteView) -> impl Scene {
+    let about = about_line(view.job, view.about);
+    let roster = (!view.members.is_empty()).then(|| EntityScene(roster(view.count, view.members)));
+    let warning = view
+        .warning
+        .map(|warning| EntityScene(gap_warning(warning)));
+    bsn! {
+        @window_titled()
+        Node {
+            width: px(WIDTH + 2.0 * WINDOW_SHADOW),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Stretch,
+        }
+        Pickable
+        Children [
+            @window_title("Party Invitation")
+            --
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: px(10),
+                margin: {UiRect::new(px(0), px(0), px(10), px(6))},
+            }
+            @ignore_picking()
+            Children [
+                @sentence(view.inviter, view.party)
+                --
+                {about}
+                --
+                {roster}
+                --
+                Node { column_gap: px(12) }
+                @ignore_picking()
+                Children [
+                    @setting("EXP", view.exp)
+                    --
+                    @setting("Item pickup", view.pickup)
+                ]
+                --
+                {warning}
+                --
+                @clock()
+                --
+                @friends_only()
+                --
+                Node {
+                    justify_content: JustifyContent::FlexEnd,
+                    column_gap: px(12),
+                    margin: {UiRect::top(px(6))},
+                }
+                @ignore_picking()
+                Children [
+                    @wide_button(ButtonArt::NORMAL, "Decline", 96.0)
+                    PartyAction::AnswerInvite(false)
+                    on(on_party_button)
+                    --
+                    @wide_button(ButtonArt::PRIMARY, "Join Party", 110.0)
+                    PartyAction::AnswerInvite(true)
+                    on(on_party_button)
+                ]
+            ]
+        ]
+    }
+}
+
+/// "`inviter` invites you to join `party`.", with the party's name in the title font.
+fn sentence(inviter: String, party: String) -> impl Scene {
+    bsn! {
+        Text(inviter)
+        TextFont {
+            font: FontSourceTemplate::Handle(theme::FONT_BODY),
+            font_size: {FontSize::Px(14.0)},
+        }
+        TextColor(ro_dark::HERO)
+        @ignore_picking()
+        Children [
+            @run(" invites you to join ".into(), theme::FONT_BODY, ro_dark::BODY)
+            --
+            @run(party, theme::FONT_TITLE, ro_dark::HERO)
+            --
+            @run(".".into(), theme::FONT_BODY, ro_dark::BODY)
+        ]
+    }
+}
+
+fn run(text: String, font: &'static str, color: Color) -> impl Scene {
+    bsn! {
+        TextSpan(text)
+        TextFont {
+            font: FontSourceTemplate::Handle(font),
+            font_size: {FontSize::Px(14.0)},
+        }
+        TextColor(color)
+    }
+}
+
+/// The inviter's job, then what else is known about them.
+fn about_line(job: Option<String>, about: String) -> Option<EntityScene<impl Scene>> {
+    let mut runs = Vec::new();
+    if let Some(job) = job {
+        runs.push((ro_dark::BRONZE_LIGHT, job));
+    }
+    if !about.is_empty() {
+        let lead = if runs.is_empty() { "" } else { " \u{b7} " };
+        runs.push((ro_dark::MUTED, format!("{lead}{about}")));
+    }
+    (!runs.is_empty()).then(|| EntityScene(colored_lines(vec![runs])))
+}
+
+fn roster(count: String, members: Vec<InviteMember>) -> impl Scene {
+    let rows: Vec<_> = members.into_iter().map(roster_row).collect();
+    bsn! {
+        @inset()
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
+            padding: {UiRect::axes(px(12), px(10))},
+        }
+        @ignore_picking()
+        Children [
+            Node {
+                align_items: AlignItems::Baseline,
+                justify_content: JustifyContent::SpaceBetween,
+            }
+            @ignore_picking()
+            Children [
+                @overline("MEMBERS".into(), ro_dark::ACCENT)
+                --
+                @chrome_text(count, 11.0, ro_dark::MUTED)
+            ]
+            --
+            Node { flex_wrap: FlexWrap::Wrap, column_gap: px(16), row_gap: px(2) }
+            @ignore_picking()
+            Children [ {rows} ]
+        ]
+    }
+}
+
+fn roster_row(member: InviteMember) -> impl Scene {
+    let crown = member
+        .leader
+        .then(|| EntityScene(diamond(8.0, ro_dark::RARE_RING, ro_dark::RARE_RING)));
+    let (dot, ink) = if member.online {
+        (ro_dark::JOB_EXP, ro_dark::STRONG)
+    } else {
+        (ro_dark::SLOT_STROKE, ro_dark::MUTED)
     };
-    responses.write(PartyInviteResponded {
-        party_id: pending.party_id,
-        accept: choice.primary,
-    });
-    pending.clear();
+    bsn! {
+        Node {
+            width: px(ROSTER_COLUMN),
+            height: px(20),
+            align_items: AlignItems::Center,
+            column_gap: px(7),
+            overflow: {Overflow::clip()},
+        }
+        @ignore_picking()
+        Children [
+            Node { width: px(7), height: px(7), flex_shrink: 0.0, border_radius: BorderRadius::MAX }
+            BackgroundColor(dot)
+            @ignore_picking()
+            --
+            {crown}
+            --
+            @chrome_text(member.name, 12.0, ink)
+            TextLayout { linebreak: LineBreak::NoWrap }
+            Node { flex_shrink: 0.0 }
+            --
+            @chrome_text(member.meta, 12.0, ro_dark::MUTED)
+            TextLayout { linebreak: LineBreak::NoWrap }
+        ]
+    }
 }
 
-/// After the TTL, clear the pending invite and despawn only its matching dialog.
-pub fn expire_pending_invite(
-    time: Res<Time>,
-    mut pending: ResMut<PendingPartyInvite>,
-    roots: Query<(Entity, &SystemDialogRoot)>,
-    mut commands: Commands,
-) {
-    if !pending.is_pending() {
-        return;
+/// One of the party's sharing options: its name over its current choice.
+fn setting(label: &'static str, value: &'static str) -> impl Scene {
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, flex_basis: px(0) }
+        @ignore_picking()
+        Children [
+            @chrome_text(label.into(), 11.0, ro_dark::MUTED)
+            --
+            @chrome_text(value.into(), 13.0, ro_dark::STRONG)
+        ]
     }
-    if !pending.timer.tick(time.delta()).just_finished() {
-        return;
+}
+
+/// The note that joining will turn Even Share off.
+fn gap_warning((headline, consequence): (String, String)) -> impl Scene {
+    let fill = ro_dark::STATUS_BUSY.with_alpha(0.1);
+    let stroke = ro_dark::STATUS_BUSY.with_alpha(0.45);
+    let line = vec![vec![(
+        ro_dark::BRONZE_LIGHT,
+        format!("{headline} {consequence}"),
+    )]];
+    bsn! {
+        Node {
+            align_items: AlignItems::FlexStart,
+            column_gap: px(10),
+            padding: {UiRect::axes(px(12), px(8))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        @ignore_picking()
+        Children [
+            @diamond(8.0, ro_dark::STATUS_BUSY, ro_dark::STATUS_BUSY)
+            Node { margin: {UiRect::top(px(4))} }
+            --
+            Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) }
+            @ignore_picking()
+            Children [ @colored_lines(line) ]
+        ]
     }
-    let correlation = pending.correlation;
-    pending.clear();
-    if let Some((entity, _)) = roots
-        .iter()
-        .find(|(_, root)| root.matches(SystemDialogKind::PartyInvite, correlation))
-    {
-        commands.entity(entity).despawn();
+}
+
+/// The countdown: a draining bar and the seconds left. [`sync_invite_clock`] drives both.
+fn clock() -> impl Scene {
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(10) }
+        @ignore_picking()
+        Children [
+            Node {
+                flex_grow: 1.0,
+                height: px(10),
+                padding: px(1),
+                border: px(1),
+                border_radius: BorderRadius::all(px(5)),
+            }
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::BAR_FRAME)
+            @ignore_picking()
+            Children [
+                InviteClock::Bar
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor(ro_dark::SP)
+                @ignore_picking()
+            ]
+            --
+            Node { width: px(96), flex_shrink: 0.0, justify_content: JustifyContent::FlexEnd }
+            @ignore_picking()
+            Children [
+                InviteClock::Label
+                @chrome_text(String::new(), 11.0, ro_dark::MUTED)
+            ]
+        ]
+    }
+}
+
+/// NOTE: drawn disabled, because the client has no friends list and the server no such
+/// filter. Make it an `ArtCheckbox` once invitations can be filtered.
+fn friends_only() -> impl Scene {
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(4) }
+        @ignore_picking()
+        Children [
+            ImageNode {
+                image: {format!("{PRIMITIVES_DIR}control/checkbox_off.png")},
+                color: DISABLED_TINT,
+            }
+            Node { width: px(34), height: px(34) }
+            @ignore_picking()
+            --
+            @chrome_text(
+                "Only accept party invites from friends and guild mates".into(),
+                12.0,
+                ro_dark::DISABLED_LABEL,
+            )
+        ]
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::scene::ScenePlugin;
+    use lifthrasir_client::domain::entities::EntityRegistry;
+    use lifthrasir_client::domain::party::PartyState;
+    use net_contract::state::ZoneSession;
     use std::time::Duration;
 
-    fn invite() -> PartyInviteNotified {
+    fn invite(party_id: u32, party_name: &str) -> PartyInviteNotified {
         PartyInviteNotified {
-            party_id: 42,
-            party_name: "Wolfpack".into(),
+            party_id,
+            party_name: party_name.into(),
             inviter_name: "Odin".into(),
+            ..default()
         }
     }
 
-    fn shown_dialogs(app: &App) -> Vec<ShowSystemDialog> {
-        let messages = app.world().resource::<Messages<ShowSystemDialog>>();
-        let mut cursor = messages.get_cursor();
-        cursor.read(messages).cloned().collect()
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_message::<PartyInviteNotified>()
+            .init_resource::<Time>()
+            .init_resource::<PendingPartyInvite>()
+            .init_resource::<PartyState>()
+            .init_resource::<ZoneSession>()
+            .init_resource::<EntityRegistry>()
+            .init_resource::<GuildState>()
+            .add_systems(Update, (receive_invite, expire_pending_invite).chain());
+        app
     }
 
-    fn responses(app: &App) -> Vec<PartyInviteResponded> {
-        let messages = app.world().resource::<Messages<PartyInviteResponded>>();
-        let mut cursor = messages.get_cursor();
-        cursor.read(messages).cloned().collect()
+    fn send(app: &mut App, invite: PartyInviteNotified) {
+        app.world_mut()
+            .resource_mut::<Messages<PartyInviteNotified>>()
+            .write(invite);
     }
 
     #[test]
-    fn incoming_invite_shows_dialog_and_sets_pending() {
-        let mut app = App::new();
-        app.add_message::<PartyInviteNotified>()
-            .add_message::<ShowSystemDialog>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, show_incoming_invite);
-
-        app.world_mut()
-            .resource_mut::<Messages<PartyInviteNotified>>()
-            .write(invite());
+    fn an_invite_becomes_pending_and_a_newer_one_replaces_it() {
+        let mut app = app();
+        send(&mut app, invite(42, "Wolfpack"));
         app.update();
-
-        let dialogs = shown_dialogs(&app);
-        assert_eq!(dialogs.len(), 1, "one dialog raised");
-        assert_eq!(dialogs[0].button_label, "Accept");
-        assert_eq!(dialogs[0].secondary_label, "Decline");
-        assert!(dialogs[0].confirm_state.is_none());
-        assert!(dialogs[0].correlation.is_some());
 
         let pending = app.world().resource::<PendingPartyInvite>();
-        assert!(pending.is_pending());
         assert_eq!(pending.party_id, 42);
-        assert_eq!(dialogs[0].correlation, pending.correlation);
+        assert_eq!(pending.view().unwrap().party, "Wolfpack");
+        assert_eq!(pending.view().unwrap().inviter, "Odin");
+
+        send(&mut app, invite(43, "Ravens"));
+        app.update();
+
+        let pending = app.world().resource::<PendingPartyInvite>();
+        assert_eq!(pending.party_id, 43);
+        assert_eq!(pending.view().unwrap().party, "Ravens");
     }
 
     #[test]
-    fn invite_dropped_when_a_dialog_is_already_open() {
-        let mut app = App::new();
-        app.add_message::<PartyInviteNotified>()
-            .add_message::<ShowSystemDialog>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, show_incoming_invite);
-        app.world_mut().spawn(SystemDialogRoot::default());
-
-        app.world_mut()
-            .resource_mut::<Messages<PartyInviteNotified>>()
-            .write(invite());
+    fn a_pending_invite_expires_after_its_time() {
+        let mut app = app();
+        send(&mut app, invite(42, "Wolfpack"));
         app.update();
-
-        assert!(shown_dialogs(&app).is_empty(), "no dialog raised");
-        assert!(
-            !app.world().resource::<PendingPartyInvite>().is_pending(),
-            "invite dropped, pending stays clear"
-        );
-    }
-
-    #[test]
-    fn choice_with_pending_writes_response_and_clears() {
-        let mut app = App::new();
-        app.add_message::<SystemDialogChoice>()
-            .add_message::<PartyInviteResponded>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, claim_invite_choice);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-        let correlation = app.world().resource::<PendingPartyInvite>().correlation;
-
-        app.world_mut()
-            .resource_mut::<Messages<SystemDialogChoice>>()
-            .write(SystemDialogChoice {
-                primary: true,
-                kind: SystemDialogKind::PartyInvite,
-                correlation,
-            });
-        app.update();
-
-        let written = responses(&app);
-        assert_eq!(written.len(), 1);
-        assert_eq!(written[0].party_id, 42);
-        assert!(written[0].accept, "accept mirrors primary");
-        assert!(
-            !app.world().resource::<PendingPartyInvite>().is_pending(),
-            "response clears pending"
-        );
-    }
-
-    #[test]
-    fn choice_without_pending_writes_nothing() {
-        let mut app = App::new();
-        app.add_message::<SystemDialogChoice>()
-            .add_message::<PartyInviteResponded>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, claim_invite_choice);
-
-        app.world_mut()
-            .resource_mut::<Messages<SystemDialogChoice>>()
-            .write(SystemDialogChoice {
-                primary: true,
-                kind: SystemDialogKind::PartyInvite,
-                correlation: None,
-            });
-        app.update();
-
-        assert!(
-            responses(&app).is_empty(),
-            "a choice with no pending invite is ignored"
-        );
-    }
-
-    #[test]
-    fn generic_choice_is_ignored_even_with_pending() {
-        let mut app = App::new();
-        app.add_message::<SystemDialogChoice>()
-            .add_message::<PartyInviteResponded>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, claim_invite_choice);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-
-        app.world_mut()
-            .resource_mut::<Messages<SystemDialogChoice>>()
-            .write(SystemDialogChoice {
-                primary: true,
-                kind: SystemDialogKind::Generic,
-                correlation: None,
-            });
-        app.update();
-
-        assert!(
-            responses(&app).is_empty(),
-            "a Generic choice (e.g. disconnect) never claims a pending invite"
-        );
-        assert!(
-            app.world().resource::<PendingPartyInvite>().is_pending(),
-            "pending invite survives an unrelated Generic choice"
-        );
-    }
-
-    #[test]
-    fn wrong_correlation_choice_writes_nothing_and_keeps_pending() {
-        let mut app = App::new();
-        app.add_message::<SystemDialogChoice>()
-            .add_message::<PartyInviteResponded>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, claim_invite_choice);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-
-        app.world_mut()
-            .resource_mut::<Messages<SystemDialogChoice>>()
-            .write(SystemDialogChoice {
-                primary: true,
-                kind: SystemDialogKind::PartyInvite,
-                correlation: Some(999),
-            });
-        app.update();
-
-        assert!(responses(&app).is_empty());
         assert!(app.world().resource::<PendingPartyInvite>().is_pending());
+
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f32(INVITE_TTL_SECS + 1.0));
+        app.update();
+
+        let pending = app.world().resource::<PendingPartyInvite>();
+        assert!(!pending.is_pending());
+        assert!(pending.view().is_none());
     }
 
     #[test]
-    fn stale_choice_cannot_claim_a_later_invite() {
+    fn the_clock_counts_down_and_turns_red_at_the_end() {
         let mut app = App::new();
-        app.add_message::<SystemDialogChoice>()
-            .add_message::<PartyInviteResponded>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, claim_invite_choice);
-        let (stale, current) = {
-            let mut pending = app.world_mut().resource_mut::<PendingPartyInvite>();
-            pending.set(&invite());
-            let stale = pending.correlation;
-            pending.clear();
-            pending.set(&invite());
-            (stale, pending.correlation)
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.init_resource::<PendingPartyInvite>();
+        app.add_systems(Update, sync_invite_clock);
+        app.world_mut().spawn_scene(clock()).unwrap();
+        app.world_mut().resource_mut::<PendingPartyInvite>().set(
+            42,
+            view::invite(&invite(42, "Wolfpack"), None, None, false, None),
+        );
+        let label = |app: &mut App| {
+            let world = app.world_mut();
+            let (clock_text, color) = world
+                .query::<(&InviteClock, &Text, &TextColor)>()
+                .iter(world)
+                .find(|(clock, ..)| **clock == InviteClock::Label)
+                .map(|(_, text, color)| (text.0.clone(), color.0))
+                .unwrap();
+            (clock_text, color)
         };
-        assert_ne!(stale, current);
+
+        app.update();
+        assert_eq!(label(&mut app), ("Expires in 30 s".into(), ro_dark::MUTED));
 
         app.world_mut()
-            .resource_mut::<Messages<SystemDialogChoice>>()
-            .write(SystemDialogChoice {
-                primary: true,
-                kind: SystemDialogKind::PartyInvite,
-                correlation: stale,
-            });
+            .resource_mut::<PendingPartyInvite>()
+            .timer
+            .tick(Duration::from_secs_f32(26.5));
         app.update();
-
-        assert!(responses(&app).is_empty());
-        assert!(app.world().resource::<PendingPartyInvite>().is_pending());
         assert_eq!(
-            app.world().resource::<PendingPartyInvite>().correlation,
-            current
+            label(&mut app),
+            ("Expires in 4 s".into(), ro_dark::STATUS_FULL)
         );
     }
 
     #[test]
-    fn decline_choice_sends_non_accept_response() {
+    fn the_dialog_shows_the_roster_and_the_level_warning() {
         let mut app = App::new();
-        app.add_message::<SystemDialogChoice>()
-            .add_message::<PartyInviteResponded>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, claim_invite_choice);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-        let correlation = app.world().resource::<PendingPartyInvite>().correlation;
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        let view = InviteView {
+            inviter: "Ygor".into(),
+            party: "Wolfpack".into(),
+            job: Some("Dragon Knight".into()),
+            about: "Base Lv 215".into(),
+            count: "1 / 12 \u{b7} 1 online".into(),
+            members: vec![InviteMember {
+                name: "Ygor".into(),
+                meta: "Dragon Knight 215".into(),
+                online: true,
+                leader: true,
+            }],
+            exp: "Even Share",
+            pickup: "Each Take",
+            warning: Some(("Too far apart.".into(), "EXP will switch.".into())),
+        };
+        app.world_mut().spawn_scene(dialog(view)).unwrap();
 
-        app.world_mut()
-            .resource_mut::<Messages<SystemDialogChoice>>()
-            .write(SystemDialogChoice {
-                primary: false,
-                kind: SystemDialogKind::PartyInvite,
-                correlation,
-            });
-        app.update();
-
-        let written = responses(&app);
-        assert_eq!(written.len(), 1);
-        assert!(!written[0].accept, "decline mirrors non-primary");
-    }
-
-    #[test]
-    fn pending_invite_expires_after_ttl() {
-        let mut app = App::new();
-        app.init_resource::<Time>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, expire_pending_invite);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-
-        app.update();
-        assert!(
-            app.world().resource::<PendingPartyInvite>().is_pending(),
-            "still pending before the TTL"
+        let world = app.world_mut();
+        let texts: Vec<_> = world
+            .query::<&Text>()
+            .iter(world)
+            .map(|text| text.0.clone())
+            .collect();
+        for expected in [
+            "Dragon Knight 215",
+            "Even Share",
+            "Too far apart. EXP will switch.",
+        ] {
+            assert!(texts.iter().any(|text| text == expected), "{expected}");
+        }
+        let answers: Vec<_> = world.query::<&PartyAction>().iter(world).copied().collect();
+        assert_eq!(
+            answers,
+            vec![
+                PartyAction::AnswerInvite(false),
+                PartyAction::AnswerInvite(true)
+            ]
         );
-
-        app.world_mut()
-            .resource_mut::<Time>()
-            .advance_by(Duration::from_secs_f32(INVITE_TTL_SECS + 1.0));
-        app.update();
-
-        assert!(
-            !app.world().resource::<PendingPartyInvite>().is_pending(),
-            "TTL clears the pending invite"
-        );
-    }
-
-    #[test]
-    fn invite_timeout_does_not_close_an_unrelated_dialog() {
-        let mut app = App::new();
-        app.init_resource::<Time>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, expire_pending_invite);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-        let unrelated = app.world_mut().spawn(SystemDialogRoot::default()).id();
-
-        app.world_mut()
-            .resource_mut::<Time>()
-            .advance_by(Duration::from_secs_f32(INVITE_TTL_SECS + 1.0));
-        app.update();
-
-        assert!(app.world().get_entity(unrelated).is_ok());
-        assert!(!app.world().resource::<PendingPartyInvite>().is_pending());
-    }
-
-    #[test]
-    fn invite_timeout_closes_its_matching_dialog() {
-        let mut app = App::new();
-        app.init_resource::<Time>()
-            .init_resource::<PendingPartyInvite>()
-            .add_systems(Update, expire_pending_invite);
-        app.world_mut()
-            .resource_mut::<PendingPartyInvite>()
-            .set(&invite());
-        let correlation = app.world().resource::<PendingPartyInvite>().correlation;
-        let owned = app
-            .world_mut()
-            .spawn(SystemDialogRoot::new(
-                None,
-                SystemDialogKind::PartyInvite,
-                correlation,
-            ))
-            .id();
-
-        app.world_mut()
-            .resource_mut::<Time>()
-            .advance_by(Duration::from_secs_f32(INVITE_TTL_SECS + 1.0));
-        app.update();
-
-        assert!(app.world().get_entity(owned).is_err());
-        assert!(!app.world().resource::<PendingPartyInvite>().is_pending());
     }
 }

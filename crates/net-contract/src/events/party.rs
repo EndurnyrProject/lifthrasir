@@ -22,13 +22,20 @@ pub struct PartyMemberUpdated {
     pub member: PartyMemberInfo,
 }
 
-/// An incoming invite to join a party.
-#[derive(Message, Debug, Clone)]
+/// An incoming invite to join a party, with the party as its members see it so the
+/// invitee can judge it before answering.
+#[derive(Message, Debug, Clone, Default)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct PartyInviteNotified {
     pub party_id: u32,
     pub party_name: String,
     pub inviter_name: String,
+    /// One of `members`.
+    pub inviter_char_id: u32,
+    pub leader_char_id: u32,
+    pub exp_share: bool,
+    pub item_pickup_share: bool,
+    pub members: Vec<PartyMemberInfo>,
 }
 
 /// Result of an outbound party action (create, invite, respond, leave).

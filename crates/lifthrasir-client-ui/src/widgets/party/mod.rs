@@ -1,64 +1,115 @@
-//! Party UI: the read-only roster window and (in later tasks) the create dialog,
-//! invite modal, feedback lines, slash commands, and right-click invite menu. This
-//! task wires only the roster window; `PartyPlugin` is the shared registration point
-//! that the later tasks extend.
+//! Party UI: the party window, the HUD frames and the invitation dialog, after the
+//! `Party`, `Party Frames (HUD)` and `Party Invitation` artboards of the Lifthrasir
+//! Widgets design.
 //!
-//! The window is authored as a BSN scene ([`scene`]): persistent chrome (root,
-//! titlebar, empty body region, footer with a `@FeathersButton` "Leave Party") plus a
-//! swappable body that [`refresh_roster`] respawns each visible frame from a projected
-//! view-model. Membership drives visibility: [`party_visibility`] opens the window only
-//! on the `!in_party -> in_party` edge and closes it on the reverse, so a manual close
-//! on an intermediate same-party `PartyInfo` is not fought.
+//! Authority stays in [`PartyState`] and the server: this module projects that state
+//! and turns its controls into outbound commands. Each [`PartyHost`] is a region
+//! [`rebuild_party_ui`] refills when its view-model changes. The views leave out what
+//! changes all the time (HP, SP, distance); [`sync_readouts`] refreshes those in
+//! place, so a member taking damage never respawns a button mid-click.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy::ui::Checked;
+use bevy::text::EditableText;
+use bevy::ui_widgets::Activate;
 use leafwing_input_manager::prelude::ActionState;
 use lifthrasir_assets::catalogs::job::registry::JobSpriteRegistry;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::EntityRegistry;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::targeting::TargetingMode;
 use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
 use lifthrasir_client::domain::party::PartyState;
-use net_contract::dto::PartyMemberInfo;
+use lifthrasir_client::domain::skill::{CastTarget, SkillCastResolved};
+use lifthrasir_client::domain::trade::TradeSession;
+use lifthrasir_client::domain::vending::VendingState;
+use lifthrasir_runtime::rendering::coordinates::RO_UNITS_PER_CELL;
+use net_contract::commands::{
+    PartyCreateRequested, PartyInviteRequested, PartyInviteResponded, PartyKickRequested,
+    PartyLeaderRequested, PartyLeaveRequested, PartyOptionsRequested, RequestTrade,
+};
 use net_contract::state::ZoneSession;
 
-pub mod create_dialog;
 pub mod feedback;
+pub mod frames;
 pub mod invite_dialog;
-pub mod member_menu;
 pub mod scene;
 pub mod slash;
+mod view;
 
 pub use crate::widgets::party::invite_dialog::PendingPartyInvite;
 pub use crate::widgets::party::slash::{PartySlash, PartySlashSubmitted};
 
-pub use crate::widgets::party::scene::build as spawn_party_window;
+use crate::screens::shared::{light_search_focus, set_field_text};
+use view::{MemberReadout, ReadoutPart, ReadoutValue, Roster};
 
-/// Aesir's hard cap on party size; shown as the `members/12` denominator.
+/// Aesir's hard cap on party size.
 pub const PARTY_MAX: usize = 12;
+/// Longest party or hero name the name field submits.
+const NAME_MAX_CHARS: usize = 24;
 
-/// Marks the roster-window root so the toggle/visibility/refresh systems can flip it.
+/// Marks the window root so the hotkey, drag and close act on this window only.
 #[derive(Component, Default, Clone)]
 pub struct PartyWindowRoot;
 
-/// The drag-handle titlebar; the drag observer only moves the window when the drag's
-/// target is the titlebar itself, so dragging from the close button is inert.
+/// The draggable title bar.
 #[derive(Component, Default, Clone)]
 pub struct PartyTitlebar;
 
-/// The swappable body region that `refresh_roster` clears and refills when visible
-/// roster inputs change.
-#[derive(Component, Default, Clone)]
-pub struct PartyWindowBody;
+/// A region [`rebuild_party_ui`] refills when its view changes.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyHost {
+    /// The window's heading: party name and head count.
+    #[default]
+    Head,
+    /// The name field that founds a party or invites a hero.
+    Form,
+    /// The roster, the sharing options and the level track.
+    Body,
+    /// The party frames on the HUD.
+    Frames,
+    /// The invitation dialog.
+    Invite,
+}
 
-/// The footer holding the Leave button; hidden while partyless so it is never a dead
-/// control.
+/// The name typed to found a party or invite a hero; read on submit.
 #[derive(Component, Default, Clone)]
-pub struct PartyFooter;
+pub struct PartyNameField;
 
-/// Count of members flagged online by the server (the header's "active" figure).
-pub fn active_count(members: &[PartyMemberInfo]) -> usize {
-    members.iter().filter(|member| member.online).count()
+/// What a party button does when activated.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartyAction {
+    #[default]
+    CloseWindow,
+    /// Founds a party or invites a hero with the typed name.
+    Submit,
+    Select(u32),
+    Trade(u32),
+    MakeLeader(u32),
+    /// Raises the expel prompt for the selected member.
+    AskExpel,
+    KeepMember,
+    Expel(u32),
+    ExpShare(bool),
+    PickupShare(bool),
+    /// Raises the leave prompt.
+    AskLeave,
+    Stay,
+    Leave,
+    /// Collapses or expands the HUD frames.
+    ToggleFrames,
+    /// Casts the armed skill on a member, like a click on their character.
+    CastOn(u32),
+    AnswerInvite(bool),
+}
+
+/// What the player picked in the party UI. None of it is sent to the server.
+#[derive(Resource, Default, Debug)]
+pub struct PartyUi {
+    selected: Option<u32>,
+    ask_expel: bool,
+    ask_leave: bool,
+    frames_collapsed: bool,
 }
 
 pub struct PartyPlugin;
@@ -66,9 +117,9 @@ pub struct PartyPlugin;
 impl Plugin for PartyPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PendingPartyInvite>();
+        app.init_resource::<PartyUi>();
         app.add_message::<PartySlashSubmitted>();
         app.add_observer(crate::widgets::player_context_menu::open_player_menu);
-        app.add_observer(member_menu::open);
         app.add_systems(
             Update,
             toggle_party_window.run_if(in_state(GameState::InGame).and_then(ui_unfocused)),
@@ -77,20 +128,33 @@ impl Plugin for PartyPlugin {
             Update,
             (
                 party_visibility,
-                (refresh_roster, sync_party_option_toggles).chain(),
-                create_dialog::focus_new_name_field,
-                invite_dialog::show_incoming_invite,
-                invite_dialog::claim_invite_choice,
-                invite_dialog::expire_pending_invite,
-                feedback::ingest_party_feedback,
                 slash::dispatch_party_slash,
+                invite_dialog::receive_invite,
+                invite_dialog::expire_pending_invite,
+                rebuild_party_ui,
+                sync_readouts,
+                invite_dialog::sync_invite_clock,
+                light_search_focus::<PartyNameField>,
+                feedback::ingest_party_feedback,
             )
+                .chain()
                 .run_if(in_state(GameState::InGame)),
         );
     }
 }
 
-/// Keep the roster closed when joining a party and hide it when leaving one.
+/// Spawns the party window, the frames host and the invitation host under the HUD root.
+pub fn spawn_party_window(commands: &mut Commands, parent: Entity) {
+    commands
+        .spawn_scene(scene::window())
+        .insert(ChildOf(parent));
+    commands.spawn_scene(frames::host()).insert(ChildOf(parent));
+    commands
+        .spawn_scene(invite_dialog::host())
+        .insert(ChildOf(parent));
+}
+
+/// Keep the window closed when joining a party and hide it when leaving one.
 pub fn party_visibility(
     party: Res<PartyState>,
     mut prev_in_party: Local<bool>,
@@ -110,8 +174,8 @@ pub fn party_visibility(
     *visibility = Visibility::Hidden;
 }
 
-/// `PlayerAction::Party` toggles the window. Unconditional (works while partyless too)
-/// so the "Create a party" empty state is reachable by the hotkey.
+/// `PlayerAction::Party` toggles the window. It works while partyless too, since the
+/// window is where a party is founded.
 pub fn toggle_party_window(
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
     mut window: Query<&mut Visibility, With<PartyWindowRoot>>,
@@ -131,455 +195,300 @@ pub fn toggle_party_window(
     };
 }
 
-type FooterQuery<'w, 's> =
-    Query<'w, 's, &'static mut Visibility, (With<PartyFooter>, Without<PartyWindowRoot>)>;
+/// The world as the party UI reads it.
+#[derive(SystemParam)]
+pub struct PartyData<'w, 's> {
+    party: Res<'w, PartyState>,
+    session: Res<'w, ZoneSession>,
+    registry: Res<'w, EntityRegistry>,
+    jobs: Option<Res<'w, JobSpriteRegistry>>,
+    places: Query<'w, 's, &'static GlobalTransform>,
+}
 
-/// Rebuild the swappable body when the window is visible and its content actually
-/// changed: despawn `PartyWindowBody`'s children and respawn the projected roster scene.
-/// Party snapshots own the displayed resources; `EntityRegistry` contributes only the
-/// independent "on screen" chip. The rebuild is gated on change detection because the
-/// partyless empty state hosts the "Create a party" button — a per-frame respawn would
-/// destroy that button between a click's press and release, so it would never fire. A
-/// hidden window resets `was_visible`, making the next open rebuild even when no resource
-/// changed while hidden. The footer's visibility tracks membership so "Leave Party"
-/// never shows while partyless.
-#[allow(clippy::too_many_arguments)]
-pub fn refresh_roster(
-    mut commands: Commands,
-    session: Res<ZoneSession>,
-    party: Res<PartyState>,
-    registry: Res<EntityRegistry>,
-    jobs: Option<Res<JobSpriteRegistry>>,
-    root: Query<&Visibility, With<PartyWindowRoot>>,
-    container: Query<(Entity, Option<&Children>), With<PartyWindowBody>>,
-    mut footer: FooterQuery,
-    mut was_visible: Local<bool>,
-) {
-    let Ok(visibility) = root.single() else {
-        return;
-    };
-    if *visibility == Visibility::Hidden {
-        *was_visible = false;
-        return;
-    }
-    let reopened = !*was_visible;
-    *was_visible = true;
-    let Ok((body, children)) = container.single() else {
-        return;
-    };
-
-    if let Ok(mut footer_visibility) = footer.single_mut() {
-        *footer_visibility = if party.in_party() {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-    }
-
-    let empty = children.is_none_or(|children| children.is_empty());
-    let jobs_changed = jobs.as_ref().is_some_and(|jobs| jobs.is_changed());
-    if !empty && !reopened && !party.is_changed() && !registry.is_changed() && !jobs_changed {
-        return;
-    }
-
-    if let Some(children) = children {
-        for child in children.iter() {
-            commands.entity(child).despawn();
+impl PartyData<'_, '_> {
+    fn roster(&self) -> Roster<'_> {
+        Roster {
+            party: &self.party,
+            me: self.session.char_id,
+            jobs: self.jobs.as_deref(),
         }
     }
 
-    let header = party.in_party().then(|| roster_header(&party));
-    let is_leader = party.is_leader(session.char_id);
-    let rows = roster_rows(
-        &party,
-        &registry,
-        jobs.as_deref(),
-        session.char_id,
-        is_leader,
-    );
-
-    commands
-        .spawn_scene(scene::body(header, rows, is_leader))
-        .insert(ChildOf(body));
+    /// Distance in cells from the local player to the character `char_id`, while that
+    /// character is in view.
+    fn cells(&self, char_id: u32) -> Option<u32> {
+        let place = |entity| self.places.get(entity).map(GlobalTransform::translation);
+        let own = place(self.registry.local_player_entity()?).ok()?;
+        let other = place(self.registry.get_entity(char_id)?).ok()?;
+        let gap = (other - own).abs() / RO_UNITS_PER_CELL;
+        Some(gap.x.max(gap.z).round() as u32)
+    }
 }
 
-/// Drive the leader-only option toggles from the server-confirmed [`PartyState`]. Each
-/// marked checkbox is controlled (no `checkbox_self_update`), so its [`Checked`] visual
-/// only moves when a `PartyInfo` lands.
-fn sync_party_option_toggles(
-    party: Res<PartyState>,
-    mut commands: Commands,
-    exp: Query<Entity, With<scene::ExpShareToggle>>,
-    item: Query<Entity, With<scene::ItemShareToggle>>,
-) {
-    set_checked(&mut commands, &exp, party.exp_share);
-    set_checked(&mut commands, &item, party.item_pickup_share);
+/// What a [`PartyHost`] shows.
+#[derive(Clone, PartialEq)]
+enum Content {
+    Head(view::HeadView),
+    Form(view::FormView),
+    Body(view::BodyView),
+    Frames(view::FramesView),
+    Invite(view::InviteView),
 }
 
-fn set_checked<M: Component>(commands: &mut Commands, toggles: &Query<Entity, With<M>>, on: bool) {
-    for entity in toggles {
-        let mut entity = commands.entity(entity);
-        if on {
-            entity.insert(Checked);
-        } else {
-            entity.remove::<Checked>();
+impl Content {
+    fn spawn(self, commands: &mut Commands) -> Entity {
+        match self {
+            Content::Head(view) => commands.spawn_scene(scene::head(view)).id(),
+            Content::Form(view) => commands.spawn_scene(scene::form(view)).id(),
+            Content::Body(view) => commands.spawn_scene(scene::body(view)).id(),
+            Content::Frames(view) => commands.spawn_scene(frames::panel(view)).id(),
+            Content::Invite(view) => commands.spawn_scene(invite_dialog::dialog(view)).id(),
         }
     }
 }
 
-/// Project the party's identity + counts into the header view-model.
-fn roster_header(party: &PartyState) -> scene::RosterHeader {
-    let leader_name = party
-        .members
-        .iter()
-        .find(|member| member.char_id == party.leader_char_id)
-        .map(|member| member.name.clone())
-        .unwrap_or_default();
-    scene::RosterHeader {
-        name: party.name.clone(),
-        leader_name,
-        members: party.members.len(),
-        active: active_count(&party.members),
-    }
+/// What the hosts show besides the roster.
+#[derive(SystemParam)]
+pub struct PartyShown<'w, 's> {
+    ui: Res<'w, PartyUi>,
+    pending: Res<'w, PendingPartyInvite>,
+    trade: Res<'w, TradeSession>,
+    vending: Res<'w, VendingState>,
+    window: Query<'w, 's, &'static Visibility, With<PartyWindowRoot>>,
 }
 
-/// Project each server member snapshot into a row view-model. Job lookup is deliberately
-/// quiet (`try_display_name`) because unknown jobs and a not-yet-loaded registry both use
-/// the stable UI fallback. Empty when partyless (no members).
-fn roster_rows(
-    party: &PartyState,
-    registry: &EntityRegistry,
-    jobs: Option<&JobSpriteRegistry>,
-    local_char_id: u32,
-    is_leader: bool,
-) -> Vec<scene::RosterRow> {
-    party
-        .members
-        .iter()
-        .map(|member| scene::RosterRow {
-            name: member.name.clone(),
-            level: member.base_level,
-            map: member.map.clone(),
-            job_name: jobs
-                .and_then(|jobs| jobs.try_display_name(member.job_id))
-                .unwrap_or("Unknown Job")
-                .to_string(),
-            online: member.online,
-            leader: member.char_id == party.leader_char_id,
-            char_id: member.char_id,
-            actionable: is_leader && member.char_id != local_char_id,
-            on_screen: registry.get_entity(member.char_id).is_some(),
-            resources: member.online.then(|| scene::MemberResources {
-                hp: scene::ResourceValue {
-                    current: member.hp,
-                    max: member.max_hp,
-                },
-                sp: scene::ResourceValue {
-                    current: member.sp,
-                    max: member.max_sp,
-                },
-                ap: (member.max_ap > 0).then(|| scene::ResourceValue {
-                    current: u64::from(member.ap),
-                    max: u64::from(member.max_ap),
-                }),
+/// Refills every [`PartyHost`] whose view changed. The window's hosts are empty while
+/// it is hidden, the frames while partyless and the invitation while none is pending.
+fn rebuild_party_ui(
+    mut commands: Commands,
+    data: PartyData,
+    state: PartyShown,
+    hosts: Query<(Entity, Ref<PartyHost>, Option<&Children>)>,
+    mut shown: Local<[Option<Content>; 5]>,
+) {
+    let open = state
+        .window
+        .single()
+        .is_ok_and(|visibility| *visibility != Visibility::Hidden);
+    let roster = data.roster();
+    let in_party = data.party.in_party();
+    let ui = &*state.ui;
+    // A vendor's shop locks trading out; the server enforces it too.
+    let trade_free = !state.trade.is_open() && !state.vending.gameplay_locked();
+    for (host, kind, children) in &hosts {
+        let content = match *kind {
+            PartyHost::Head => open.then(|| Content::Head(view::head(roster))),
+            PartyHost::Form => open.then(|| Content::Form(view::form(roster))),
+            PartyHost::Body => (open && in_party).then(|| {
+                let in_view = |char_id| data.cells(char_id).is_some();
+                Content::Body(view::body(roster, ui, in_view, trade_free))
             }),
-        })
-        .collect()
+            PartyHost::Frames => in_party.then(|| Content::Frames(view::frames(roster, ui))),
+            PartyHost::Invite => state.pending.view().cloned().map(Content::Invite),
+        };
+        let slot = &mut shown[*kind as usize];
+        if *slot == content && !kind.is_added() {
+            continue;
+        }
+        for child in children.into_iter().flatten() {
+            commands.entity(*child).despawn();
+        }
+        if let Some(content) = content.clone() {
+            let spawned = content.spawn(&mut commands);
+            commands.entity(spawned).insert(ChildOf(host));
+        }
+        *slot = content;
+    }
+}
+
+type ReadoutNode<'a> = (
+    &'a MemberReadout,
+    &'a mut Node,
+    Option<&'a mut Text>,
+    Option<&'a mut TextColor>,
+);
+
+/// Refreshes every [`MemberReadout`] from the roster, writing only what changed.
+fn sync_readouts(data: PartyData, mut readouts: Query<ReadoutNode>) {
+    let roster = data.roster();
+    for (readout, mut node, text, color) in &mut readouts {
+        let Some(member) = data
+            .party
+            .members
+            .iter()
+            .find(|member| member.char_id == readout.char_id)
+        else {
+            continue;
+        };
+        let placed = matches!(readout.part, ReadoutPart::Where | ReadoutPart::FrameWhere);
+        let cells = placed.then(|| data.cells(member.char_id)).flatten();
+        match view::readout(readout.part, member, roster, cells) {
+            ReadoutValue::Fill(fill) => {
+                let width = Val::Percent(fill);
+                if node.width != width {
+                    node.width = width;
+                }
+            }
+            ReadoutValue::Text(value, tone) => {
+                if let Some(mut text) = text
+                    && text.0 != value
+                {
+                    text.0 = value;
+                }
+                if let Some(mut color) = color
+                    && color.0 != tone
+                {
+                    color.0 = tone;
+                }
+            }
+        }
+    }
+}
+
+/// The name to submit: trimmed, capped and non-empty, else `None`.
+pub fn submit_name(raw: &str) -> Option<String> {
+    let name: String = raw.trim().chars().take(NAME_MAX_CHARS).collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// The commands a party button can send.
+#[derive(SystemParam)]
+pub struct PartyCommands<'w> {
+    create: MessageWriter<'w, PartyCreateRequested>,
+    invite: MessageWriter<'w, PartyInviteRequested>,
+    respond: MessageWriter<'w, PartyInviteResponded>,
+    leave: MessageWriter<'w, PartyLeaveRequested>,
+    kick: MessageWriter<'w, PartyKickRequested>,
+    leader: MessageWriter<'w, PartyLeaderRequested>,
+    options: MessageWriter<'w, PartyOptionsRequested>,
+    trade: MessageWriter<'w, RequestTrade>,
+    casts: MessageWriter<'w, SkillCastResolved>,
+}
+
+/// Everything a party button reads or changes.
+#[derive(SystemParam)]
+pub struct PartyActions<'w, 's> {
+    ui: ResMut<'w, PartyUi>,
+    party: Res<'w, PartyState>,
+    targeting: ResMut<'w, TargetingMode>,
+    pending: ResMut<'w, PendingPartyInvite>,
+    window: Query<'w, 's, &'static mut Visibility, With<PartyWindowRoot>>,
+    names: Query<'w, 's, &'static mut EditableText, With<PartyNameField>>,
+    out: PartyCommands<'w>,
+}
+
+impl PartyActions<'_, '_> {
+    fn run(&mut self, action: PartyAction) {
+        match action {
+            PartyAction::CloseWindow => {
+                if let Ok(mut visibility) = self.window.single_mut() {
+                    *visibility = Visibility::Hidden;
+                }
+            }
+            PartyAction::Submit => self.submit(),
+            PartyAction::Select(char_id) => {
+                self.ui.selected = Some(char_id);
+                self.ui.ask_expel = false;
+            }
+            PartyAction::Trade(target_char_id) => {
+                self.out.trade.write(RequestTrade { target_char_id });
+            }
+            PartyAction::MakeLeader(target_char_id) => {
+                self.out
+                    .leader
+                    .write(PartyLeaderRequested { target_char_id });
+            }
+            PartyAction::AskExpel => self.ui.ask_expel = true,
+            PartyAction::KeepMember => self.ui.ask_expel = false,
+            PartyAction::Expel(target_char_id) => {
+                self.out.kick.write(PartyKickRequested { target_char_id });
+                self.ui.ask_expel = false;
+                self.ui.selected = None;
+            }
+            // The server takes both options as one desired state, so the untouched one
+            // is sent as last confirmed.
+            PartyAction::ExpShare(exp_share) => {
+                self.out.options.write(PartyOptionsRequested {
+                    exp_share,
+                    item_pickup_share: self.party.item_pickup_share,
+                });
+            }
+            PartyAction::PickupShare(item_pickup_share) => {
+                self.out.options.write(PartyOptionsRequested {
+                    exp_share: self.party.exp_share,
+                    item_pickup_share,
+                });
+            }
+            PartyAction::AskLeave => self.ui.ask_leave = true,
+            PartyAction::Stay => self.ui.ask_leave = false,
+            PartyAction::Leave => {
+                self.out.leave.write(PartyLeaveRequested);
+                self.ui.ask_leave = false;
+            }
+            PartyAction::ToggleFrames => self.ui.frames_collapsed ^= true,
+            PartyAction::CastOn(char_id) => self.cast_on(char_id),
+            PartyAction::AnswerInvite(accept) => {
+                if !self.pending.is_pending() {
+                    return;
+                }
+                self.out.respond.write(PartyInviteResponded {
+                    party_id: self.pending.party_id,
+                    accept,
+                });
+                self.pending.clear();
+            }
+        }
+    }
+
+    /// Sends the typed name and empties the field. An empty name sends nothing.
+    fn submit(&mut self) {
+        let Ok(mut field) = self.names.single_mut() else {
+            return;
+        };
+        let Some(name) = submit_name(&field.value().to_string()) else {
+            return;
+        };
+        if self.party.in_party() {
+            self.out.invite.write(PartyInviteRequested {
+                target_char_id: 0,
+                target_name: name,
+            });
+        } else {
+            self.out.create.write(PartyCreateRequested { name });
+        }
+        set_field_text(&mut field, "");
+    }
+
+    /// Resolves a skill armed for an entity target onto a member. Idle clicks do
+    /// nothing: the client has no free targeting.
+    fn cast_on(&mut self, char_id: u32) {
+        let TargetingMode::AwaitingEntity { skill_id, level } = *self.targeting else {
+            return;
+        };
+        self.out.casts.write(SkillCastResolved {
+            skill_id,
+            level,
+            target: CastTarget::Entity(char_id),
+        });
+        *self.targeting = TargetingMode::Idle;
+    }
+}
+
+/// Runs the [`PartyAction`] of an activated button. The headless button also activates
+/// on a right click, which is ignored.
+pub fn on_party_button(
+    activate: On<Activate>,
+    actions: Query<&PartyAction>,
+    mouse: Option<Res<ButtonInput<MouseButton>>>,
+    mut party: PartyActions,
+) {
+    if mouse.is_some_and(|mouse| mouse.just_released(MouseButton::Right)) {
+        return;
+    }
+    if let Ok(action) = actions.get(activate.entity) {
+        party.run(*action);
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::scene::ScenePlugin;
-    use lifthrasir_assets::catalogs::job::registry::JobSpriteRegistry;
-
-    fn member(char_id: u32, online: bool) -> PartyMemberInfo {
-        PartyMemberInfo {
-            char_id,
-            name: "Test".into(),
-            base_level: 50,
-            online,
-            map: "prontera".into(),
-            job_id: 0,
-            hp: 0,
-            max_hp: 0,
-            sp: 0,
-            max_sp: 0,
-            ap: 0,
-            max_ap: 0,
-        }
-    }
-
-    #[test]
-    fn roster_rows_project_party_snapshot_job_and_world_presence() {
-        let mut known = member(1, true);
-        known.job_id = 4008;
-        known.hp = u64::from(u32::MAX) + 25;
-        known.max_hp = u64::from(u32::MAX) + 100;
-        known.sp = 34;
-        known.max_sp = 80;
-        known.ap = 12;
-        known.max_ap = 20;
-
-        let mut unknown = member(2, false);
-        unknown.job_id = 999_999;
-
-        let party = PartyState {
-            leader_char_id: known.char_id,
-            members: vec![known, unknown],
-            ..default()
-        };
-        let mut entities = EntityRegistry::default();
-        entities.register_entity(1, Entity::from_bits(7));
-        let mut job_data = lifthrasir_data::JobData::default();
-        job_data
-            .display_names
-            .insert(4008, "Rune Knight".to_string());
-        let jobs = JobSpriteRegistry::from_job_data(job_data);
-
-        let rows = roster_rows(&party, &entities, Some(&jobs), party.leader_char_id, true);
-
-        assert_eq!(rows[0].job_name, "Rune Knight");
-        assert!(rows[0].leader);
-        assert!(rows[0].on_screen);
-        assert_eq!(
-            rows[0].resources,
-            Some(scene::MemberResources {
-                hp: scene::ResourceValue {
-                    current: u64::from(u32::MAX) + 25,
-                    max: u64::from(u32::MAX) + 100,
-                },
-                sp: scene::ResourceValue {
-                    current: 34,
-                    max: 80,
-                },
-                ap: Some(scene::ResourceValue {
-                    current: 12,
-                    max: 20,
-                }),
-            })
-        );
-        assert_eq!(rows[1].job_name, "Unknown Job");
-        assert!(!rows[1].on_screen);
-        assert_eq!(rows[1].resources, None);
-
-        let rows_without_registry =
-            roster_rows(&party, &entities, None, party.leader_char_id, true);
-        assert_eq!(rows_without_registry[0].job_name, "Unknown Job");
-    }
-
-    #[test]
-    fn roster_rows_only_mark_other_member_rows_actionable_for_the_leader() {
-        let leader = member(1, true);
-        let follower = member(2, true);
-        let party = PartyState {
-            leader_char_id: leader.char_id,
-            members: vec![leader, follower],
-            ..default()
-        };
-
-        // Local player is the leader: own row never actionable, other rows are.
-        let rows = roster_rows(&party, &EntityRegistry::default(), None, 1, true);
-        assert!(!rows[0].actionable);
-        assert_eq!(rows[0].char_id, 1);
-        assert!(rows[1].actionable);
-        assert_eq!(rows[1].char_id, 2);
-
-        // Local player is not the leader: no row is actionable.
-        let rows = roster_rows(&party, &EntityRegistry::default(), None, 1, false);
-        assert!(!rows[0].actionable);
-        assert!(!rows[1].actionable);
-    }
-
-    #[test]
-    fn online_snapshot_omits_ap_when_max_ap_is_zero() {
-        let mut online = member(1, true);
-        online.ap = 8;
-        online.max_ap = 0;
-        let party = PartyState {
-            party_id: 7,
-            members: vec![online],
-            ..default()
-        };
-
-        let rows = roster_rows(&party, &EntityRegistry::default(), None, 1, true);
-
-        assert!(rows[0].resources.as_ref().unwrap().ap.is_none());
-    }
-
-    fn refresh_app(member: PartyMemberInfo) -> App {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
-        app.init_asset::<Image>();
-        app.init_asset::<Font>();
-        app.insert_resource(PartyState {
-            party_id: 7,
-            name: "Wolfpack".to_string(),
-            leader_char_id: member.char_id,
-            members: vec![member],
-            ..default()
-        });
-        app.init_resource::<EntityRegistry>();
-        app.init_resource::<ZoneSession>();
-        app.world_mut()
-            .spawn((PartyWindowRoot, Visibility::Visible));
-        app.world_mut().spawn(PartyWindowBody);
-        app.world_mut().spawn((PartyFooter, Visibility::Hidden));
-        app.add_systems(Update, refresh_roster);
-        app
-    }
-
-    fn text_values(app: &mut App) -> Vec<String> {
-        app.world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|text| text.0.clone())
-            .collect()
-    }
-
-    fn set_window_visibility(app: &mut App, visibility: Visibility) {
-        *app.world_mut()
-            .query_filtered::<&mut Visibility, With<PartyWindowRoot>>()
-            .single_mut(app.world_mut())
-            .unwrap() = visibility;
-    }
-
-    #[test]
-    fn reopening_rebuilds_snapshot_changed_while_hidden() {
-        let mut online = member(1, true);
-        online.hp = 10;
-        online.max_hp = 20;
-        let mut app = refresh_app(online);
-
-        app.update();
-        assert!(text_values(&mut app).contains(&"10 / 20".to_string()));
-
-        set_window_visibility(&mut app, Visibility::Hidden);
-        app.world_mut().resource_mut::<PartyState>().members[0].hp = 15;
-        app.update();
-        assert!(text_values(&mut app).contains(&"10 / 20".to_string()));
-
-        set_window_visibility(&mut app, Visibility::Visible);
-        app.update();
-        let texts = text_values(&mut app);
-        assert!(texts.contains(&"15 / 20".to_string()));
-        assert!(!texts.contains(&"10 / 20".to_string()));
-    }
-
-    #[test]
-    fn job_and_entity_registry_changes_rebuild_visible_rows() {
-        let mut online = member(1, true);
-        online.job_id = 4008;
-        let mut app = refresh_app(online);
-
-        app.update();
-        let texts = text_values(&mut app);
-        assert!(texts.contains(&"Unknown Job".to_string()));
-        assert!(!texts.contains(&"on screen".to_string()));
-
-        let mut job_data = lifthrasir_data::JobData::default();
-        job_data
-            .display_names
-            .insert(4008, "Rune Knight".to_string());
-        app.insert_resource(JobSpriteRegistry::from_job_data(job_data));
-        app.update();
-        let texts = text_values(&mut app);
-        assert!(texts.contains(&"Rune Knight".to_string()));
-        assert!(!texts.contains(&"Unknown Job".to_string()));
-
-        app.world_mut()
-            .resource_mut::<EntityRegistry>()
-            .register_entity(1, Entity::from_bits(7));
-        app.update();
-        assert!(text_values(&mut app).contains(&"on screen".to_string()));
-    }
-
-    #[test]
-    fn active_count_only_counts_online() {
-        let members = [member(1, true), member(2, false), member(3, true)];
-        assert_eq!(active_count(&members), 2);
-    }
-
-    fn visibility_app() -> App {
-        let mut app = App::new();
-        app.init_resource::<PartyState>();
-        app.world_mut().spawn((PartyWindowRoot, Visibility::Hidden));
-        app.add_systems(Update, party_visibility);
-        app
-    }
-
-    fn root_visibility(app: &mut App) -> Visibility {
-        *app.world_mut()
-            .query_filtered::<&Visibility, With<PartyWindowRoot>>()
-            .single(app.world())
-            .unwrap()
-    }
-
-    fn set_party(app: &mut App, party_id: u32) {
-        app.world_mut().resource_mut::<PartyState>().party_id = party_id;
-    }
-
-    #[test]
-    fn stays_hidden_on_join_edge_and_closes_on_leave_edge() {
-        let mut app = visibility_app();
-
-        app.update();
-        assert_eq!(root_visibility(&mut app), Visibility::Hidden);
-
-        set_party(&mut app, 7);
-        app.update();
-        assert_eq!(root_visibility(&mut app), Visibility::Hidden);
-
-        set_window_visibility(&mut app, Visibility::Visible);
-        set_party(&mut app, 0);
-        app.update();
-        assert_eq!(root_visibility(&mut app), Visibility::Hidden);
-    }
-
-    #[test]
-    fn manual_close_is_not_reopened_by_same_party_update() {
-        let mut app = visibility_app();
-
-        set_party(&mut app, 7);
-        app.update();
-        set_window_visibility(&mut app, Visibility::Visible);
-        assert_eq!(root_visibility(&mut app), Visibility::Visible);
-
-        for mut visibility in app
-            .world_mut()
-            .query_filtered::<&mut Visibility, With<PartyWindowRoot>>()
-            .iter_mut(app.world_mut())
-        {
-            *visibility = Visibility::Hidden;
-        }
-
-        app.world_mut().resource_mut::<PartyState>().set_changed();
-        app.update();
-        assert_eq!(root_visibility(&mut app), Visibility::Hidden);
-    }
-
-    #[test]
-    fn sync_party_option_toggles_mirrors_party_state_checked_flags() {
-        let mut app = App::new();
-        app.insert_resource(PartyState {
-            exp_share: true,
-            item_pickup_share: false,
-            ..default()
-        });
-        let exp = app.world_mut().spawn(scene::ExpShareToggle).id();
-        let item = app.world_mut().spawn(scene::ItemShareToggle).id();
-        app.add_systems(Update, sync_party_option_toggles);
-
-        app.update();
-        assert!(app.world().entity(exp).contains::<Checked>());
-        assert!(!app.world().entity(item).contains::<Checked>());
-
-        app.world_mut().resource_mut::<PartyState>().exp_share = false;
-        app.world_mut()
-            .resource_mut::<PartyState>()
-            .item_pickup_share = true;
-        app.update();
-        assert!(!app.world().entity(exp).contains::<Checked>());
-        assert!(app.world().entity(item).contains::<Checked>());
-    }
-}
+mod tests;

@@ -40,10 +40,16 @@ pub fn party_member_update(u: net::PartyMemberUpdate) -> Option<PartyMemberUpdat
 }
 
 pub fn party_invite_notify(n: net::PartyInviteNotify) -> PartyInviteNotified {
+    let party = n.party.unwrap_or_default();
     PartyInviteNotified {
         party_id: n.party_id,
         party_name: n.party_name,
         inviter_name: n.inviter_name,
+        inviter_char_id: n.inviter_char_id,
+        leader_char_id: party.leader_char_id,
+        exp_share: party.exp_share,
+        item_pickup_share: party.item_pickup_share,
+        members: party.members.into_iter().map(party_member).collect(),
     }
 }
 

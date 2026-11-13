@@ -1,772 +1,689 @@
-//! Idiomatic BSN chrome for the party roster window (mirrors the inventory window).
-//!
-//! [`window`] builds the persistent chrome — root, draggable titlebar, an empty
-//! [`PartyWindowBody`] region, and a persistent footer with a real `@FeathersButton`
-//! "Leave Party" — as one `bsn!` tree. [`body`] projects the live roster view-model
-//! (header band + one row per member, or the partyless empty state) and is respawned
-//! by [`refresh_roster`](super::refresh_roster) when visible roster inputs change.
-//!
-//! Scenes own their data, so every view-model ([`RosterHeader`], [`RosterRow`]) is
-//! prepared as owned values in the system before entering a `bsn!` block. The window
-//! spawns as a single scene, so the titlebar drag is an inline `on(...)` observer that
-//! resolves the root by marker (no captured entity, no `make_draggable`).
+//! The party window scenes: the frame [`window`] spawns once and the three regions
+//! `rebuild_party_ui` projects from their view-models. Sizes follow the `Party`
+//! artboard of the Lifthrasir Widgets design.
 
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{FontSize, FontSourceTemplate};
-use bevy::ui_widgets::{Activate, ValueChange};
-use bevy_feathers::controls::{FeathersButton, FeathersCheckbox};
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
-use lifthrasir_client::domain::party::PartyState;
-use net_contract::commands::{PartyLeaveRequested, PartyOptionsRequested};
-
-use lifthrasir_ui::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
-use lifthrasir_ui::widgets::chrome::{
-    body_container, chrome_text, glyph_icon, ignore_picking, titlebar,
+use bevy::ui_widgets::Button;
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    ButtonArt, HoverColors, INPUT_SHADOW, WINDOW_SHADOW, close_button, diamond, display_text,
+    inset, segment, tab_text, window_title_bar, window_titled,
 };
 
-use crate::widgets::party::member_menu::PartyMemberRow;
-use crate::widgets::party::{
-    PARTY_MAX, PartyFooter, PartyTitlebar, PartyWindowBody, PartyWindowRoot,
+use super::view::{
+    BodyView, CardView, FormView, HeadView, LeaveView, LevelsView, MemberReadout, ReadoutPart,
+    SHARE_GAP, SelectionView, SharingView,
+};
+use super::{
+    PARTY_MAX, PartyAction, PartyHost, PartyNameField, PartyTitlebar, PartyWindowRoot,
+    on_party_button,
+};
+use crate::screens::shared::{
+    DANGER_TINT, colored_lines, glow, overline, row_button, search_field, usable, wide_button,
 };
 
-const WINDOW_LEFT: f32 = 300.0;
-const WINDOW_TOP: f32 = 90.0;
-const WINDOW_WIDTH: f32 = 400.0;
+const WINDOW_LEFT: f32 = 160.0;
+const WINDOW_TOP: f32 = 40.0;
+/// Width of the window's shape.
+const WINDOW_WIDTH: f32 = 924.0;
+/// Width of the roster column: two cards and the gap between them.
+const ROSTER_WIDTH: f32 = 536.0;
+const CARD_GAP: f32 = 8.0;
+const CARD_WIDTH: f32 = (ROSTER_WIDTH - CARD_GAP) / 2.0;
+const CARD_HEIGHT: f32 = 92.0;
 
-/// The owned header view-model: party name, leader name, and the member/active counts.
-pub(crate) struct RosterHeader {
-    pub name: String,
-    pub leader_name: String,
-    pub members: usize,
-    pub active: usize,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ResourceValue {
-    pub current: u64,
-    pub max: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct MemberResources {
-    pub hp: ResourceValue,
-    pub sp: ResourceValue,
-    pub ap: Option<ResourceValue>,
-}
-
-/// One roster row's owned view-model. Resources come exclusively from the latest
-/// `PartyState` snapshot; `on_screen` is an independent world-entity lookup.
-pub(crate) struct RosterRow {
-    pub name: String,
-    pub level: u32,
-    pub map: String,
-    pub job_name: String,
-    pub online: bool,
-    pub leader: bool,
-    pub char_id: u32,
-    pub actionable: bool,
-    pub on_screen: bool,
-    pub resources: Option<MemberResources>,
-}
-
-/// Marks the leader-only EXP-share toggle checkbox inside the options row.
-#[derive(Component, Default, Clone)]
-pub struct ExpShareToggle;
-
-/// Marks the leader-only item-share toggle checkbox inside the options row.
-#[derive(Component, Default, Clone)]
-pub struct ItemShareToggle;
-
-/// Spawn the whole window as one scene and parent it under `parent` with a single
-/// insert.
-pub fn build(commands: &mut Commands, parent: Entity) {
-    commands.spawn_scene(window()).insert(ChildOf(parent));
-}
-
-fn window() -> impl Scene {
+/// The frame: the title bar, the heading beside the name field, and the body.
+pub fn window() -> impl Scene {
     bsn! {
         PartyWindowRoot
+        @window_titled()
         Node {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
+            width: px(WINDOW_WIDTH + 2.0 * WINDOW_SHADOW),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
-            border: px(1),
-            border_radius: BorderRadius::all(px(13)),
         }
-        ThemeBackgroundColor({TOKEN_WINDOW_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         Pickable
         Children [
-            @titlebar::<PartyTitlebar, PartyWindowRoot>("members", "Party") --
-            @body_container::<PartyWindowBody>(UiRect {
-                left: Val::Px(14.0),
-                right: Val::Px(14.0),
-                top: Val::Px(12.0),
-                bottom: Val::Px(10.0),
-            }) --
-            @footer()
-        ]
-    }
-}
-
-/// The persistent footer: a single `@FeathersButton` whose `on(Activate)` requests a
-/// party leave. Hidden while partyless (toggled by `refresh_roster`) so it is never a
-/// dead control; kept out of the swappable body so its observer is not respawned.
-fn footer() -> impl Scene {
-    bsn! {
-        PartyFooter
-        Node {
-            flex_direction: FlexDirection::Row,
-            padding: {UiRect { left: Val::Px(14.0), right: Val::Px(14.0), bottom: Val::Px(14.0), ..default() }},
-        }
-        Visibility::Hidden
-        @ignore_picking()
-        Children [
-            @FeathersButton { @caption: bsn! { @button_label("Leave Party") } }
-            Node { flex_grow: 1.0, height: px(32) }
-            on(on_leave)
-        ]
-    }
-}
-
-/// The whole swappable body: the header band plus one row per member, or the partyless
-/// empty state. `header` is `None` exactly when partyless; `is_leader` adds the
-/// leader-only options row.
-pub(crate) fn body(
-    header: Option<RosterHeader>,
-    rows: Vec<RosterRow>,
-    is_leader: bool,
-) -> impl Scene {
-    let partyless = header.is_none();
-    let header_scene = header.map(|header| EntityScene(header_band(header)));
-    let empty = partyless.then(|| EntityScene(empty_state()));
-    let row_scenes: Vec<_> = rows.into_iter().map(member_row).collect();
-    let options = is_leader.then(|| EntityScene(options_row()));
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
-        @ignore_picking()
-        Children [ {header_scene} -- {empty} -- {row_scenes} -- {options} ]
-    }
-}
-
-/// Leader-only options section: two controlled Feathers checkboxes that write the full
-/// [`PartyOptionsRequested`] pair, preserving the untouched flag from [`PartyState`].
-/// No `checkbox_self_update`: the checked visual is driven solely by
-/// [`sync_party_option_toggles`](super::sync_party_option_toggles), so the toggles
-/// settle on server-confirmed values.
-fn options_row() -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: px(4),
-            padding: {UiRect::axes(px(10), px(8))},
-            border_radius: BorderRadius::all(px(7)),
-            margin: {UiRect::bottom(px(4))},
-        }
-        BackgroundColor(lifthrasir_ui::theme::GLASS_2)
-        @ignore_picking()
-        Children [
-            @chrome_text("Party options".to_string(), 11.0, lifthrasir_ui::theme::TEXT_DIM) --
-            Node { flex_direction: FlexDirection::Row, column_gap: px(16) }
+            PartyTitlebar
+            @window_title_bar("Party", bsn! {
+                @close_button()
+                PartyAction::CloseWindow
+                on(on_party_button)
+            })
+            Pickable
+            on(drag_window::<PartyTitlebar, PartyWindowRoot>)
+            --
+            Node {
+                align_items: AlignItems::FlexStart,
+                column_gap: px(14),
+                margin: {UiRect::top(px(10))},
+            }
             @ignore_picking()
             Children [
-                @FeathersCheckbox { @caption: bsn! { Text("EXP Share") ThemedText } }
-                ExpShareToggle
-                on(on_exp_share_changed)
+                PartyHost::Head
+                Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) }
+                @ignore_picking()
                 --
-                @FeathersCheckbox { @caption: bsn! { Text("Item Share") ThemedText } }
-                ItemShareToggle
-                on(on_item_share_changed)
-            ]
-        ]
-    }
-}
-
-fn on_exp_share_changed(
-    ev: On<ValueChange<bool>>,
-    party: Res<PartyState>,
-    mut writer: MessageWriter<PartyOptionsRequested>,
-) {
-    writer.write(PartyOptionsRequested {
-        exp_share: ev.value,
-        item_pickup_share: party.item_pickup_share,
-    });
-}
-
-fn on_item_share_changed(
-    ev: On<ValueChange<bool>>,
-    party: Res<PartyState>,
-    mut writer: MessageWriter<PartyOptionsRequested>,
-) {
-    writer.write(PartyOptionsRequested {
-        exp_share: party.exp_share,
-        item_pickup_share: ev.value,
-    });
-}
-
-/// Partyless empty state: a hint plus a "Create a party" `@FeathersButton` that opens
-/// the create-party modal ([`create_dialog`](super::create_dialog)).
-fn empty_state() -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
-        @ignore_picking()
-        Children [
-            Node { flex_direction: FlexDirection::Column, row_gap: px(2) }
-            @ignore_picking()
-            Children [
-                @title_text("Create a party".to_string(), 15.0, lifthrasir_ui::theme::GOLD) --
-                @chrome_text("You are not in a party yet.".to_string(), 11.5, lifthrasir_ui::theme::TEXT_DIM)
+                PartyHost::Form
+                Node { flex_shrink: 0.0 }
+                @ignore_picking()
             ]
             --
-            @FeathersButton { @caption: bsn! { @button_label("Create a party") } }
-            Node { height: px(32) }
-            on(super::create_dialog::open_create_dialog)
+            PartyHost::Body
+            Node { margin: {UiRect::new(px(0), px(0), px(10), px(8))} }
+            @ignore_picking()
         ]
     }
 }
 
-/// Header band: party name, leader line (crown + name), and the `members/12` + active
-/// counts.
-fn header_band(header: RosterHeader) -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
-            padding: {UiRect::axes(px(10), px(8))},
-            border_radius: BorderRadius::all(px(8)),
-            margin: {UiRect::bottom(px(4))},
-        }
-        BackgroundColor(lifthrasir_ui::theme::GLASS_2)
-        @ignore_picking()
-        Children [
-            Node { flex_direction: FlexDirection::Column, row_gap: px(3) }
-            @ignore_picking()
-            Children [
-                @title_text(header.name, 15.0, lifthrasir_ui::theme::TEXT) --
-                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
-                @ignore_picking()
-                Children [
-                    @glyph_icon("crown", 12.0, lifthrasir_ui::theme::GOLD) --
-                    @chrome_text(format!("Leader {}", header.leader_name), 11.5, lifthrasir_ui::theme::TEXT_DIM)
-                ]
-            ]
-            --
-            Node { flex_direction: FlexDirection::Column, align_items: AlignItems::FlexEnd, row_gap: px(3) }
-            @ignore_picking()
-            Children [
-                @chrome_text(format!("{}/{PARTY_MAX} members", header.members), 11.5, lifthrasir_ui::theme::TEXT) --
-                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(5) }
-                @ignore_picking()
-                Children [
-                    @online_dot(true) --
-                    @chrome_text(format!("{} active", header.active), 11.5, lifthrasir_ui::theme::EMERALD_BRI)
-                ]
-            ]
-        ]
-    }
-}
-
-/// One roster row: online dot, identity/meta, and the server-owned resource snapshot.
-/// Actionable rows (leader can act on them) are pickable and carry the
-/// [`PartyMemberRow`] marker the global `member_menu::open` observer reads; every
-/// other row stays `ignore_picking()`.
-fn member_row(row: RosterRow) -> impl Scene {
-    let crown = row
-        .leader
-        .then(|| EntityScene(glyph_icon("crown", 12.0, lifthrasir_ui::theme::GOLD)));
-    let marker = row
-        .actionable
-        .then(|| bsn! { PartyMemberRow({row.char_id}) });
-    let picking = (!row.actionable).then(ignore_picking);
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::axes(px(8), px(7))},
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        @{picking}
-        @{marker}
-        Children [
-            @online_dot(row.online) --
-            Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, row_gap: px(2) }
-            @ignore_picking()
-            Children [
-                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
-                @ignore_picking()
-                Children [ @chrome_text(row.name, 13.0, lifthrasir_ui::theme::TEXT) -- {crown} ]
-                --
-                Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: px(4) }
-                @ignore_picking()
-                Children [
-                    @chrome_text(format!("Lv {}", row.level), 11.0, lifthrasir_ui::theme::GOLD) --
-                    @chrome_text(row.job_name, 11.0, lifthrasir_ui::theme::TEXT_DIM) --
-                    @glyph_icon("pin", 11.0, lifthrasir_ui::theme::TEXT_FAINT) --
-                    @chrome_text(row.map, 11.0, lifthrasir_ui::theme::TEXT_DIM)
-                ]
-            ]
-            --
-            @resource_cell(row.resources, row.on_screen)
-        ]
-    }
-}
-
-/// Right-hand status cell. Offline rows have no meters; world presence remains an
-/// independent chip and therefore may coexist with either online or offline state.
-fn resource_cell(resources: Option<MemberResources>, on_screen: bool) -> impl Scene {
-    let (hp, sp, ap, offline) = match resources {
-        Some(resources) => (
-            Some(EntityScene(resource_meter(
-                "HP",
-                resources.hp,
-                hp_meter_color(resources.hp),
-            ))),
-            Some(EntityScene(resource_meter(
-                "SP",
-                resources.sp,
-                lifthrasir_ui::theme::MANA_BLUE,
-            ))),
-            resources
-                .ap
-                .map(|ap| EntityScene(resource_meter("AP", ap, lifthrasir_ui::theme::GOLD))),
-            None,
-        ),
-        None => (
-            None,
-            None,
-            None,
-            Some(EntityScene(chrome_text(
-                "Offline".to_string(),
-                11.0,
-                lifthrasir_ui::theme::TEXT_FAINT,
-            ))),
-        ),
+pub(super) fn head(view: HeadView) -> impl Scene {
+    let line = match view.count {
+        Some((counts, leader)) => vec![(ro_dark::MUTED, counts), (ro_dark::RARE_RING, leader)],
+        None => vec![(ro_dark::MUTED, "Name a party to found one.".to_string())],
     };
-    let chip = on_screen.then(|| {
-        EntityScene(chrome_text(
-            "on screen".to_string(),
-            9.5,
-            lifthrasir_ui::theme::EMERALD_BRI,
-        ))
-    });
+    bsn! {
+        Node { flex_direction: FlexDirection::Column }
+        @ignore_picking()
+        Children [
+            @display_text(view.title, 22.0, ro_dark::HERO)
+            --
+            @colored_lines(vec![line])
+        ]
+    }
+}
+
+/// The name field, its button and the rule under them.
+pub(super) fn form(view: FormView) -> impl Scene {
+    let (hint, label, width, enabled) = match view {
+        FormView::Create => ("Party name", "Create Party", 112.0, true),
+        FormView::Invite { leader } => ("Invite a hero by name", "Invite", 72.0, leader),
+    };
+    let note = match view {
+        FormView::Create => format!("You become the leader \u{b7} Up to {PARTY_MAX} members"),
+        FormView::Invite { leader: true } => format!(
+            "Heroes must be online and not in another party \u{b7} Up to {PARTY_MAX} members"
+        ),
+        FormView::Invite { leader: false } => "Only the leader can invite".to_string(),
+    };
     bsn! {
         Node {
-            width: px(168),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::FlexEnd,
-            row_gap: px(3),
-        }
-        @ignore_picking()
-        Children [ {hp} -- {sp} -- {ap} -- {offline} -- {chip} ]
-    }
-}
-
-/// One compact resource line. Labels retain the exact integer snapshot while only the
-/// visual fill is clamped into the track.
-fn resource_meter(label: &'static str, value: ResourceValue, color: Color) -> impl Scene {
-    let percent_full = resource_fill_percent(value);
-    bsn! {
-        Node {
-            width: percent(100),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(4),
+            row_gap: px(8),
         }
         @ignore_picking()
         Children [
-            @chrome_text(label.to_string(), 9.5, color) --
-            Node { flex_grow: 1.0, height: px(6), border_radius: BorderRadius::all(px(3)) }
-            BackgroundColor(lifthrasir_ui::theme::GLASS_2)
+            Node { align_items: AlignItems::Center, column_gap: px(14) }
             @ignore_picking()
             Children [
-                Node { width: percent(percent_full), height: percent(100), border_radius: BorderRadius::all(px(3)) }
-                BackgroundColor(color)
-                @ignore_picking()
+                @search_field::<PartyNameField>(hint)
+                Node {
+                    width: px(220.0 + 2.0 * INPUT_SHADOW),
+                    flex_grow: 0.0,
+                    flex_shrink: 0.0,
+                }
+                --
+                @wide_button(ButtonArt::PRIMARY, label, width)
+                @usable(enabled, Color::WHITE)
+                PartyAction::Submit
+                on(on_party_button)
             ]
             --
-            @chrome_text(format!("{} / {}", value.current, value.max), 9.5, lifthrasir_ui::theme::TEXT_DIM)
+            @chrome_text(note, 11.0, ro_dark::MUTED)
         ]
     }
 }
 
-fn resource_ratio(value: ResourceValue) -> f32 {
-    if value.max == 0 {
-        return 0.0;
+/// The roster with its selection bar, beside the sharing options, the level track and
+/// Leave Party.
+pub(super) fn body(view: BodyView) -> impl Scene {
+    let open = (0..view.open_slots).map(|_| Box::new(open_slot()) as Box<dyn Scene>);
+    let cards: Vec<Box<dyn Scene>> = view
+        .cards
+        .into_iter()
+        .map(|card_view| Box::new(card(card_view)) as Box<dyn Scene>)
+        .chain(open)
+        .collect();
+    let selection = selection_bar(view.selection);
+    let leave = leave_controls(view.leave);
+    bsn! {
+        Node { column_gap: px(20), align_items: AlignItems::FlexStart }
+        @ignore_picking()
+        Children [
+            Node {
+                width: px(ROSTER_WIDTH),
+                flex_shrink: 0.0,
+                flex_direction: FlexDirection::Column,
+            }
+            @ignore_picking()
+            Children [
+                @overline("MEMBERS".into(), ro_dark::ACCENT)
+                --
+                Node {
+                    flex_wrap: FlexWrap::Wrap,
+                    column_gap: px(CARD_GAP),
+                    row_gap: px(CARD_GAP),
+                    margin: {UiRect::top(px(6))},
+                }
+                @ignore_picking()
+                Children [ {cards} ]
+                --
+                @inset()
+                Node {
+                    height: px(52),
+                    margin: {UiRect::top(px(10))},
+                    padding: {UiRect::horizontal(px(12))},
+                    align_items: AlignItems::Center,
+                    column_gap: px(8),
+                }
+                @ignore_picking()
+                Children [ {selection} ]
+            ]
+            --
+            Node {
+                flex_grow: 1.0,
+                flex_basis: px(0),
+                min_width: px(0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(12),
+            }
+            @ignore_picking()
+            Children [
+                @sharing(view.sharing)
+                --
+                @levels(view.levels)
+                --
+                Node {
+                    height: px(32),
+                    justify_content: JustifyContent::FlexEnd,
+                    align_items: AlignItems::Center,
+                    column_gap: px(8),
+                }
+                @ignore_picking()
+                Children [ {leave} ]
+            ]
+        ]
     }
-    (value.current as f64 / value.max as f64) as f32
 }
 
-fn resource_fill_percent(value: ResourceValue) -> f32 {
-    resource_ratio(value).clamp(0.0, 1.0) * 100.0
+/// A node that follows one live value of the member `char_id`.
+pub(super) fn readout(char_id: u32, part: ReadoutPart) -> MemberReadout {
+    MemberReadout { char_id, part }
 }
 
-fn hp_meter_color(value: ResourceValue) -> Color {
-    if resource_ratio(value) < 0.25 {
-        lifthrasir_ui::theme::HEALTH_RED
+/// The gold mark beside the leader's name.
+pub(super) fn crown(size: f32) -> impl Scene {
+    diamond(size, ro_dark::RARE_RING, ro_dark::RARE_RING)
+}
+
+fn card(view: CardView) -> impl Scene {
+    let (fill, stroke, border) = match (view.selected, view.online) {
+        (true, _) => (ro_dark::SLOT, ro_dark::SELECT_RING, 2.0),
+        (false, true) => (ro_dark::SLOT, ro_dark::SLOT_STROKE, 1.0),
+        (false, false) => (ro_dark::SLOT_DISABLED, ro_dark::INSET_RULE, 1.0),
+    };
+    let halo = glow(if view.selected {
+        ro_dark::FROST_GLOW.with_alpha(0.45)
     } else {
-        lifthrasir_ui::theme::EMERALD
+        Color::NONE
+    });
+    let colors = HoverColors {
+        rest: (fill, stroke),
+        hover: if view.selected {
+            (fill, stroke)
+        } else {
+            (ro_dark::SLOT_HOVER, ro_dark::BUTTON_STROKE)
+        },
+    };
+    let (dot, ink) = match (view.online, view.me) {
+        (false, _) => (ro_dark::SLOT_STROKE, ro_dark::MUTED),
+        (true, true) => (ro_dark::JOB_EXP, ro_dark::FROST),
+        (true, false) => (ro_dark::JOB_EXP, ro_dark::STRONG),
+    };
+    let char_id = view.char_id;
+    let crown = view.leader.then(|| EntityScene(crown(9.0)));
+    let you = view
+        .me
+        .then(|| EntityScene(chrome_text("You".into(), 11.0, ro_dark::FROST)));
+    let place = readout(char_id, ReadoutPart::Where);
+    let place = view.online.then(|| {
+        EntityScene(bsn! {
+            place
+            @chrome_text(String::new(), 11.0, ro_dark::MUTED)
+            TextLayout { linebreak: LineBreak::NoWrap }
+        })
+    });
+    let offline =
+        (!view.online).then(|| EntityScene(chrome_text("Offline".into(), 11.0, ro_dark::MUTED)));
+    let bars = view.online.then(|| {
+        EntityScene(bsn! {
+            Node { column_gap: px(6) }
+            @ignore_picking()
+            Children [
+                @bar(char_id, (ReadoutPart::HpFill, ReadoutPart::HpText), ro_dark::HP, 3.0)
+                --
+                @bar(char_id, (ReadoutPart::SpFill, ReadoutPart::SpText), ro_dark::SP, 2.0)
+            ]
+        })
+    });
+    bsn! {
+        Button
+        Hovered
+        colors
+        PartyAction::Select(char_id)
+        Node {
+            width: px(CARD_WIDTH),
+            height: px(CARD_HEIGHT),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
+            padding: {UiRect::axes(px(12.0 - border), px(10.0 - border))},
+            border: px(border),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        halo
+        Pickable
+        on(on_party_button)
+        Children [
+            Node { align_items: AlignItems::Center, column_gap: px(8) }
+            @ignore_picking()
+            Children [
+                Node { width: px(8), height: px(8), flex_shrink: 0.0, border_radius: BorderRadius::MAX }
+                BackgroundColor(dot)
+                @ignore_picking()
+                --
+                {crown}
+                --
+                @chrome_text(view.name, 13.0, ink)
+                --
+                {you}
+                --
+                Node { flex_grow: 1.0 }
+                @ignore_picking()
+                --
+                {place}
+                --
+                {offline}
+            ]
+            --
+            @chrome_text(view.detail, 11.0, ro_dark::MUTED)
+            --
+            {bars}
+        ]
     }
 }
 
-/// A small round status dot: emerald when online, faint when offline.
-fn online_dot(online: bool) -> impl Scene {
-    let color = if online {
-        lifthrasir_ui::theme::EMERALD
+/// A resource bar with its amount written over it. `grow` shares the row between bars.
+fn bar(
+    char_id: u32,
+    (fill, text): (ReadoutPart, ReadoutPart),
+    color: Color,
+    grow: f32,
+) -> impl Scene {
+    let fill = readout(char_id, fill);
+    let text = readout(char_id, text);
+    bsn! {
+        Node {
+            flex_grow: grow,
+            flex_basis: px(0),
+            height: px(12),
+            padding: px(1),
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(ro_dark::BAR_TROUGH)
+        BorderColor::all(ro_dark::BAR_FRAME)
+        @ignore_picking()
+        Children [
+            fill
+            Node {
+                width: percent(0),
+                height: percent(100),
+                border_radius: BorderRadius::all(px(4)),
+            }
+            BackgroundColor(color)
+            @ignore_picking()
+            --
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                right: px(0),
+                top: px(0),
+                bottom: px(0),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+            }
+            @ignore_picking()
+            Children [
+                text
+                @chrome_text(String::new(), 9.5, ro_dark::VALUE)
+                TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
+            ]
+        ]
+    }
+}
+
+fn open_slot() -> impl Scene {
+    bsn! {
+        Node {
+            width: px(CARD_WIDTH),
+            height: px(CARD_HEIGHT),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BorderColor::all(ro_dark::INSET_RULE)
+        @ignore_picking()
+        Children [ @chrome_text("Open slot".into(), 11.0, ro_dark::FAINT) ]
+    }
+}
+
+/// The selected member with what can be done to them, or the expel prompt.
+fn selection_bar(view: Option<SelectionView>) -> Vec<Box<dyn Scene>> {
+    let Some(view) = view else {
+        return vec![Box::new(bsn! {
+            Node { flex_grow: 1.0, justify_content: JustifyContent::Center }
+            @ignore_picking()
+            Children [ @chrome_text("Select a member".into(), 12.0, ro_dark::MUTED) ]
+        })];
+    };
+    let char_id = view.char_id;
+    let mut bar: Vec<Box<dyn Scene>> = vec![Box::new(bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            overflow: {Overflow::clip()},
+        }
+        @ignore_picking()
+        Children [
+            @chrome_text(view.title, 13.0, ro_dark::STRONG)
+            TextLayout { linebreak: LineBreak::NoWrap }
+            --
+            @chrome_text(view.meta, 11.0, ro_dark::MUTED)
+            TextLayout { linebreak: LineBreak::NoWrap }
+        ]
+    })];
+    if view.ask_expel {
+        bar.push(Box::new(chrome_text(
+            format!("Expel {}?", view.name),
+            12.0,
+            ro_dark::DANGER_GLOW,
+        )));
+        bar.push(Box::new(bsn! {
+            @row_button(ButtonArt::NORMAL, "Keep", 48.0)
+            PartyAction::KeepMember
+            on(on_party_button)
+        }));
+        bar.push(Box::new(bsn! {
+            @row_button(ButtonArt::NORMAL, "Expel", 52.0)
+            @usable(true, DANGER_TINT)
+            PartyAction::Expel(char_id)
+            on(on_party_button)
+        }));
+        return bar;
+    }
+    // NOTE: disabled, because the client has no whisper. Point it at the chat's
+    // whisper target once that exists.
+    bar.push(Box::new(bsn! {
+        @row_button(ButtonArt::NORMAL, "Whisper", 64.0)
+        @usable(false, Color::WHITE)
+    }));
+    bar.push(Box::new(bsn! {
+        @row_button(ButtonArt::NORMAL, "Trade", 52.0)
+        @usable(view.can_trade, Color::WHITE)
+        PartyAction::Trade(char_id)
+        on(on_party_button)
+    }));
+    bar.push(Box::new(bsn! {
+        @row_button(ButtonArt::NORMAL, "Make Leader", 92.0)
+        @usable(view.can_lead, Color::WHITE)
+        PartyAction::MakeLeader(char_id)
+        on(on_party_button)
+    }));
+    bar.push(Box::new(bsn! {
+        @row_button(ButtonArt::NORMAL, "Expel", 52.0)
+        @usable(view.can_expel, DANGER_TINT)
+        PartyAction::AskExpel
+        on(on_party_button)
+    }));
+    bar
+}
+
+fn sharing(view: SharingView) -> impl Scene {
+    let who = if view.leader {
+        "You lead \u{b7} You can change these"
     } else {
-        lifthrasir_ui::theme::TEXT_FAINT
+        "Only the leader can change these"
+    };
+    let act = |action: PartyAction| view.leader.then_some(action);
+    let exp_tone = if view.exp_warn {
+        ro_dark::STATUS_BUSY
+    } else {
+        ro_dark::MUTED
+    };
+    let pickup_note = if view.pickup_share {
+        "Anyone in the party can pick up any drop."
+    } else {
+        "Whoever picks it up keeps it."
     };
     bsn! {
-        Node { width: px(8), height: px(8), border_radius: BorderRadius::all(px(4)) }
-        BackgroundColor(color)
+        @inset()
+        Node { flex_direction: FlexDirection::Column, row_gap: px(12), padding: px(14) }
         @ignore_picking()
+        Children [
+            Node {
+                align_items: AlignItems::Baseline,
+                justify_content: JustifyContent::SpaceBetween,
+            }
+            @ignore_picking()
+            Children [
+                @overline("SHARING".into(), ro_dark::ACCENT)
+                --
+                @chrome_text(who.into(), 11.0, ro_dark::MUTED)
+            ]
+            --
+            @option(
+                "EXP",
+                [
+                    ("Each Take", !view.exp_share, act(PartyAction::ExpShare(false))),
+                    (
+                        "Even Share",
+                        view.exp_share,
+                        act(PartyAction::ExpShare(true)).filter(|_| view.even_ok),
+                    ),
+                ],
+                (view.exp_note, exp_tone),
+            )
+            --
+            @option(
+                "Item Pickup",
+                [
+                    ("Each Take", !view.pickup_share, act(PartyAction::PickupShare(false))),
+                    ("Party Share", view.pickup_share, act(PartyAction::PickupShare(true))),
+                ],
+                (pickup_note.into(), ro_dark::MUTED),
+            )
+            --
+            // NOTE: disabled, because the protocol has no item distribution option.
+            // Wire both choices once `PartyInfo` carries one.
+            @option(
+                "Item Sharing",
+                [("Individual", false, None), ("Random", false, None)],
+                ("Not supported by the server yet.".into(), ro_dark::MUTED),
+            )
+        ]
     }
 }
 
-/// Button caption: `ThemedText` inherits font + color from the Feathers button ancestor.
-fn button_label(text: &'static str) -> impl Scene {
+/// One sharing option: its name, its two choices and a note on the current one.
+fn option(
+    label: &'static str,
+    choices: [(&'static str, bool, Option<PartyAction>); 2],
+    (note, tone): (String, Color),
+) -> impl Scene {
+    let choices: Vec<_> = choices
+        .into_iter()
+        .map(|(label, on, action)| choice(label, on, action))
+        .collect();
     bsn! {
-        Text(text)
-        ThemedText
+        Node { flex_direction: FlexDirection::Column, row_gap: px(6) }
+        @ignore_picking()
+        Children [
+            @chrome_text(label.into(), 12.0, ro_dark::LABEL)
+            --
+            Node { column_gap: px(4) }
+            @ignore_picking()
+            Children [ {choices} ]
+            --
+            @chrome_text(note, 11.0, tone)
+        ]
     }
 }
 
-/// A display-font (cinzel) label, colored explicitly (Feathers has no font token and
-/// this text sits outside a Feathers ancestor).
-fn title_text(text: String, size: f32, color: Color) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-            font_size: {FontSize::Px(size)},
+/// A choice, `lit` while it is the current one. Without an `action` it is dimmed and
+/// cannot be picked.
+fn choice(label: &'static str, lit: bool, action: Option<PartyAction>) -> impl Scene {
+    let (ink, _) = tab_text(lit);
+    let ink = if action.is_some() {
+        ink
+    } else {
+        ink.with_alpha(0.55)
+    };
+    let off = action.is_none().then(ignore_picking);
+    let wired = action.map(|action| {
+        bsn! {
+            action
+            on(on_party_button)
         }
-        TextColor(color)
+    });
+    bsn! {
+        Button
+        @segment(lit)
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            height: px(30),
+            justify_content: JustifyContent::Center,
+        }
+        @{wired}
+        @{off}
+        Children [ @chrome_text(label.into(), 12.0, ink) ]
+    }
+}
+
+fn levels(view: LevelsView) -> impl Scene {
+    let band = if view.even_ok {
+        ro_dark::STATUS_ONLINE.with_alpha(0.55)
+    } else {
+        ro_dark::STATUS_BUSY.with_alpha(0.6)
+    };
+    let (band_left, band_width) = view.band;
+    let ticks: Vec<_> = view.ticks.into_iter().map(tick).collect();
+    let rule =
+        format!("Online members only \u{b7} Even Share needs a gap of {SHARE_GAP} levels or less");
+    bsn! {
+        @inset()
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: px(6),
+            padding: {UiRect::axes(px(14), px(12))},
+        }
         @ignore_picking()
+        Children [
+            @overline("LEVELS".into(), ro_dark::ACCENT)
+            --
+            Node { height: px(34), position_type: PositionType::Relative }
+            @ignore_picking()
+            Children [
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0),
+                    right: px(0),
+                    top: px(13),
+                    height: px(6),
+                    border: px(1),
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor(ro_dark::BAR_TROUGH)
+                BorderColor::all(ro_dark::INSET_RULE)
+                @ignore_picking()
+                --
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: {Val::Percent(band_left)},
+                    width: {Val::Percent(band_width)},
+                    top: px(13),
+                    height: px(6),
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor(band)
+                @ignore_picking()
+                --
+                {ticks}
+                --
+                @chrome_text(format!("Lv {}", view.lo), 10.0, ro_dark::MUTED)
+                Node { position_type: PositionType::Absolute, left: px(0), top: px(22) }
+                --
+                @chrome_text(format!("Lv {}", view.hi), 10.0, ro_dark::MUTED)
+                Node { position_type: PositionType::Absolute, right: px(0), top: px(22) }
+            ]
+            --
+            @chrome_text(rule, 11.0, ro_dark::MUTED)
+        ]
     }
 }
 
-fn on_leave(_: On<Activate>, mut writer: MessageWriter<PartyLeaveRequested>) {
-    writer.write(PartyLeaveRequested);
+/// One member's place on the level track; frost for the local player.
+fn tick((at, me): (f32, bool)) -> impl Scene {
+    let fill = if me {
+        ro_dark::FROST_GLOW
+    } else {
+        ro_dark::BRONZE_LIGHT
+    };
+    bsn! {
+        @diamond(10.0, fill, ro_dark::BAR_TROUGH)
+        Node {
+            position_type: PositionType::Absolute,
+            left: {Val::Percent(at)},
+            top: px(10),
+            margin: {UiRect::left(px(-5))},
+        }
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::scene::ScenePlugin;
-
-    fn scene_app() -> App {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
-        app.init_asset::<Image>();
-        app.init_asset::<Font>();
-        app
+/// Leave Party, or the prompt it raises.
+fn leave_controls(view: LeaveView) -> Vec<Box<dyn Scene>> {
+    if !view.ask {
+        return vec![Box::new(bsn! {
+            @wide_button(ButtonArt::NORMAL, "Leave Party", 112.0)
+            @usable(true, DANGER_TINT)
+            PartyAction::AskLeave
+            on(on_party_button)
+        })];
     }
-
-    fn text_values(app: &mut App) -> Vec<String> {
-        app.world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|text| text.0.clone())
-            .collect()
-    }
-
-    #[test]
-    fn online_resources_render_exact_labels_and_optional_ap() {
-        let mut app = scene_app();
-        let large = u64::from(u32::MAX) + 1;
-        app.world_mut()
-            .spawn_scene(resource_cell(
-                Some(MemberResources {
-                    hp: ResourceValue {
-                        current: large,
-                        max: large * 2,
-                    },
-                    sp: ResourceValue {
-                        current: 34,
-                        max: 80,
-                    },
-                    ap: Some(ResourceValue {
-                        current: 12,
-                        max: 20,
-                    }),
-                }),
-                false,
-            ))
-            .unwrap();
-
-        let texts = text_values(&mut app);
-        assert!(texts.contains(&"HP".to_string()));
-        assert!(texts.contains(&format!("{large} / {}", large * 2)));
-        assert!(texts.contains(&"SP".to_string()));
-        assert!(texts.contains(&"34 / 80".to_string()));
-        assert!(texts.contains(&"AP".to_string()));
-        assert!(texts.contains(&"12 / 20".to_string()));
-        assert!(!texts.contains(&"Offline".to_string()));
-        assert!(!texts.contains(&"on screen".to_string()));
-        assert_eq!(
-            resource_ratio(ResourceValue {
-                current: large,
-                max: large * 2,
-            }),
-            0.5
-        );
-    }
-
-    #[test]
-    fn offline_omits_meters_but_keeps_world_presence_independent() {
-        let mut app = scene_app();
-        app.world_mut()
-            .spawn_scene(resource_cell(None, true))
-            .unwrap();
-
-        let texts = text_values(&mut app);
-        assert!(texts.contains(&"Offline".to_string()));
-        assert!(texts.contains(&"on screen".to_string()));
-        assert!(!texts.contains(&"HP".to_string()));
-        assert!(!texts.contains(&"SP".to_string()));
-        assert!(!texts.contains(&"AP".to_string()));
-    }
-
-    #[test]
-    fn resource_fill_handles_zero_and_clamps_only_the_visual() {
-        let zero_max = ResourceValue {
-            current: 10,
-            max: 0,
-        };
-        let over_max = ResourceValue {
-            current: 150,
-            max: 100,
-        };
-
-        assert_eq!(resource_ratio(zero_max), 0.0);
-        assert_eq!(resource_ratio(over_max), 1.5);
-        assert_eq!(resource_fill_percent(zero_max), 0.0);
-        assert_eq!(resource_fill_percent(over_max), 100.0);
-        assert_eq!(
-            hp_meter_color(ResourceValue {
-                current: 24,
-                max: 100,
-            }),
-            lifthrasir_ui::theme::HEALTH_RED
-        );
-        assert_eq!(
-            hp_meter_color(ResourceValue {
-                current: 25,
-                max: 100,
-            }),
-            lifthrasir_ui::theme::EMERALD
-        );
-    }
-
-    #[test]
-    fn window_scene_spawns_root_titlebar_body_and_footer() {
-        let mut app = scene_app();
-        app.world_mut().spawn_scene(window()).unwrap();
-
-        let world = app.world_mut();
-        assert_eq!(
-            world
-                .query_filtered::<(), With<PartyWindowRoot>>()
-                .iter(world)
-                .count(),
-            1
-        );
-        assert_eq!(
-            world
-                .query_filtered::<(), With<PartyWindowBody>>()
-                .iter(world)
-                .count(),
-            1
-        );
-        assert_eq!(
-            world
-                .query_filtered::<(), With<PartyFooter>>()
-                .iter(world)
-                .count(),
-            1
-        );
-    }
-
-    #[test]
-    fn body_scene_spawns_a_row_per_member() {
-        let mut app = scene_app();
-        let header = RosterHeader {
-            name: "Wolfpack".to_string(),
-            leader_name: "Solveig".to_string(),
-            members: 2,
-            active: 2,
-        };
-        let rows = vec![
-            RosterRow {
-                name: "Solveig".to_string(),
-                level: 99,
-                map: "prontera".to_string(),
-                job_name: "Rune Knight".to_string(),
-                online: true,
-                leader: true,
-                char_id: 1,
-                actionable: false,
-                on_screen: true,
-                resources: Some(MemberResources {
-                    hp: ResourceValue {
-                        current: 100,
-                        max: 200,
-                    },
-                    sp: ResourceValue {
-                        current: 40,
-                        max: 80,
-                    },
-                    ap: None,
-                }),
-            },
-            RosterRow {
-                name: "Brynjar".to_string(),
-                level: 88,
-                map: "payon".to_string(),
-                job_name: "Arch Bishop".to_string(),
-                online: true,
-                leader: false,
-                char_id: 2,
-                actionable: true,
-                on_screen: false,
-                resources: Some(MemberResources {
-                    hp: ResourceValue {
-                        current: 90,
-                        max: 100,
-                    },
-                    sp: ResourceValue {
-                        current: 70,
-                        max: 100,
-                    },
-                    ap: Some(ResourceValue {
-                        current: 10,
-                        max: 20,
-                    }),
-                }),
-            },
-        ];
-        assert!(
-            app.world_mut()
-                .spawn_scene(body(Some(header), rows, false))
-                .is_ok()
-        );
-    }
-
-    #[test]
-    fn body_for_non_leader_renders_no_option_toggles() {
-        let mut app = scene_app();
-        app.world_mut()
-            .spawn_scene(body(None, Vec::new(), false))
-            .unwrap();
-        let world = app.world_mut();
-        assert_eq!(
-            world
-                .query_filtered::<(), With<ExpShareToggle>>()
-                .iter(world)
-                .count(),
-            0
-        );
-        assert_eq!(
-            world
-                .query_filtered::<(), With<ItemShareToggle>>()
-                .iter(world)
-                .count(),
-            0
-        );
-    }
-
-    #[test]
-    fn body_for_leader_renders_exactly_one_of_each_option_toggle() {
-        let mut app = scene_app();
-        app.world_mut()
-            .spawn_scene(body(None, Vec::new(), true))
-            .unwrap();
-        let world = app.world_mut();
-        assert_eq!(
-            world
-                .query_filtered::<(), With<ExpShareToggle>>()
-                .iter(world)
-                .count(),
-            1
-        );
-        assert_eq!(
-            world
-                .query_filtered::<(), With<ItemShareToggle>>()
-                .iter(world)
-                .count(),
-            1
-        );
-    }
-
-    fn option_app() -> App {
-        let mut app = scene_app();
-        app.add_message::<PartyOptionsRequested>();
-        app
-    }
-
-    fn toggle_written(app: &mut App) -> Vec<PartyOptionsRequested> {
-        let messages = app.world().resource::<Messages<PartyOptionsRequested>>();
-        messages.get_cursor().read(messages).cloned().collect()
-    }
-
-    #[test]
-    fn exp_share_toggle_writes_full_pair_preserving_item_share_from_state() {
-        let mut app = option_app();
-        app.insert_resource(PartyState {
-            exp_share: false,
-            item_pickup_share: true,
-            ..default()
-        });
-        let toggle = app
-            .world_mut()
-            .spawn(ExpShareToggle)
-            .observe(on_exp_share_changed)
-            .id();
-
-        app.world_mut().trigger(ValueChange {
-            source: toggle,
-            value: true,
-            is_final: true,
-        });
-        app.world_mut().flush();
-
-        let written = toggle_written(&mut app);
-        assert_eq!(written.len(), 1);
-        assert!(written[0].exp_share);
-        assert!(written[0].item_pickup_share);
-    }
-
-    #[test]
-    fn item_share_toggle_writes_full_pair_preserving_exp_share_from_state() {
-        let mut app = option_app();
-        app.insert_resource(PartyState {
-            exp_share: true,
-            item_pickup_share: false,
-            ..default()
-        });
-        let toggle = app
-            .world_mut()
-            .spawn(ItemShareToggle)
-            .observe(on_item_share_changed)
-            .id();
-
-        app.world_mut().trigger(ValueChange {
-            source: toggle,
-            value: true,
-            is_final: true,
-        });
-        app.world_mut().flush();
-
-        let written = toggle_written(&mut app);
-        assert_eq!(written.len(), 1);
-        assert!(written[0].exp_share);
-        assert!(written[0].item_pickup_share);
-    }
+    vec![
+        Box::new(chrome_text(view.prompt, 12.0, ro_dark::DANGER_GLOW)),
+        Box::new(bsn! {
+            @row_button(ButtonArt::NORMAL, "Stay", 48.0)
+            PartyAction::Stay
+            on(on_party_button)
+        }),
+        Box::new(bsn! {
+            @row_button(ButtonArt::NORMAL, "Leave Party", 92.0)
+            @usable(true, DANGER_TINT)
+            PartyAction::Leave
+            on(on_party_button)
+        }),
+    ]
 }
