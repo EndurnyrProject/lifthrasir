@@ -60,6 +60,8 @@ fn guild_position_edit_body(command: &GuildPositionEditRequested) -> Body {
         can_expel: command.can_expel,
         can_storage: command.can_storage,
         tax: command.tax,
+        can_notice: command.can_notice,
+        can_relations: command.can_relations,
     })
 }
 
@@ -594,6 +596,8 @@ mod tests {
             can_expel: true,
             tax: None,
             can_storage: None,
+            can_notice: None,
+            can_relations: None,
         });
         app.world_mut().write_message(GuildMemberPositionRequested {
             target_char_id: 5,
@@ -779,6 +783,8 @@ mod tests {
             can_expel: false,
             tax: None,
             can_storage: None,
+            can_notice: None,
+            can_relations: None,
         });
 
         match body {
@@ -787,8 +793,7 @@ mod tests {
                 name,
                 can_invite,
                 can_expel,
-                can_storage: _,
-                tax: _,
+                ..
             }) => {
                 assert_eq!(index, 3);
                 assert_eq!(name, "Officer");
@@ -811,12 +816,16 @@ mod tests {
                 can_expel: false,
                 can_storage,
                 tax,
+                can_notice: can_storage,
+                can_relations: can_storage.map(|allowed| !allowed),
             });
             let Body::GuildPositionEditRequest(request) = body else {
                 panic!("expected GuildPositionEditRequest");
             };
             assert_eq!(request.can_storage, can_storage);
             assert_eq!(request.tax, tax);
+            assert_eq!(request.can_notice, can_storage);
+            assert_eq!(request.can_relations, can_storage.map(|allowed| !allowed));
         }
     }
 

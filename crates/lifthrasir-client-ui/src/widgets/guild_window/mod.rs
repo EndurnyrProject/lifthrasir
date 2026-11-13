@@ -1,72 +1,203 @@
-mod dialogs;
+//! Guild UI: the guild window and the invitation dialog, after the `Guild` and
+//! `Guild Invitation` artboards of the Lifthrasir Widgets design.
+//!
+//! Authority stays in [`GuildState`] and the server: this module projects that state
+//! and turns its controls into outbound commands. Each [`GuildHost`] is a region
+//! [`rebuild_guild_ui`] refills when its view-model changes. The page of the tab on
+//! show is itself a host whose skeleton holds further hosts, so the fields a player
+//! types in outlive the data changing around them.
+//!
+//! One request is in flight at a time ([`GuildUi::pending`]); its result, matched by
+//! action name, releases the slot and becomes the toast over the panel.
+
 pub(crate) mod emblem;
 mod feedback;
-mod members;
-mod notice;
-mod positions;
+pub mod invite_dialog;
 mod relation_dialogs;
-mod relations;
 pub mod scene;
-mod skills;
 pub(crate) mod slash;
+mod view;
 
-pub(crate) use crate::widgets::guild_window::members::request_invite;
+pub use crate::widgets::guild_window::invite_dialog::PendingGuildInvite;
 
-use crate::widgets::guild_window::feedback::apply_guild_results;
-#[cfg(test)]
-use crate::widgets::guild_window::feedback::guild_error_text;
-
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bevy::ecs::system::SystemParam;
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use bevy::ui::InteractionDisabled;
 use bevy::ui_widgets::Activate;
 use leafwing_input_manager::prelude::ActionState;
 use lifthrasir_assets::catalogs::job::registry::JobSpriteRegistry;
+use lifthrasir_assets::catalogs::skill::registry::SkillCatalog;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::guild::{GuildState, GuildSystems};
 use lifthrasir_client::domain::input::{PlayerAction, UiFocus};
-use net_contract::commands::GuildCreateRequested;
+use net_contract::commands::{
+    GuildAllianceRequested, GuildAntagonistRemoveRequested, GuildCreateRequested,
+    GuildExpelRequested, GuildInviteRequested, GuildInviteResponded, GuildLeaveRequested,
+    GuildMemberPositionRequested, GuildNoticeEditRequested, GuildPositionEditRequested,
+    GuildSkillUpRequested, PartyInviteRequested,
+};
+use net_contract::dto::{GuildPositionInfo, GuildRelationKind};
 use net_contract::events::ZoneDisconnected;
-#[cfg(test)]
-use net_contract::events::{GuildIngress, GuildIngressPayload};
 use net_contract::state::{ZoneSession, ZoneSessionGeneration};
+
+use crate::screens::shared::{light_field_focus, light_search_focus, set_field_text};
+use crate::widgets::chat_box::ChatUi;
+use crate::widgets::info_modal::{InfoContent, ShowInfoModal, view as info_view};
+use view::Guild;
+
+/// Longest hero or position name a field submits.
+const NAME_MAX_CHARS: usize = 24;
+/// How long the toast stays up before it clears itself.
+const FEEDBACK_DISMISS: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GuildTab {
     #[default]
+    Overview,
     Members,
     Positions,
-    Notice,
     Skills,
     Relations,
 }
 
+/// What the roster is ordered by.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MemberSort {
+    Name,
+    Job,
+    Level,
+    Position,
+    Exp,
+    /// Online members first, then whoever was seen last.
+    #[default]
+    Seen,
+}
+
+/// One thing a position may be allowed to do.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Perm {
+    #[default]
+    Invite,
+    Expel,
+    Storage,
+    Notice,
+    Relations,
+}
+
+impl Perm {
+    pub const ALL: [Perm; 5] = [
+        Perm::Invite,
+        Perm::Expel,
+        Perm::Storage,
+        Perm::Notice,
+        Perm::Relations,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Perm::Invite => "INVITE",
+            Perm::Expel => "EXPEL",
+            Perm::Storage => "STORAGE",
+            Perm::Notice => "NOTICE",
+            Perm::Relations => "RELATIONS",
+        }
+    }
+
+    /// Whether `position` has it.
+    pub fn of(self, position: &GuildPositionInfo) -> bool {
+        match self {
+            Perm::Invite => position.can_invite,
+            Perm::Expel => position.can_expel,
+            Perm::Storage => position.can_storage,
+            Perm::Notice => position.can_notice,
+            Perm::Relations => position.can_relations,
+        }
+    }
+}
+
+/// The inline prompt that is up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Ask {
+    Leave,
+    Expel,
+}
+
+/// The request the server has not answered yet.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingGuildMutation {
     pub action: &'static str,
     pub generation: ZoneSessionGeneration,
 }
 
+/// What the player picked in the guild window. None of it is sent to the server.
 #[derive(Resource, Debug, Default, PartialEq, Eq)]
 pub struct GuildUi {
     pub selected_tab: GuildTab,
+    /// The toast over the panel.
     pub feedback: Option<String>,
     pub pending: Option<PendingGuildMutation>,
     feedback_is_error: bool,
+    selected_member: Option<u32>,
+    online_only: bool,
+    sort: MemberSort,
+    sort_reversed: bool,
+    ask: Option<Ask>,
+    /// The selected member's position menu is open.
+    position_menu: bool,
+    /// The position whose edit bar is up.
+    selected_position: Option<u32>,
+    editing_notice: bool,
 }
 
+impl GuildUi {
+    fn say(&mut self, text: impl Into<String>) {
+        self.feedback = Some(text.into());
+        self.feedback_is_error = false;
+    }
+
+    fn fail(&mut self, text: impl Into<String>) {
+        self.feedback = Some(text.into());
+        self.feedback_is_error = true;
+    }
+
+    /// Books `action` as the request in flight and shows `progress`. Refuses, saying
+    /// so, while another request is still unanswered.
+    fn begin(
+        &mut self,
+        action: &'static str,
+        generation: ZoneSessionGeneration,
+        progress: &str,
+    ) -> bool {
+        if self.pending.is_some() {
+            self.fail("A guild action is already pending.");
+            return false;
+        }
+        self.pending = Some(PendingGuildMutation { action, generation });
+        self.say(progress);
+        true
+    }
+}
+
+/// The session the guild UI was last reset for.
 #[derive(Resource, Default)]
 pub(crate) struct GuildUiSession {
     generation: ZoneSessionGeneration,
     char_id: u32,
     guild_id: u32,
+    /// The session ended; nothing from it may be shown or acted on.
     blocked: bool,
+    /// The UI was reset this frame.
     reset: bool,
+}
+
+/// The name to submit: trimmed, capped and non-empty, else `None`.
+fn submit_name(raw: &str) -> Option<String> {
+    let name: String = raw.trim().chars().take(NAME_MAX_CHARS).collect();
+    (!name.is_empty()).then_some(name)
 }
 
 fn request_create(
@@ -75,101 +206,172 @@ fn request_create(
     raw_name: &str,
 ) -> Option<GuildCreateRequested> {
     if ui.pending.is_some() {
-        ui.feedback = Some("A guild action is already pending.".to_string());
-        ui.feedback_is_error = true;
+        ui.fail("A guild action is already pending.");
         return None;
     }
-    let name = raw_name.trim();
-    if name.is_empty() {
-        ui.feedback = Some("Enter a guild name.".to_string());
-        ui.feedback_is_error = true;
+    let Some(name) = submit_name(raw_name) else {
+        ui.fail("Enter a guild name.");
+        return None;
+    };
+    ui.begin("create", generation, "Creating guild\u{2026}");
+    Some(GuildCreateRequested { name })
+}
+
+/// Invites a hero by id (from their context menu) or by name (from the window);
+/// exactly one of the two must be given.
+pub(crate) fn request_invite(
+    ui: &mut GuildUi,
+    generation: ZoneSessionGeneration,
+    target_char_id: u32,
+    raw_name: &str,
+) -> Option<GuildInviteRequested> {
+    if ui.pending.is_some() {
+        ui.fail("A guild action is already pending.");
         return None;
     }
-    ui.feedback = Some("Creating guild…".to_string());
-    ui.feedback_is_error = false;
-    ui.pending = Some(PendingGuildMutation {
-        action: "create",
-        generation,
-    });
-    Some(GuildCreateRequested {
-        name: name.to_string(),
+    let target_name = raw_name.trim();
+    if (target_char_id == 0) == target_name.is_empty() {
+        ui.fail("Enter a character name.");
+        return None;
+    }
+    ui.begin("invite", generation, "Sending guild invitation\u{2026}");
+    Some(GuildInviteRequested {
+        target_char_id,
+        target_name: target_name.into(),
     })
 }
 
+/// A whole percentage from 0 to 100.
+fn parse_tax(raw: &str) -> Option<u32> {
+    raw.parse::<u32>().ok().filter(|tax| *tax <= 100)
+}
+
+/// Marks the window root so the hotkey, drag and close act on this window only.
 #[derive(Component, Default, Clone)]
 pub struct GuildWindowRoot;
+
+/// The draggable title bar.
 #[derive(Component, Default, Clone)]
 pub struct GuildTitlebar;
+
+/// A region [`rebuild_guild_ui`] refills when its view changes.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuildHost {
+    /// The guild and the player's position, in the title bar.
+    #[default]
+    Title,
+    Tabs,
+    /// The skeleton of the tab on show; it holds the hosts below.
+    Page,
+    Summary,
+    Notice,
+    Activity,
+    /// The online filter and the head count over the roster.
+    Tools,
+    MemberHead,
+    MemberRows,
+    /// The bar acting on the selected member.
+    Selection,
+    Positions,
+    PositionEdit,
+    SkillHead,
+    Skills,
+    Relations,
+    Footer,
+    Toast,
+    /// The invitation dialog.
+    Invite,
+}
+
+/// How many [`GuildHost`] regions there are.
+const HOSTS: usize = GuildHost::Invite as usize + 1;
+
+impl GuildHost {
+    /// Whether the host lives in the page's skeleton rather than in the frame.
+    fn in_page(self) -> bool {
+        (GuildHost::Page as usize) < self as usize && (self as usize) < GuildHost::Footer as usize
+    }
+}
+
+/// The roster's search box.
 #[derive(Component, Default, Clone)]
-pub struct GuildMembersPanel;
-#[derive(Component, Default, Clone)]
-pub struct GuildPositionsPanel;
-#[derive(Component, Default, Clone)]
-pub struct GuildNoticePanel;
-#[derive(Component, Default, Clone)]
-pub struct GuildSkillsPanel;
-#[derive(Component, Default, Clone)]
-pub struct GuildRelationsPanel;
-#[derive(Component, Default, Clone)]
-pub struct GuildPositionsList;
-#[derive(Component, Default, Clone)]
-pub struct GuildSkillsList;
-#[derive(Component, Default, Clone)]
-pub struct GuildNoticeContent;
-#[derive(Component, Default, Clone)]
-pub struct GuildMembersList;
-#[derive(Component, Default, Clone)]
-pub struct GuildInviteControls;
+pub struct MemberSearchField;
+/// The name of the hero to invite.
 #[derive(Component, Default, Clone)]
 pub struct GuildInviteNameField;
+/// Why the selected member is expelled.
 #[derive(Component, Default, Clone)]
-pub struct GuildInviteButton;
+pub struct ExpelReasonField;
 #[derive(Component, Default, Clone)]
-pub struct GuildFeedbackBanner;
+pub struct NoticeSubjectField;
 #[derive(Component, Default, Clone)]
-pub struct GuildFeedbackText;
+pub struct NoticeBodyField;
 #[derive(Component, Default, Clone)]
-pub struct GuildNameText;
+pub struct PositionNameField;
 #[derive(Component, Default, Clone)]
-pub struct GuildMasterText;
+pub struct PositionTaxField;
+/// The master of the guild to ally with.
 #[derive(Component, Default, Clone)]
-pub struct GuildNoticeText;
+pub struct GuildAllianceNameField;
+/// A hero of the guild to declare an antagonist.
 #[derive(Component, Default, Clone)]
-pub struct GuildMemberCountText;
-#[derive(Component, Default, Clone)]
-pub struct GuildOnlineCountText;
-#[derive(Component, Default, Clone)]
-pub struct GuildLevelText;
-#[derive(Component, Default, Clone)]
-pub struct GuildExpText;
-#[derive(Component, Default, Clone)]
-pub struct GuildSkillPointsText;
-#[derive(Component, Default, Clone)]
-pub struct GuildExpFill;
-#[derive(Component, Default, Clone)]
-pub struct GuildHeaderEmblemImage;
-#[derive(Component, Default, Clone)]
-pub struct GuildHeaderEmblemFallback;
-#[derive(Component, Default, Clone)]
-pub struct GuildEmblemUploadButton;
-#[derive(Component, Default, Clone)]
-pub struct MembersTabButton;
-#[derive(Component, Default, Clone)]
-pub struct PositionsTabButton;
-#[derive(Component, Default, Clone)]
-pub struct NoticeTabButton;
-#[derive(Component, Default, Clone)]
-pub struct SkillsTabButton;
-#[derive(Component, Default, Clone)]
-pub struct RelationsTabButton;
-#[derive(Component, Default, Clone)]
-pub struct GuildTabButton;
-#[derive(Component, Default, Clone)]
-pub struct GuildTabPage;
-#[derive(Component, Default, Clone)]
-pub struct GuildMutationControl;
-#[derive(Component, Default, Clone)]
-pub struct GuildLeaveButton;
+pub struct GuildAntagonistNameField;
+
+/// An image that shows the emblem of a guild once it is cached.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmblemSlot {
+    pub guild_id: u32,
+    pub emblem_id: u32,
+}
+
+/// A guild skill card; a right click opens the skill's details.
+#[derive(Component, Default, Debug, Clone, Copy)]
+pub struct SkillCell(pub u32);
+
+/// What a guild button does when activated.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuildAction {
+    #[default]
+    CloseWindow,
+    Tab(GuildTab),
+    /// Opens the file picker for a new emblem.
+    PickEmblem,
+    EditNotice,
+    CancelNotice,
+    SaveNotice,
+    ToggleOnline,
+    Sort(MemberSort),
+    Select(u32),
+    /// Invites the hero typed in the name field.
+    Invite,
+    Whisper(u32),
+    PartyInvite(u32),
+    TogglePositionMenu,
+    /// Moves a member to a position slot.
+    Assign(u32, u32),
+    /// Raises the expel prompt for the selected member.
+    AskExpel,
+    KeepMember,
+    Expel(u32),
+    /// Opens or closes a position's edit bar.
+    SelectPosition(u32),
+    TogglePerm(u32, Perm),
+    SavePosition(u32),
+    SkillUp(u32),
+    ProposeAlliance,
+    DeclareAntagonist,
+    BreakAlliance(u32),
+    RemoveAntagonist(u32),
+    /// Raises the leave prompt.
+    AskLeave,
+    Stay,
+    Leave,
+    Storage,
+    AnswerInvite(bool),
+    /// Leaves the welcome for the guild window.
+    OpenGuild,
+    DismissInvite,
+}
 
 #[derive(SystemParam)]
 pub(crate) struct GuildMutationContext<'w> {
@@ -180,18 +382,17 @@ pub(crate) struct GuildMutationContext<'w> {
 }
 
 type GuildTextFieldFilter = Or<(
+    With<MemberSearchField>,
     With<GuildInviteNameField>,
-    With<positions::PositionNameField>,
-    With<positions::PositionTaxField>,
-    With<notice::GuildNoticeSubjectField>,
-    With<notice::GuildNoticeBodyField>,
-    With<members::GuildExpelReasonField>,
-    With<relations::GuildAllianceNameField>,
-    With<relations::GuildAntagonistNameField>,
+    With<ExpelReasonField>,
+    With<NoticeSubjectField>,
+    With<NoticeBodyField>,
+    With<PositionNameField>,
+    With<PositionTaxField>,
+    With<GuildAllianceNameField>,
+    With<GuildAntagonistNameField>,
 )>;
 type GuildTextFields<'w, 's> = Query<'w, 's, Entity, GuildTextFieldFilter>;
-type GuildEditableTextFields<'w, 's> =
-    Query<'w, 's, &'static mut EditableText, GuildTextFieldFilter>;
 
 pub struct GuildWindowPlugin;
 
@@ -200,21 +401,13 @@ impl Plugin for GuildWindowPlugin {
         app.add_message::<slash::GuildSlashSubmitted>()
             .init_resource::<GuildUi>()
             .init_resource::<GuildUiSession>()
-            .init_resource::<positions::PositionDraftState>()
             .init_resource::<emblem::GuildEmblemPreview>()
-            .init_resource::<dialogs::PendingGuildInvite>()
-            .init_resource::<dialogs::PendingGuildConfirmation>()
+            .init_resource::<PendingGuildInvite>()
             .init_resource::<relation_dialogs::PendingAllianceInvite>()
             .init_resource::<relation_dialogs::PendingRelationConfirmation>()
             .add_systems(
                 Update,
-                (
-                    reset_guild_ui_session,
-                    positions::reset_position_drafts,
-                    dialogs::reset_stale_invite,
-                    dialogs::reset_stale_confirmation,
-                    emblem::reset_emblem_preview,
-                )
+                (reset_guild_ui_session, emblem::reset_emblem_preview)
                     .chain()
                     .in_set(GuildSystems::SessionReset),
             )
@@ -232,37 +425,37 @@ impl Plugin for GuildWindowPlugin {
                         relation_dialogs::reset_invalid_relation_dialogs,
                         slash::dispatch_guild_slash
                             .after(crate::widgets::chat_box::chat_input_control),
-                        positions::sync_position_drafts,
-                        apply_guild_results,
+                        feedback::apply_guild_results,
                         relation_dialogs::expire_pending_alliance,
                         relation_dialogs::queue_incoming_alliance,
                         relation_dialogs::claim_alliance_choice,
                         relation_dialogs::claim_relation_confirmation,
-                        positions::resolve_position_submission,
                         feedback::ingest_guild_announcements,
+                        invite_dialog::receive_invite,
+                        invite_dialog::expire_pending_invite,
                         sync_membership_mode,
-                        sync_header,
                         emblem::invalidate_picker_when_hidden,
                         emblem::poll_picker,
                         emblem::receive_emblem_changes,
                         emblem::queue_current_guild_emblem,
-                        emblem::sync_header_emblem,
-                        sync_emblem_upload_control,
                     )
                         .chain(),
                     (
-                        sync_tabs,
-                        sync_feedback,
-                        sync_invite_controls,
-                        sync_expel_controls,
-                        refresh_members,
-                        positions::refresh_positions,
-                        skills::refresh_skills,
-                        relations::refresh_relations,
-                        relations::sync_relation_controls,
-                        positions::sync_permission_toggles,
-                        notice::refresh_notice,
-                        sync_management_controls,
+                        expire_feedback,
+                        rebuild_guild_ui,
+                        emblem::sync_emblems,
+                        invite_dialog::sync_invite_clock,
+                        (
+                            light_search_focus::<MemberSearchField>,
+                            light_search_focus::<GuildInviteNameField>,
+                            light_search_focus::<ExpelReasonField>,
+                            light_search_focus::<GuildAllianceNameField>,
+                            light_search_focus::<GuildAntagonistNameField>,
+                            light_field_focus::<NoticeSubjectField>,
+                            light_field_focus::<NoticeBodyField>,
+                            light_field_focus::<PositionNameField>,
+                            light_field_focus::<PositionTaxField>,
+                        ),
                         release_hidden_guild_focus,
                     )
                         .chain(),
@@ -272,22 +465,8 @@ impl Plugin for GuildWindowPlugin {
                     .run_if(in_state(GameState::InGame)),
             );
         app.add_systems(
-            Update,
-            (
-                dialogs::queue_incoming_invite,
-                dialogs::claim_invite_choice,
-                dialogs::claim_confirmation_choice,
-            )
-                .in_set(GuildSystems::UiSync)
-                .run_if(in_state(GameState::InGame)),
-        );
-        app.add_systems(
             PostUpdate,
             (
-                dialogs::expire_pending_invite,
-                dialogs::show_pending_invite,
-                dialogs::close_finished_invite_dialog,
-                dialogs::show_pending_confirmation,
                 relation_dialogs::show_pending_alliance,
                 relation_dialogs::show_pending_relation_confirmation,
                 relation_dialogs::close_finished_relation_dialogs,
@@ -299,23 +478,38 @@ impl Plugin for GuildWindowPlugin {
             (
                 clear_guild_focus_on_exit,
                 block_guild_ui_on_exit,
-                positions::clear_position_drafts,
-                dialogs::clear_pending_invite,
-                dialogs::clear_pending_confirmation,
+                invite_dialog::clear_pending_invite,
                 relation_dialogs::clear_relation_dialogs,
             ),
         );
     }
 }
 
+/// Spawns the guild window and the invitation host under the HUD root.
+pub fn spawn_guild_window(commands: &mut Commands, parent: Entity) {
+    commands
+        .spawn_scene(scene::window())
+        .insert(ChildOf(parent));
+    commands
+        .spawn_scene(invite_dialog::host())
+        .insert(ChildOf(parent));
+}
+
+fn hide(roots: &mut Query<&mut Visibility, With<GuildWindowRoot>>) {
+    for mut visibility in roots {
+        *visibility = Visibility::Hidden;
+    }
+}
+
+/// Starts the UI over when the zone session, the character or the connection changes.
 fn reset_guild_ui_session(
     generation: Res<ZoneSessionGeneration>,
     zone_session: Option<Res<ZoneSession>>,
     mut disconnected: Option<MessageReader<ZoneDisconnected>>,
     mut session: ResMut<GuildUiSession>,
     mut ui: ResMut<GuildUi>,
+    mut invite: ResMut<PendingGuildInvite>,
     mut roots: Query<&mut Visibility, With<GuildWindowRoot>>,
-    mut fields: GuildEditableTextFields,
 ) {
     let disconnected = disconnected
         .as_mut()
@@ -332,21 +526,16 @@ fn reset_guild_ui_session(
     session.char_id = char_id;
     session.blocked = !generation_changed && (disconnected || character_changed);
     *ui = GuildUi::default();
-    for mut visibility in &mut roots {
-        *visibility = Visibility::Hidden;
-    }
-    for mut field in &mut fields {
-        field.clear();
-    }
+    invite.clear();
+    hide(&mut roots);
 }
 
+/// Starts the UI over when the player's guild changes.
 fn reset_guild_ui_guild(
     guild: Res<GuildState>,
     mut session: ResMut<GuildUiSession>,
     mut ui: ResMut<GuildUi>,
-    mut drafts: ResMut<positions::PositionDraftState>,
     mut roots: Query<&mut Visibility, With<GuildWindowRoot>>,
-    mut fields: GuildEditableTextFields,
 ) {
     let guild_id = guild.info().map_or(0, |info| info.guild_id);
     if session.guild_id == guild_id {
@@ -355,69 +544,21 @@ fn reset_guild_ui_guild(
     session.guild_id = guild_id;
     session.reset = true;
     *ui = GuildUi::default();
-    *drafts = positions::PositionDraftState::default();
-    for mut visibility in &mut roots {
-        *visibility = Visibility::Hidden;
-    }
-    for mut field in &mut fields {
-        field.clear();
-    }
+    hide(&mut roots);
 }
 
 fn block_guild_ui_on_exit(
     mut session: ResMut<GuildUiSession>,
     mut ui: ResMut<GuildUi>,
     mut roots: Query<&mut Visibility, With<GuildWindowRoot>>,
-    mut fields: GuildEditableTextFields,
 ) {
     session.blocked = true;
     *ui = GuildUi::default();
-    for mut visibility in &mut roots {
-        *visibility = Visibility::Hidden;
-    }
-    for mut field in &mut fields {
-        field.clear();
-    }
+    hide(&mut roots);
 }
 
-fn sync_emblem_upload_control(
-    guild: Res<GuildState>,
-    session: Res<ZoneSession>,
-    mut controls: Query<&mut Visibility, With<GuildEmblemUploadButton>>,
-) {
-    let visible = guild.is_master(session.char_id);
-    for mut visibility in &mut controls {
-        *visibility = if visible {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-    }
-}
-
-fn sync_management_controls(
-    ui: Res<GuildUi>,
-    confirmation: Option<Res<dialogs::PendingGuildConfirmation>>,
-    relation_confirmation: Option<Res<relation_dialogs::PendingRelationConfirmation>>,
-    controls: Query<Entity, With<GuildMutationControl>>,
-    mut commands: Commands,
-) {
-    for control in &controls {
-        if ui.pending.is_some()
-            || confirmation
-                .as_deref()
-                .is_some_and(|pending| pending.is_pending())
-            || relation_confirmation
-                .as_deref()
-                .is_some_and(|pending| pending.is_pending())
-        {
-            commands.entity(control).insert(InteractionDisabled);
-        } else {
-            commands.entity(control).remove::<InteractionDisabled>();
-        }
-    }
-}
-
+/// `PlayerAction::Guild` toggles the window. It stays closed while guildless: a guild
+/// is founded with `/guild`, not here.
 fn toggle_guild_window(
     guild: Res<GuildState>,
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
@@ -476,1351 +617,695 @@ fn clear_guild_focus_on_exit(fields: GuildTextFields, mut input_focus: ResMut<In
     clear_guild_focus(&mut input_focus, &fields);
 }
 
-pub(crate) fn select_members(_: On<Activate>, mut ui: ResMut<GuildUi>) {
-    ui.selected_tab = GuildTab::Members;
-}
-
-pub(crate) fn select_positions(_: On<Activate>, mut ui: ResMut<GuildUi>) {
-    ui.selected_tab = GuildTab::Positions;
-}
-
-pub(crate) fn select_notice(_: On<Activate>, mut ui: ResMut<GuildUi>) {
-    ui.selected_tab = GuildTab::Notice;
-}
-
-pub(crate) fn select_skills(_: On<Activate>, mut ui: ResMut<GuildUi>) {
-    ui.selected_tab = GuildTab::Skills;
-}
-
-pub(crate) fn select_relations(_: On<Activate>, mut ui: ResMut<GuildUi>) {
-    ui.selected_tab = GuildTab::Relations;
-}
-
+/// Closes the window when the player is no longer in a guild.
 fn sync_membership_mode(
     guild: Res<GuildState>,
     mut root: Query<&mut Visibility, With<GuildWindowRoot>>,
 ) {
     if !guild.in_guild() {
-        for mut visibility in &mut root {
-            *visibility = Visibility::Hidden;
-        }
+        hide(&mut root);
     }
 }
 
-#[allow(clippy::type_complexity)]
-fn sync_header(
-    guild: Res<GuildState>,
-    mut texts: ParamSet<(
-        Query<&mut Text, With<GuildNameText>>,
-        Query<&mut Text, With<GuildMasterText>>,
-        Query<&mut Text, With<GuildNoticeText>>,
-        Query<&mut Text, With<GuildMemberCountText>>,
-        Query<&mut Text, With<GuildOnlineCountText>>,
-        Query<&mut Text, With<GuildLevelText>>,
-        Query<&mut Text, With<GuildExpText>>,
-        Query<&mut Text, With<GuildSkillPointsText>>,
-    )>,
-    mut exp_fill: Query<&mut Node, With<GuildExpFill>>,
-) {
-    let Some(info) = guild.info() else {
-        return;
-    };
-    let master = info
-        .members
-        .iter()
-        .find(|member| member.char_id == info.master_char_id)
-        .map(|member| member.name.as_str())
-        .unwrap_or("Unknown");
-    set_single_text(&mut texts.p0(), info.name.clone());
-    set_single_text(&mut texts.p1(), format!("Guild Master {master}"));
-    let notice = if info.notice_subject.is_empty() {
-        "No guild notice".to_string()
-    } else {
-        info.notice_subject.clone()
-    };
-    set_single_text(&mut texts.p2(), notice);
-    let member_label = if info.members.len() == 1 {
-        "1 member".to_string()
-    } else {
-        format!("{} members", info.members.len())
-    };
-    set_single_text(&mut texts.p3(), member_label);
-    let online = info.members.iter().filter(|member| member.online).count();
-    set_single_text(&mut texts.p4(), format!("{online} online"));
-    set_single_text(&mut texts.p5(), format!("Guild Level {}", info.level));
-    let exp_label = if info.next_exp == 0 {
-        format!("Guild EXP {} · MAX", info.exp)
-    } else {
-        format!("Guild EXP {} / {}", info.exp, info.next_exp)
-    };
-    set_single_text(&mut texts.p6(), exp_label);
-    let point_label = if info.skill_points == 1 {
-        "skill point"
-    } else {
-        "skill points"
-    };
-    set_single_text(
-        &mut texts.p7(),
-        format!("{} {point_label} available", info.skill_points),
-    );
-    if let Ok(mut fill) = exp_fill.single_mut() {
-        let progress_percent = if info.next_exp == 0 {
-            100.0
-        } else {
-            (info.exp as f64 / info.next_exp as f64 * 100.0).clamp(0.0, 100.0) as f32
-        };
-        let width = percent(progress_percent);
-        if fill.width != width {
-            fill.width = width;
-        }
-    }
-}
-
-fn set_single_text<F: bevy::ecs::query::QueryFilter>(
-    query: &mut Query<&mut Text, F>,
-    value: String,
-) {
-    if let Ok(mut text) = query.single_mut()
-        && text.0 != value
-    {
-        text.0 = value;
-    }
-}
-
-#[allow(clippy::type_complexity)]
-fn sync_tabs(
-    ui: Res<GuildUi>,
-    mut members: Query<
-        (&mut Visibility, &mut Node),
-        (
-            With<GuildMembersPanel>,
-            Without<GuildPositionsPanel>,
-            Without<GuildNoticePanel>,
-            Without<GuildSkillsPanel>,
-            Without<GuildRelationsPanel>,
-        ),
-    >,
-    mut positions: Query<
-        (&mut Visibility, &mut Node),
-        (
-            With<GuildPositionsPanel>,
-            Without<GuildMembersPanel>,
-            Without<GuildNoticePanel>,
-            Without<GuildSkillsPanel>,
-            Without<GuildRelationsPanel>,
-        ),
-    >,
-    mut notice: Query<
-        (&mut Visibility, &mut Node),
-        (
-            With<GuildNoticePanel>,
-            Without<GuildMembersPanel>,
-            Without<GuildPositionsPanel>,
-            Without<GuildSkillsPanel>,
-            Without<GuildRelationsPanel>,
-        ),
-    >,
-    mut skills: Query<
-        (&mut Visibility, &mut Node),
-        (
-            With<GuildSkillsPanel>,
-            Without<GuildMembersPanel>,
-            Without<GuildPositionsPanel>,
-            Without<GuildNoticePanel>,
-            Without<GuildRelationsPanel>,
-        ),
-    >,
-    mut relations: Query<
-        (&mut Visibility, &mut Node),
-        (
-            With<GuildRelationsPanel>,
-            Without<GuildMembersPanel>,
-            Without<GuildPositionsPanel>,
-            Without<GuildNoticePanel>,
-            Without<GuildSkillsPanel>,
-        ),
-    >,
-) {
-    let Ok(mut members) = members.single_mut() else {
-        return;
-    };
-    let Ok(mut positions) = positions.single_mut() else {
-        return;
-    };
-    let Ok(mut notice) = notice.single_mut() else {
-        return;
-    };
-    let members_active = ui.selected_tab == GuildTab::Members;
-    *members.0 = if members_active {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-    members.1.display = if members_active {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    let positions_active = ui.selected_tab == GuildTab::Positions;
-    *positions.0 = if positions_active {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-    positions.1.display = if positions_active {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    let notice_active = ui.selected_tab == GuildTab::Notice;
-    *notice.0 = if notice_active {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
-    notice.1.display = if notice_active {
-        Display::Flex
-    } else {
-        Display::None
-    };
-    if let Ok((mut visibility, mut node)) = skills.single_mut() {
-        let active = ui.selected_tab == GuildTab::Skills;
-        *visibility = if active {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        node.display = if active { Display::Flex } else { Display::None };
-    }
-    if let Ok((mut visibility, mut node)) = relations.single_mut() {
-        let active = ui.selected_tab == GuildTab::Relations;
-        *visibility = if active {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-        node.display = if active { Display::Flex } else { Display::None };
-    }
-}
-
-/// How long a feedback banner stays up before it clears itself.
-const FEEDBACK_DISMISS: Duration = Duration::from_secs(5);
-
-/// Shows `GuildUi::feedback` in the banner and clears it after
-/// [`FEEDBACK_DISMISS`]. A new message restarts the timer; re-setting the same
-/// text while it is still showing does not. The banner toggles `Display`, not
-/// `Visibility`, so a hidden banner takes no layout space.
-fn sync_feedback(
+/// Clears the toast after [`FEEDBACK_DISMISS`]. A new message restarts the wait;
+/// setting the same text again while it shows does not.
+fn expire_feedback(
     mut ui: ResMut<GuildUi>,
     time: Res<Time>,
     mut shown: Local<Option<(String, Duration)>>,
-    mut banner: Query<
-        (&mut Node, &mut BackgroundColor, &mut BorderColor),
-        With<GuildFeedbackBanner>,
-    >,
-    mut text: Query<(&mut Text, &mut TextColor), With<GuildFeedbackText>>,
 ) {
     let now = time.elapsed();
-    let expired = shown.as_ref().is_some_and(|(message, since)| {
-        ui.feedback.as_ref() == Some(message) && now - *since > FEEDBACK_DISMISS
-    });
-    if expired {
-        ui.feedback = None;
-    }
     let Some(message) = ui.feedback.clone() else {
         *shown = None;
-        for (mut node, _, _) in &mut banner {
-            node.display = Display::None;
+        return;
+    };
+    match shown.as_ref() {
+        Some((current, since)) if *current == message => {
+            if now - *since > FEEDBACK_DISMISS {
+                ui.feedback = None;
+                *shown = None;
+            }
         }
-        return;
-    };
-    if shown
-        .as_ref()
-        .is_some_and(|(current, _)| *current == message)
-    {
-        return;
-    }
-    let tint = if ui.feedback_is_error {
-        lifthrasir_ui::theme::BAD
-    } else {
-        lifthrasir_ui::theme::EMERALD_BRI
-    };
-    for (mut node, mut background, mut border) in &mut banner {
-        node.display = Display::Flex;
-        background.0 = tint.with_alpha(0.12);
-        *border = BorderColor::all(tint.with_alpha(0.35));
-    }
-    for (mut text, mut color) in &mut text {
-        text.0.clone_from(&message);
-        color.0 = tint;
-    }
-    *shown = Some((message, now));
-}
-
-fn sync_invite_controls(
-    guild: Res<GuildState>,
-    session: Res<ZoneSession>,
-    ui: Res<GuildUi>,
-    mut controls: Query<&mut Visibility, With<GuildInviteControls>>,
-    button: Query<Entity, With<GuildInviteButton>>,
-    mut commands: Commands,
-) {
-    if let Ok(mut visibility) = controls.single_mut() {
-        *visibility = if guild.can_invite(session.char_id) {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-    }
-    let Ok(button) = button.single() else {
-        return;
-    };
-    if ui.pending.is_some() {
-        commands.entity(button).insert(InteractionDisabled);
-    } else {
-        commands.entity(button).remove::<InteractionDisabled>();
+        _ => *shown = Some((message, now)),
     }
 }
 
-fn sync_expel_controls(
-    guild: Res<GuildState>,
-    session: Res<ZoneSession>,
-    mut controls: Query<(&members::GuildExpelControl, &mut Visibility)>,
-) {
-    let allowed = guild.can_expel(session.char_id);
-    for (control, mut visibility) in &mut controls {
-        *visibility = if allowed && control.0 != session.char_id && !guild.is_master(control.0) {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-    }
+/// What a [`GuildHost`] shows.
+#[derive(Clone, PartialEq)]
+enum Content {
+    Title(String),
+    Tabs(Vec<view::TabView>),
+    Page(view::PageView),
+    Summary(view::SummaryView),
+    Notice(view::NoticeView),
+    Activity(Vec<view::ActivityLine>),
+    Tools(view::ToolsView),
+    MemberHead((MemberSort, bool)),
+    MemberRows(Vec<view::MemberRowView>),
+    Selection(Option<view::SelectionView>),
+    Positions(view::PositionsView),
+    PositionEdit(view::PositionEditView),
+    SkillHead(u32),
+    Skills(Vec<view::SkillCardView>),
+    Relations(view::RelationsView),
+    Footer(view::FooterView),
+    Toast(view::ToastView),
+    Invite(view::InviteView),
+    Welcome(view::WelcomeView),
 }
 
-fn refresh_members(
-    mut commands: Commands,
-    guild: Res<GuildState>,
-    jobs: Option<Res<JobSpriteRegistry>>,
-    container: Query<(Entity, Option<&Children>), With<GuildMembersList>>,
-) {
-    let Ok((container, children)) = container.single() else {
-        return;
-    };
-    let empty = children.is_none_or(|children| children.is_empty());
-    let jobs_changed = jobs.as_ref().is_some_and(|jobs| jobs.is_changed());
-    if !empty && !guild.is_changed() && !jobs_changed {
-        return;
-    }
-    if let Some(children) = children {
-        for child in children.iter() {
-            commands.entity(child).despawn();
+impl Content {
+    fn spawn(self, commands: &mut Commands) -> Entity {
+        match self {
+            Content::Title(line) => commands.spawn_scene(scene::title(line)).id(),
+            Content::Tabs(view) => commands.spawn_scene(scene::tabs(view)).id(),
+            Content::Page(view) => commands.spawn_scene(scene::page(view)).id(),
+            Content::Summary(view) => commands.spawn_scene(scene::summary(view)).id(),
+            Content::Notice(view) => commands.spawn_scene(scene::notice(view)).id(),
+            Content::Activity(view) => commands.spawn_scene(scene::activity(view)).id(),
+            Content::Tools(view) => commands.spawn_scene(scene::tools(view)).id(),
+            Content::MemberHead(view) => commands.spawn_scene(scene::member_head(view)).id(),
+            Content::MemberRows(view) => commands.spawn_scene(scene::member_rows(view)).id(),
+            Content::Selection(view) => commands.spawn_scene(scene::selection(view)).id(),
+            Content::Positions(view) => commands.spawn_scene(scene::positions(view)).id(),
+            Content::PositionEdit(view) => commands.spawn_scene(scene::position_edit(view)).id(),
+            Content::SkillHead(points) => commands.spawn_scene(scene::skill_head(points)).id(),
+            Content::Skills(view) => commands.spawn_scene(scene::skills(view)).id(),
+            Content::Relations(view) => commands.spawn_scene(scene::relations(view)).id(),
+            Content::Footer(view) => commands.spawn_scene(scene::footer(view)).id(),
+            Content::Toast(view) => commands.spawn_scene(scene::toast(view)).id(),
+            Content::Invite(view) => commands.spawn_scene(invite_dialog::dialog(view)).id(),
+            Content::Welcome(view) => commands.spawn_scene(invite_dialog::welcome(view)).id(),
         }
     }
-    let rows = guild
+}
+
+/// The world as the guild UI reads it.
+#[derive(SystemParam)]
+pub struct GuildData<'w, 's> {
+    guild: Res<'w, GuildState>,
+    session: Res<'w, ZoneSession>,
+    jobs: Option<Res<'w, JobSpriteRegistry>>,
+    skills: Option<Res<'w, SkillCatalog>>,
+    ui: Res<'w, GuildUi>,
+    pending: Res<'w, PendingGuildInvite>,
+    window: Query<'w, 's, &'static Visibility, With<GuildWindowRoot>>,
+    search: Query<'w, 's, &'static EditableText, With<MemberSearchField>>,
+}
+
+impl GuildData<'_, '_> {
+    /// The player's guild at `now`, while they are in one.
+    fn guild(&self, now: u64) -> Option<Guild<'_>> {
+        Some(Guild {
+            state: &self.guild,
+            info: self.guild.info()?,
+            me: self.session.char_id,
+            jobs: self.jobs.as_deref(),
+            skills: self.skills.as_deref(),
+            now,
+        })
+    }
+
+    /// What `host` shows. The window's hosts are empty while it is hidden, and the
+    /// invitation's while none is pending and none was just accepted.
+    fn content(&self, host: GuildHost, now: u64) -> Option<Content> {
+        let ui = &*self.ui;
+        if host == GuildHost::Invite {
+            if let Some(view) = self.pending.view() {
+                return Some(Content::Invite(view.clone()));
+            }
+            let guild = self.guild(now)?;
+            return (self.pending.joined() == guild.info.guild_id)
+                .then(|| Content::Welcome(view::welcome(guild)));
+        }
+        let open = self
+            .window
+            .single()
+            .is_ok_and(|visibility| *visibility != Visibility::Hidden);
+        let guild = self.guild(now).filter(|_| open)?;
+        Some(match host {
+            GuildHost::Title => Content::Title(view::title(guild)),
+            GuildHost::Tabs => Content::Tabs(view::tabs(guild, ui)),
+            GuildHost::Page => Content::Page(view::page(guild, ui)),
+            GuildHost::Summary => Content::Summary(view::summary(guild)),
+            GuildHost::Notice => Content::Notice(view::notice(guild, ui)),
+            GuildHost::Activity => Content::Activity(view::activity(guild)),
+            GuildHost::Tools => Content::Tools(view::tools(guild, ui)),
+            GuildHost::MemberHead => Content::MemberHead((ui.sort, ui.sort_reversed)),
+            GuildHost::MemberRows => {
+                let query = self
+                    .search
+                    .single()
+                    .map(|field| field.value().to_string())
+                    .unwrap_or_default();
+                Content::MemberRows(view::member_rows(guild, ui, &query))
+            }
+            GuildHost::Selection => Content::Selection(view::selection(guild, ui)),
+            GuildHost::Positions => Content::Positions(view::positions(guild, ui)),
+            GuildHost::PositionEdit => Content::PositionEdit(view::position_edit(guild, ui)?),
+            GuildHost::SkillHead => Content::SkillHead(guild.info.skill_points),
+            GuildHost::Skills => Content::Skills(view::skills(guild).cards),
+            GuildHost::Relations => Content::Relations(view::relations(guild)),
+            GuildHost::Footer => Content::Footer(view::footer(guild, ui)),
+            GuildHost::Toast => Content::Toast(view::toast(ui)?),
+            GuildHost::Invite => return None,
+        })
+    }
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
+}
+
+/// Refills every [`GuildHost`] whose view changed.
+fn rebuild_guild_ui(
+    mut commands: Commands,
+    data: GuildData,
+    hosts: Query<(Entity, Ref<GuildHost>, Option<&Children>)>,
+    mut shown: Local<[Option<Content>; HOSTS]>,
+) {
+    let now = unix_now();
+    // Once the page is replaced its old hosts are on their way out with it; the new
+    // page's hosts are filled next frame.
+    let mut page_replaced = false;
+    for (host, kind, children) in &hosts {
+        if page_replaced && kind.in_page() {
+            continue;
+        }
+        let content = data.content(*kind, now);
+        let slot = &mut shown[*kind as usize];
+        if *slot == content && !kind.is_added() {
+            continue;
+        }
+        for child in children.into_iter().flatten() {
+            commands.entity(*child).despawn();
+        }
+        if let Some(content) = content.clone() {
+            let spawned = content.spawn(&mut commands);
+            commands.entity(spawned).insert(ChildOf(host));
+        }
+        *slot = content;
+        page_replaced |= *kind == GuildHost::Page;
+    }
+}
+
+/// The commands a guild button can send.
+#[derive(SystemParam)]
+pub struct GuildCommands<'w> {
+    invite: MessageWriter<'w, GuildInviteRequested>,
+    respond: MessageWriter<'w, GuildInviteResponded>,
+    leave: MessageWriter<'w, GuildLeaveRequested>,
+    expel: MessageWriter<'w, GuildExpelRequested>,
+    position: MessageWriter<'w, GuildPositionEditRequested>,
+    assign: MessageWriter<'w, GuildMemberPositionRequested>,
+    notice: MessageWriter<'w, GuildNoticeEditRequested>,
+    skill: MessageWriter<'w, GuildSkillUpRequested>,
+    alliance: MessageWriter<'w, GuildAllianceRequested>,
+    antagonist_remove: MessageWriter<'w, GuildAntagonistRemoveRequested>,
+    party: MessageWriter<'w, PartyInviteRequested>,
+}
+
+/// The fields a guild button reads on submit. Each is on show only on its own tab.
+#[derive(SystemParam)]
+pub struct GuildFields<'w, 's> {
+    texts: Query<'w, 's, &'static mut EditableText>,
+    invite: Query<'w, 's, Entity, With<GuildInviteNameField>>,
+    reason: Query<'w, 's, Entity, With<ExpelReasonField>>,
+    subject: Query<'w, 's, Entity, With<NoticeSubjectField>>,
+    body: Query<'w, 's, Entity, With<NoticeBodyField>>,
+    position_name: Query<'w, 's, Entity, With<PositionNameField>>,
+    position_tax: Query<'w, 's, Entity, With<PositionTaxField>>,
+    alliance: Query<'w, 's, Entity, With<GuildAllianceNameField>>,
+    antagonist: Query<'w, 's, Entity, With<GuildAntagonistNameField>>,
+}
+
+impl GuildFields<'_, '_> {
+    /// The trimmed text of `field`; empty while the field is not on show.
+    fn read(&self, field: Option<Entity>) -> String {
+        field
+            .and_then(|field| self.texts.get(field).ok())
+            .map(|text| text.value().to_string().trim().to_string())
+            .unwrap_or_default()
+    }
+
+    fn clear(&mut self, field: Option<Entity>) {
+        if let Some(mut text) = field.and_then(|field| self.texts.get_mut(field).ok()) {
+            set_field_text(&mut text, "");
+        }
+    }
+}
+
+/// Everything a guild button reads or changes.
+#[derive(SystemParam)]
+pub struct GuildActions<'w, 's> {
+    context: GuildMutationContext<'w>,
+    pending: ResMut<'w, PendingGuildInvite>,
+    confirmation: ResMut<'w, relation_dialogs::PendingRelationConfirmation>,
+    emblem: ResMut<'w, emblem::GuildEmblemPreview>,
+    chat: Option<ResMut<'w, ChatUi>>,
+    window: Query<'w, 's, &'static mut Visibility, With<GuildWindowRoot>>,
+    fields: GuildFields<'w, 's>,
+    out: GuildCommands<'w>,
+}
+
+impl GuildActions<'_, '_> {
+    fn run(&mut self, action: GuildAction) {
+        match action {
+            GuildAction::CloseWindow => self.show(Visibility::Hidden),
+            GuildAction::Tab(tab) => {
+                let ui = &mut self.context.ui;
+                ui.selected_tab = tab;
+                ui.ask = None;
+                ui.position_menu = false;
+                ui.editing_notice = false;
+            }
+            GuildAction::PickEmblem => emblem::pick_emblem(
+                &self.context.guild,
+                &self.context.session,
+                *self.context.generation,
+                &mut self.emblem,
+            ),
+            GuildAction::EditNotice => self.context.ui.editing_notice = true,
+            GuildAction::CancelNotice => self.context.ui.editing_notice = false,
+            GuildAction::SaveNotice => self.save_notice(),
+            GuildAction::ToggleOnline => self.context.ui.online_only ^= true,
+            GuildAction::Sort(by) => {
+                let ui = &mut self.context.ui;
+                ui.sort_reversed = ui.sort == by && !ui.sort_reversed;
+                ui.sort = by;
+            }
+            GuildAction::Select(char_id) => {
+                let ui = &mut self.context.ui;
+                ui.selected_member = Some(char_id);
+                ui.ask = None;
+                ui.position_menu = false;
+            }
+            GuildAction::Invite => self.invite(),
+            GuildAction::Whisper(char_id) => self.whisper(char_id),
+            GuildAction::PartyInvite(char_id) => self.party_invite(char_id),
+            GuildAction::TogglePositionMenu => self.context.ui.position_menu ^= true,
+            GuildAction::Assign(char_id, index) => self.assign(char_id, index),
+            GuildAction::AskExpel => {
+                self.context.ui.ask = Some(Ask::Expel);
+                self.context.ui.position_menu = false;
+            }
+            GuildAction::KeepMember | GuildAction::Stay => self.context.ui.ask = None,
+            GuildAction::Expel(char_id) => self.expel(char_id),
+            GuildAction::SelectPosition(index) => {
+                let ui = &mut self.context.ui;
+                ui.selected_position = (ui.selected_position != Some(index)).then_some(index);
+            }
+            GuildAction::TogglePerm(index, perm) => self.toggle_perm(index, perm),
+            GuildAction::SavePosition(index) => self.save_position(index),
+            GuildAction::SkillUp(skill_id) => self.skill_up(skill_id),
+            GuildAction::ProposeAlliance => self.propose_alliance(),
+            GuildAction::DeclareAntagonist => self.declare_antagonist(),
+            GuildAction::BreakAlliance(guild_id) => self.break_alliance(guild_id),
+            GuildAction::RemoveAntagonist(guild_id) => self.remove_antagonist(guild_id),
+            GuildAction::AskLeave => self.context.ui.ask = Some(Ask::Leave),
+            GuildAction::Leave => self.leave(),
+            GuildAction::Storage => self.context.ui.say("Guild storage opens at a Kafra"),
+            GuildAction::AnswerInvite(accept) => self.answer_invite(accept),
+            GuildAction::OpenGuild => {
+                self.pending.clear();
+                self.show(Visibility::Visible);
+            }
+            GuildAction::DismissInvite => self.pending.clear(),
+        }
+    }
+
+    fn show(&mut self, shown: Visibility) {
+        if let Ok(mut visibility) = self.window.single_mut() {
+            *visibility = shown;
+        }
+    }
+
+    fn me(&self) -> u32 {
+        self.context.session.char_id
+    }
+
+    /// Books `action` as the request in flight, or says another one still is.
+    fn begin(&mut self, action: &'static str, progress: &str) -> bool {
+        let generation = *self.context.generation;
+        self.context.ui.begin(action, generation, progress)
+    }
+
+    /// The name of a member, for the toast that names them.
+    fn member_name(&self, char_id: u32) -> Option<String> {
+        Some(self.context.guild.member(char_id)?.name.clone())
+    }
+
+    /// A position the local player may edit: any but the master's own, as the master.
+    fn editable_position(&self, index: u32) -> Option<GuildPositionInfo> {
+        let guild = &self.context.guild;
+        let master = guild.info()?.master_char_id;
+        if !guild.is_master(self.me()) || guild.position_of(master)?.index == index {
+            return None;
+        }
+        guild.position(index).cloned()
+    }
+
+    fn invite(&mut self) {
+        let field = self.fields.invite.single().ok();
+        let name = self.fields.read(field);
+        let generation = *self.context.generation;
+        let Some(command) = request_invite(&mut self.context.ui, generation, 0, &name) else {
+            return;
+        };
+        self.out.invite.write(command);
+        self.fields.clear(field);
+    }
+
+    /// Aims the chat input at a whisper to the member.
+    fn whisper(&mut self, char_id: u32) {
+        let Some(name) = self.member_name(char_id) else {
+            return;
+        };
+        if let Some(chat) = self.chat.as_mut() {
+            chat.aim_whisper(&name);
+        }
+        self.context.ui.say(format!("Chat set to whisper {name}"));
+    }
+
+    fn party_invite(&mut self, char_id: u32) {
+        let Some(name) = self.member_name(char_id) else {
+            return;
+        };
+        self.out.party.write(PartyInviteRequested {
+            target_char_id: char_id,
+            target_name: String::new(),
+        });
+        self.context.ui.say(format!("Party invite sent to {name}."));
+    }
+
+    fn assign(&mut self, target: u32, index: u32) {
+        let guild = &self.context.guild;
+        let valid = !guild.is_master(target)
+            && guild.member(target).is_some()
+            && self.editable_position(index).is_some();
+        if !valid {
+            self.context
+                .ui
+                .fail("This member cannot be assigned to that position.");
+            return;
+        }
+        if !self.begin("member_position", "Assigning position\u{2026}") {
+            return;
+        }
+        self.out.assign.write(GuildMemberPositionRequested {
+            target_char_id: target,
+            index,
+        });
+        self.context.ui.position_menu = false;
+    }
+
+    fn expel(&mut self, target: u32) {
+        let guild = &self.context.guild;
+        let me = self.me();
+        if target == me
+            || guild.is_master(target)
+            || guild.member(target).is_none()
+            || !guild.can_expel(me)
+        {
+            return;
+        }
+        let reason = self.fields.read(self.fields.reason.single().ok());
+        if reason.is_empty() {
+            self.context
+                .ui
+                .fail("Enter a reason before expelling a member.");
+            return;
+        }
+        if !self.begin("expel", "Expelling guild member\u{2026}") {
+            return;
+        }
+        self.out.expel.write(GuildExpelRequested {
+            target_char_id: target,
+            reason,
+        });
+        self.context.ui.ask = None;
+        self.context.ui.selected_member = None;
+    }
+
+    fn leave(&mut self) {
+        if !self.context.guild.in_guild() || !self.begin("leave", "Leaving guild\u{2026}") {
+            return;
+        }
+        self.out.leave.write(GuildLeaveRequested);
+        self.context.ui.ask = None;
+    }
+
+    fn save_notice(&mut self) {
+        if !self.context.guild.can_notice(self.me()) {
+            return;
+        }
+        let subject = self.fields.read(self.fields.subject.single().ok());
+        let body = self.fields.read(self.fields.body.single().ok());
+        if !self.begin("notice_edit", "Saving notice\u{2026}") {
+            return;
+        }
+        self.out
+            .notice
+            .write(GuildNoticeEditRequested { subject, body });
+        self.context.ui.editing_notice = false;
+    }
+
+    /// Flips one permission of a position, leaving the rest as the server has them.
+    fn toggle_perm(&mut self, index: u32, perm: Perm) {
+        let Some(position) = self.editable_position(index) else {
+            return;
+        };
+        if position.name.trim().is_empty() {
+            self.context
+                .ui
+                .fail("Name the position before changing what it can do.");
+            return;
+        }
+        if !self.begin("position_edit", "Saving position\u{2026}") {
+            return;
+        }
+        let flipped = !perm.of(&position);
+        let mut command = GuildPositionEditRequested {
+            index,
+            name: position.name,
+            can_invite: position.can_invite,
+            can_expel: position.can_expel,
+            tax: None,
+            can_storage: None,
+            can_notice: None,
+            can_relations: None,
+        };
+        match perm {
+            Perm::Invite => command.can_invite = flipped,
+            Perm::Expel => command.can_expel = flipped,
+            Perm::Storage => command.can_storage = Some(flipped),
+            Perm::Notice => command.can_notice = Some(flipped),
+            Perm::Relations => command.can_relations = Some(flipped),
+        }
+        self.out.position.write(command);
+    }
+
+    /// Renames a position and sets its tax from the edit bar.
+    fn save_position(&mut self, index: u32) {
+        let Some(position) = self.editable_position(index) else {
+            return;
+        };
+        let name = self.fields.read(self.fields.position_name.single().ok());
+        let Some(name) = submit_name(&name) else {
+            self.context.ui.fail("Enter a position name.");
+            return;
+        };
+        let tax = self.fields.read(self.fields.position_tax.single().ok());
+        let Some(tax) = parse_tax(&tax) else {
+            self.context
+                .ui
+                .fail("EXP tax must be a whole percentage from 0 to 100.");
+            return;
+        };
+        if !self.begin("position_edit", "Saving position\u{2026}") {
+            return;
+        }
+        self.out.position.write(GuildPositionEditRequested {
+            index,
+            name,
+            can_invite: position.can_invite,
+            can_expel: position.can_expel,
+            tax: (tax != position.tax).then_some(tax),
+            can_storage: None,
+            can_notice: None,
+            can_relations: None,
+        });
+    }
+
+    fn skill_up(&mut self, skill_id: u32) {
+        let guild = &self.context.guild;
+        let spendable = guild.is_master(self.me())
+            && guild.info().is_some_and(|info| {
+                info.skill_points > 0
+                    && info
+                        .skills
+                        .iter()
+                        .any(|skill| skill.skill_id == skill_id && skill.level < skill.max_level)
+            });
+        if !spendable || !self.begin("skill_up", "Upgrading guild skill\u{2026}") {
+            return;
+        }
+        self.out.skill.write(GuildSkillUpRequested { skill_id });
+    }
+
+    /// Whether the guild has a relation of `kind` with `guild_id`; its name if so.
+    fn related(&self, guild_id: u32, kind: GuildRelationKind) -> Option<String> {
+        if !self.context.guild.can_relations(self.me()) {
+            return None;
+        }
+        self.context
+            .guild
+            .info()?
+            .relations
+            .iter()
+            .find(|relation| relation.guild_id == guild_id && relation.kind == kind)
+            .map(|relation| relation.name.clone())
+    }
+
+    fn propose_alliance(&mut self) {
+        if !self.context.guild.can_relations(self.me()) {
+            return;
+        }
+        let field = self.fields.alliance.single().ok();
+        let Some(target_name) = submit_name(&self.fields.read(field)) else {
+            self.context
+                .ui
+                .fail("Enter an online guild master\u{2019}s character name.");
+            return;
+        };
+        if !self.begin("alliance_request", "Sending alliance request\u{2026}") {
+            return;
+        }
+        self.out.alliance.write(GuildAllianceRequested {
+            target_char_id: 0,
+            target_name,
+        });
+        self.fields.clear(field);
+    }
+
+    /// Asks to confirm, since declaring an antagonist cannot be taken back quietly.
+    fn declare_antagonist(&mut self) {
+        let guild = &self.context.guild;
+        let Some(own_guild_id) = guild.info().map(|info| info.guild_id) else {
+            return;
+        };
+        if !guild.can_relations(self.me()) {
+            return;
+        }
+        let field = self.fields.antagonist.single().ok();
+        let Some(target_name) = submit_name(&self.fields.read(field)) else {
+            self.context
+                .ui
+                .fail("Enter a character name from the target guild.");
+            return;
+        };
+        if self.context.ui.pending.is_some() || self.confirmation.is_pending() {
+            self.context.ui.fail("A guild action is already pending.");
+            return;
+        }
+        self.confirmation
+            .declare_antagonist(*self.context.generation, own_guild_id, target_name);
+        self.fields.clear(field);
+    }
+
+    /// Asks to confirm before an alliance ends.
+    fn break_alliance(&mut self, guild_id: u32) {
+        let Some(name) = self.related(guild_id, GuildRelationKind::Ally) else {
+            return;
+        };
+        let Some(own_guild_id) = self.context.guild.info().map(|info| info.guild_id) else {
+            return;
+        };
+        if self.context.ui.pending.is_some() || self.confirmation.is_pending() {
+            return;
+        }
+        self.confirmation
+            .break_alliance(*self.context.generation, own_guild_id, guild_id, name);
+    }
+
+    fn remove_antagonist(&mut self, guild_id: u32) {
+        if self
+            .related(guild_id, GuildRelationKind::Antagonist)
+            .is_none()
+            || !self.begin("antagonist_remove", "Removing antagonist\u{2026}")
+        {
+            return;
+        }
+        self.out
+            .antagonist_remove
+            .write(GuildAntagonistRemoveRequested { guild_id });
+    }
+
+    fn answer_invite(&mut self, accept: bool) {
+        if !self.pending.is_pending() {
+            return;
+        }
+        self.out.respond.write(GuildInviteResponded {
+            guild_id: self.pending.guild_id,
+            accept,
+        });
+        if accept {
+            self.pending.accept();
+        } else {
+            self.pending.clear();
+        }
+    }
+}
+
+/// Runs the [`GuildAction`] of an activated button. The headless button also activates
+/// on a right click, which is ignored.
+pub fn on_guild_button(
+    activate: On<Activate>,
+    actions: Query<&GuildAction>,
+    mouse: Option<Res<ButtonInput<MouseButton>>>,
+    mut guild: GuildActions,
+) {
+    if mouse.is_some_and(|mouse| mouse.just_released(MouseButton::Right)) {
+        return;
+    }
+    if let Ok(action) = actions.get(activate.entity) {
+        guild.run(*action);
+    }
+}
+
+/// A right click on a skill card opens the info modal for that guild skill.
+pub fn on_skill_cell_click(
+    click: On<PointerClick>,
+    cells: Query<&SkillCell>,
+    guild: Res<GuildState>,
+    catalog: Option<Res<SkillCatalog>>,
+    mut writer: MessageWriter<ShowInfoModal>,
+) {
+    let Ok(cell) = cells.get(click.entity) else {
+        return;
+    };
+    if click.button != PointerButton::Secondary {
+        return;
+    }
+    let Some(skill) = guild
         .info()
-        .map(|info| members::project_rows(info, jobs.as_deref()))
-        .unwrap_or_default();
-    commands
-        .spawn_scene(scene::member_rows(rows))
-        .insert(ChildOf(container));
+        .and_then(|info| info.skills.iter().find(|skill| skill.skill_id == cell.0))
+    else {
+        warn!(
+            "guild: skill #{} not in the guild snapshot, ignoring inspect",
+            cell.0
+        );
+        return;
+    };
+    writer.write(ShowInfoModal {
+        content: InfoContent::Skill {
+            view: info_view::guild_skill_view(skill, catalog.as_deref()),
+            raise: None,
+        },
+    });
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::state::app::StatesPlugin;
-    use bevy::window::PrimaryWindow;
-    use net_contract::dto::{
-        GuildActionResult, GuildErrorKind, GuildInfo, GuildMemberInfo, GuildPositionInfo,
-    };
-    use net_contract::events::ZoneDisconnected;
-    fn toggle_app(visibility: Visibility) -> (App, Entity, Entity) {
-        let mut app = App::new();
-        app.add_plugins(StatesPlugin);
-        app.init_state::<GameState>();
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::InGame);
-        app.update();
-        app.init_resource::<GuildState>();
-        app.init_resource::<InputFocus>();
-        app.init_resource::<UiFocus>();
-        app.add_plugins(crate::focus::UiFocusMirrorPlugin);
-        let field = app
-            .world_mut()
-            .spawn((GuildInviteNameField, EditableText::new("")))
-            .id();
-        app.world_mut().spawn((GuildWindowRoot, visibility));
-        let player = app
-            .world_mut()
-            .spawn((LocalPlayer, ActionState::<PlayerAction>::default()))
-            .id();
-        app.add_systems(
-            Update,
-            toggle_guild_window.run_if(in_state(GameState::InGame)),
-        );
-        (app, field, player)
-    }
-
-    fn press_guild(app: &mut App, player: Entity) {
-        app.world_mut()
-            .entity_mut(player)
-            .get_mut::<ActionState<PlayerAction>>()
-            .unwrap()
-            .press(&PlayerAction::Guild);
-    }
-
-    fn feedback_app() -> App {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.init_resource::<GuildUi>();
-        app.add_systems(Update, sync_feedback);
-        app.world_mut().spawn((
-            GuildFeedbackBanner,
-            Node {
-                display: Display::None,
-                ..default()
-            },
-            BackgroundColor(Color::NONE),
-            BorderColor::all(Color::NONE),
-        ));
-        app.world_mut().spawn((
-            GuildFeedbackText,
-            Text::default(),
-            TextColor(lifthrasir_ui::theme::TEXT),
-        ));
-        app
-    }
-
-    fn banner_display(app: &mut App) -> Display {
-        app.world_mut()
-            .query_filtered::<&Node, With<GuildFeedbackBanner>>()
-            .single(app.world())
-            .unwrap()
-            .display
-    }
-
-    #[test]
-    fn feedback_banner_shows_then_dismisses_itself() {
-        let mut app = feedback_app();
-        app.world_mut().resource_mut::<GuildUi>().feedback = Some("Notice saved".into());
-        app.update();
-
-        assert_eq!(banner_display(&mut app), Display::Flex);
-        let text = app
-            .world_mut()
-            .query_filtered::<&Text, With<GuildFeedbackText>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(text.0, "Notice saved");
-
-        app.world_mut()
-            .resource_mut::<Time<Virtual>>()
-            .advance_by(FEEDBACK_DISMISS + Duration::from_secs(1));
-        app.update();
-        app.update();
-
-        assert_eq!(banner_display(&mut app), Display::None);
-        assert!(app.world().resource::<GuildUi>().feedback.is_none());
-    }
-
-    #[test]
-    fn unguilded_hotkey_keeps_window_closed_without_claiming_focus() {
-        let (mut app, _, player) = toggle_app(Visibility::Hidden);
-        let primary_window = app
-            .world_mut()
-            .spawn((Window::default(), PrimaryWindow))
-            .id();
-        app.insert_resource(InputFocus::from_entity(primary_window));
-        app.update();
-        assert!(!app.world().resource::<UiFocus>().text_input_active);
-
-        press_guild(&mut app, player);
-        app.update();
-
-        assert_eq!(
-            app.world().resource::<InputFocus>().get(),
-            Some(primary_window)
-        );
-        let visibility = app
-            .world_mut()
-            .query_filtered::<&Visibility, With<GuildWindowRoot>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(*visibility, Visibility::Hidden);
-    }
-
-    #[test]
-    fn unrelated_active_text_input_focus_stays_closed_and_preserves_focus() {
-        let (mut app, _, player) = toggle_app(Visibility::Hidden);
-        let unrelated = app.world_mut().spawn(EditableText::new("other")).id();
-        app.insert_resource(InputFocus::from_entity(unrelated));
-        app.update();
-        assert!(app.world().resource::<UiFocus>().text_input_active);
-
-        press_guild(&mut app, player);
-        app.update();
-
-        assert_eq!(app.world().resource::<InputFocus>().get(), Some(unrelated));
-        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
-    }
-
-    #[test]
-    fn only_the_active_guild_tab_participates_in_layout() {
-        let mut app = App::new();
-        app.init_resource::<GuildUi>();
-        app.world_mut()
-            .spawn((GuildMembersPanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildPositionsPanel, Node::default(), Visibility::Hidden));
-        app.world_mut()
-            .spawn((GuildNoticePanel, Node::default(), Visibility::Hidden));
-        app.add_systems(Update, sync_tabs);
-
-        app.update();
-        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::Flex);
-        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::None);
-
-        app.world_mut().resource_mut::<GuildUi>().selected_tab = GuildTab::Notice;
-        app.update();
-        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::Flex);
-        assert_eq!(
-            visibility::<GuildNoticePanel>(&mut app),
-            Visibility::Inherited
-        );
-    }
-
-    #[test]
-    fn selecting_skills_removes_every_other_page_from_layout() {
-        let mut app = App::new();
-        app.insert_resource(GuildUi {
-            selected_tab: GuildTab::Skills,
-            ..default()
-        });
-        app.world_mut()
-            .spawn((GuildMembersPanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildPositionsPanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildNoticePanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildSkillsPanel, Node::default(), Visibility::Hidden));
-        app.add_systems(Update, sync_tabs);
-
-        app.update();
-
-        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildSkillsPanel>(&mut app).display, Display::Flex);
-        assert_eq!(
-            visibility::<GuildSkillsPanel>(&mut app),
-            Visibility::Inherited
-        );
-    }
-
-    #[test]
-    fn selecting_relations_removes_all_four_other_pages_from_layout() {
-        let mut app = App::new();
-        app.insert_resource(GuildUi {
-            selected_tab: GuildTab::Relations,
-            ..default()
-        });
-        app.world_mut()
-            .spawn((GuildMembersPanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildPositionsPanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildNoticePanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildSkillsPanel, Node::default(), Visibility::Inherited));
-        app.world_mut()
-            .spawn((GuildRelationsPanel, Node::default(), Visibility::Hidden));
-        app.add_systems(Update, sync_tabs);
-
-        app.update();
-
-        assert_eq!(node::<GuildMembersPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildPositionsPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildNoticePanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildSkillsPanel>(&mut app).display, Display::None);
-        assert_eq!(node::<GuildRelationsPanel>(&mut app).display, Display::Flex);
-        assert_eq!(
-            visibility::<GuildRelationsPanel>(&mut app),
-            Visibility::Inherited
-        );
-    }
-
-    #[test]
-    fn visible_with_guild_focus_closes_and_releases_focus() {
-        let (mut app, field, player) = toggle_app(Visibility::Visible);
-        app.insert_resource(InputFocus::from_entity(field));
-        app.update();
-        assert!(app.world().resource::<UiFocus>().text_input_active);
-
-        press_guild(&mut app, player);
-        app.update();
-
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
-    }
-
-    #[test]
-    fn guilded_window_close_releases_invite_field_focus() {
-        let (mut app, _, player) = toggle_app(Visibility::Visible);
-        let invite = app
-            .world_mut()
-            .spawn((GuildInviteNameField, EditableText::new("Thor")))
-            .id();
-        app.insert_resource(InputFocus::from_entity(invite));
-        app.update();
-
-        press_guild(&mut app, player);
-        app.update();
-
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
-    }
-
-    #[test]
-    fn titlebar_close_releases_guild_owned_focus() {
-        let mut app = App::new();
-        app.init_resource::<InputFocus>();
-        let field = app.world_mut().spawn(GuildInviteNameField).id();
-        app.world_mut()
-            .spawn((GuildWindowRoot, Visibility::Visible));
-        let close = app
-            .world_mut()
-            .spawn_empty()
-            .observe(lifthrasir_ui::widgets::chrome::close_window::<GuildWindowRoot>)
-            .id();
-        app.insert_resource(InputFocus::from_entity(field));
-        app.add_systems(Update, release_hidden_guild_focus);
-
-        app.world_mut().trigger(Activate { entity: close });
-        app.update();
-
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-    }
-
-    #[test]
-    fn hidden_root_releases_only_guild_owned_focus() {
-        let mut app = App::new();
-        app.init_resource::<InputFocus>();
-        let field = app.world_mut().spawn(positions::PositionNameField).id();
-        let invite = app.world_mut().spawn(GuildInviteNameField).id();
-        let other = app.world_mut().spawn_empty().id();
-        app.world_mut().spawn((GuildWindowRoot, Visibility::Hidden));
-        app.add_systems(Update, release_hidden_guild_focus);
-
-        app.insert_resource(InputFocus::from_entity(field));
-        app.update();
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-
-        app.insert_resource(InputFocus::from_entity(invite));
-        app.update();
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-
-        app.insert_resource(InputFocus::from_entity(other));
-        app.update();
-        assert_eq!(app.world().resource::<InputFocus>().get(), Some(other));
-    }
-
-    #[test]
-    fn hidden_root_releases_position_tax_field_focus() {
-        let mut app = App::new();
-        app.init_resource::<InputFocus>();
-        let tax = app.world_mut().spawn(positions::PositionTaxField).id();
-        app.world_mut().spawn((GuildWindowRoot, Visibility::Hidden));
-        app.add_systems(Update, release_hidden_guild_focus);
-        app.insert_resource(InputFocus::from_entity(tax));
-
-        app.update();
-
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-    }
-
-    #[test]
-    fn gameplay_teardown_releases_invite_field_focus() {
-        let mut app = App::new();
-        app.add_plugins(StatesPlugin);
-        app.init_state::<GameState>();
-        app.add_systems(OnExit(GameState::InGame), clear_guild_focus_on_exit);
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::InGame);
-        app.update();
-        let invite = app.world_mut().spawn(GuildInviteNameField).id();
-        app.insert_resource(InputFocus::from_entity(invite));
-        app.world_mut()
-            .resource_mut::<NextState<GameState>>()
-            .set(GameState::CharacterSelection);
-
-        app.update();
-
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-    }
-
-    fn authoritative_ui_app() -> App {
-        let mut app = App::new();
-        app.add_message::<GuildIngress>()
-            .add_message::<ZoneDisconnected>()
-            .insert_resource(ZoneSessionGeneration(9))
-            .add_plugins(lifthrasir_client::domain::guild::GuildPlugin);
-        app.world_mut()
-            .spawn((GuildWindowRoot, Visibility::Visible));
-        app.world_mut().spawn((GuildNameText, Text::default()));
-        app.world_mut().spawn((GuildMasterText, Text::default()));
-        app.world_mut().spawn((GuildNoticeText, Text::default()));
-        app.world_mut()
-            .spawn((GuildMemberCountText, Text::default()));
-        app.world_mut()
-            .spawn((GuildOnlineCountText, Text::default()));
-        app.world_mut().spawn((GuildLevelText, Text::default()));
-        app.world_mut().spawn((GuildExpText, Text::default()));
-        app.world_mut()
-            .spawn((GuildSkillPointsText, Text::default()));
-        app.world_mut().spawn((GuildExpFill, Node::default()));
-        app.add_systems(
-            Update,
-            (sync_membership_mode, sync_header).in_set(GuildSystems::UiSync),
-        );
-        app
-    }
-
-    fn visibility<M: Component>(app: &mut App) -> Visibility {
-        *app.world_mut()
-            .query_filtered::<&Visibility, With<M>>()
-            .single(app.world())
-            .unwrap()
-    }
-
-    fn marked_text<M: Component>(app: &mut App) -> String {
-        app.world_mut()
-            .query_filtered::<&Text, With<M>>()
-            .single(app.world())
-            .unwrap()
-            .0
-            .clone()
-    }
-
-    #[test]
-    fn authoritative_snapshot_enables_management_without_opening_window() {
-        let mut app = authoritative_ui_app();
-        app.update();
-        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
-
-        app.world_mut().write_message(GuildIngress {
-            generation: ZoneSessionGeneration(9),
-            payload: GuildIngressPayload::Info(GuildInfo {
-                guild_id: 7,
-                name: "Vikings".into(),
-                master_char_id: 42,
-                emblem_id: 3,
-                notice_subject: "Welcome".into(),
-                notice_body: "Be kind".into(),
-                positions: vec![GuildPositionInfo {
-                    index: 0,
-                    name: "Master".into(),
-                    can_invite: true,
-                    can_expel: true,
-                    can_storage: false,
-                    tax: 0,
-                }],
-                members: vec![GuildMemberInfo {
-                    char_id: 42,
-                    name: "Odin".into(),
-                    job_id: 1,
-                    base_level: 99,
-                    online: false,
-                    map: "prontera".into(),
-                    position_index: 0,
-                    hp: 90,
-                    max_hp: 100,
-                    sp: 40,
-                    max_sp: 50,
-                    ap: 8,
-                    max_ap: 10,
-                }],
-                level: 1,
-                exp: 0,
-                next_exp: 0,
-                skill_points: 0,
-                skills: vec![],
-                relations: vec![],
-            }),
-        });
-        app.update();
-
-        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Hidden);
-        assert_eq!(marked_text::<GuildNameText>(&mut app), "Vikings");
-        assert_eq!(
-            marked_text::<GuildMasterText>(&mut app),
-            "Guild Master Odin"
-        );
-        assert_eq!(marked_text::<GuildNoticeText>(&mut app), "Welcome");
-        assert_eq!(marked_text::<GuildMemberCountText>(&mut app), "1 member");
-        assert_eq!(marked_text::<GuildOnlineCountText>(&mut app), "0 online");
-
-        app.init_resource::<UiFocus>();
-        app.init_resource::<InputFocus>();
-        let player = app
-            .world_mut()
-            .spawn((LocalPlayer, ActionState::<PlayerAction>::default()))
-            .id();
-        app.add_systems(Update, toggle_guild_window);
-        press_guild(&mut app, player);
-        app.update();
-        assert_eq!(visibility::<GuildWindowRoot>(&mut app), Visibility::Visible);
-    }
-
-    #[test]
-    fn progression_header_keeps_large_exp_exact_and_caps_without_division() {
-        let mut app = authoritative_ui_app();
-        let large_exp = u32::MAX as u64 + 99;
-        let next_exp = u32::MAX as u64 + 1_099;
-        app.world_mut().write_message(GuildIngress {
-            generation: ZoneSessionGeneration(9),
-            payload: GuildIngressPayload::Info(GuildInfo {
-                guild_id: 7,
-                name: "Vikings".into(),
-                master_char_id: 42,
-                emblem_id: 0,
-                notice_subject: String::new(),
-                notice_body: String::new(),
-                positions: vec![],
-                members: vec![],
-                level: 27,
-                exp: large_exp,
-                next_exp,
-                skill_points: 4,
-                skills: vec![],
-                relations: vec![],
-            }),
-        });
-        app.update();
-
-        assert_eq!(marked_text::<GuildLevelText>(&mut app), "Guild Level 27");
-        assert_eq!(
-            marked_text::<GuildExpText>(&mut app),
-            format!("Guild EXP {large_exp} / {next_exp}")
-        );
-        assert_eq!(
-            marked_text::<GuildSkillPointsText>(&mut app),
-            "4 skill points available"
-        );
-        assert_eq!(node::<GuildExpFill>(&mut app).width, percent(99.999_98));
-
-        let mut capped = app.world().resource::<GuildState>().info().unwrap().clone();
-        capped.next_exp = 0;
-        app.world_mut().write_message(GuildIngress {
-            generation: ZoneSessionGeneration(9),
-            payload: GuildIngressPayload::Info(capped),
-        });
-        app.update();
-
-        assert_eq!(
-            marked_text::<GuildExpText>(&mut app),
-            format!("Guild EXP {large_exp} · MAX")
-        );
-        assert_eq!(node::<GuildExpFill>(&mut app).width, percent(100));
-    }
-
-    fn node<M: Component>(app: &mut App) -> Node {
-        app.world_mut()
-            .query_filtered::<&Node, With<M>>()
-            .single(app.world())
-            .unwrap()
-            .clone()
-    }
-
-    #[test]
-    fn create_is_trimmed_and_serialized_until_matching_result() {
-        let mut ui = GuildUi::default();
-        let generation = ZoneSessionGeneration(3);
-
-        let first = request_create(&mut ui, generation, "  Vikings  ").unwrap();
-        assert_eq!(first.name, "Vikings");
-        assert_eq!(
-            ui.pending,
-            Some(PendingGuildMutation {
-                action: "create",
-                generation,
-            })
-        );
-
-        assert!(request_create(&mut ui, generation, "Other").is_none());
-        assert_eq!(
-            ui.feedback.as_deref(),
-            Some("A guild action is already pending.")
-        );
-    }
-
-    #[test]
-    fn empty_create_is_rejected_inline() {
-        let mut ui = GuildUi::default();
-
-        assert!(request_create(&mut ui, ZoneSessionGeneration(1), "   ").is_none());
-        assert!(ui.pending.is_none());
-        assert_eq!(ui.feedback.as_deref(), Some("Enter a guild name."));
-    }
-
-    #[test]
-    fn successful_create_result_clears_pending_without_fabricating_membership() {
-        let generation = ZoneSessionGeneration(4);
-        let mut app = App::new();
-        app.add_message::<GuildIngress>();
-        app.insert_resource(generation);
-        app.insert_resource(GuildUi {
-            pending: Some(PendingGuildMutation {
-                action: "create",
-                generation,
-            }),
-            ..default()
-        });
-        app.init_resource::<GuildState>();
-        app.init_resource::<emblem::GuildEmblemPreview>()
-            .insert_resource(Assets::<Image>::default());
-        app.add_systems(Update, apply_guild_results);
-        app.world_mut()
-            .resource_mut::<Messages<GuildIngress>>()
-            .write(GuildIngress {
-                generation,
-                payload: GuildIngressPayload::ActionResult(GuildActionResult {
-                    action: "create".into(),
-                    success: true,
-                    error: GuildErrorKind::None,
-                }),
-            });
-
-        app.update();
-
-        let ui = app.world().resource::<GuildUi>();
-        assert!(ui.pending.is_none());
-        assert_eq!(ui.feedback.as_deref(), Some("Guild created"));
-        assert!(!app.world().resource::<GuildState>().in_guild());
-    }
-
-    #[test]
-    fn mismatched_result_does_not_claim_pending_create() {
-        let generation = ZoneSessionGeneration(4);
-        let mut app = App::new();
-        app.add_message::<GuildIngress>();
-        app.insert_resource(generation);
-        app.insert_resource(GuildUi {
-            pending: Some(PendingGuildMutation {
-                action: "create",
-                generation,
-            }),
-            ..default()
-        });
-        app.init_resource::<emblem::GuildEmblemPreview>()
-            .insert_resource(Assets::<Image>::default());
-        app.add_systems(Update, apply_guild_results);
-        app.world_mut()
-            .resource_mut::<Messages<GuildIngress>>()
-            .write(GuildIngress {
-                generation,
-                payload: GuildIngressPayload::ActionResult(GuildActionResult {
-                    action: "invite".into(),
-                    success: false,
-                    error: GuildErrorKind::NoPermission,
-                }),
-            });
-
-        app.update();
-
-        assert_eq!(
-            app.world().resource::<GuildUi>().pending,
-            Some(PendingGuildMutation {
-                action: "create",
-                generation,
-            })
-        );
-    }
-
-    #[test]
-    fn guild_error_copy_maps_every_known_error_and_unknown_is_generic() {
-        let expected = [
-            (GuildErrorKind::None, "Success"),
-            (GuildErrorKind::NameTaken, "Guild name is already taken"),
-            (
-                GuildErrorKind::AlreadyInGuild,
-                "Character already belongs to a guild",
-            ),
-            (GuildErrorKind::GuildFull, "Guild is full"),
-            (
-                GuildErrorKind::NoPermission,
-                "Current position lacks permission",
-            ),
-            (GuildErrorKind::NotMember, "Character is not a guild member"),
-            (GuildErrorKind::TargetOffline, "Target is offline"),
-            (GuildErrorKind::NoEmperium, "Creation requires an Emperium"),
-            (GuildErrorKind::InvalidEmblem, "Emblem is invalid"),
-            (
-                GuildErrorKind::CannotTargetMaster,
-                "Guild master cannot be expelled",
-            ),
-            (GuildErrorKind::InvalidPosition, "Position is invalid"),
-        ];
-        for (error, copy) in expected {
-            assert_eq!(guild_error_text(error), copy);
-        }
-        assert_eq!(
-            guild_error_text(GuildErrorKind::Unknown(99)),
-            "Guild operation failed"
-        );
-    }
-
-    #[test]
-    fn guild_error_copy_maps_progression_and_relation_errors_distinctly() {
-        let expected = [
-            (
-                GuildErrorKind::NoSkillPoints,
-                "No guild skill points available",
-            ),
-            (
-                GuildErrorKind::SkillRequirement,
-                "Guild skill requirements are not met",
-            ),
-            (
-                GuildErrorKind::SkillMaxed,
-                "Guild skill is already at maximum level",
-            ),
-            (GuildErrorKind::AllyLimit, "Guild alliance limit reached"),
-            (
-                GuildErrorKind::AntagonistLimit,
-                "Guild antagonist limit reached",
-            ),
-            (GuildErrorKind::AlreadyAllied, "Guilds are already allied"),
-            (
-                GuildErrorKind::AlreadyAntagonist,
-                "Guild is already an antagonist",
-            ),
-            (GuildErrorKind::NotRelated, "Guild relation does not exist"),
-            (GuildErrorKind::SameGuild, "Cannot target the same guild"),
-            (
-                GuildErrorKind::SiegeActive,
-                "Guild relations cannot change during a siege",
-            ),
-            (
-                GuildErrorKind::RequestPending,
-                "An alliance request is already pending",
-            ),
-            (
-                GuildErrorKind::AllianceDeclined,
-                "Alliance request was declined",
-            ),
-        ];
-
-        for (error, copy) in expected {
-            assert_eq!(guild_error_text(error), copy);
-        }
-    }
-
-    #[test]
-    fn successful_notice_result_releases_pending_without_changing_durable_notice() {
-        let generation = ZoneSessionGeneration(12);
-        let mut app = App::new();
-        app.add_message::<GuildIngress>();
-        app.insert_resource(generation);
-        app.insert_resource(GuildUi {
-            pending: Some(PendingGuildMutation {
-                action: "notice_edit",
-                generation,
-            }),
-            ..default()
-        });
-        app.init_resource::<emblem::GuildEmblemPreview>()
-            .insert_resource(Assets::<Image>::default());
-        app.add_systems(Update, apply_guild_results);
-        app.world_mut().write_message(GuildIngress {
-            generation,
-            payload: GuildIngressPayload::ActionResult(GuildActionResult {
-                action: "notice_edit".into(),
-                success: true,
-                error: GuildErrorKind::None,
-            }),
-        });
-
-        app.update();
-
-        let ui = app.world().resource::<GuildUi>();
-        assert!(ui.pending.is_none());
-        assert_eq!(ui.feedback.as_deref(), Some("Notice saved"));
-    }
-
-    #[test]
-    fn mismatched_management_result_is_ignored_then_matching_failure_is_shown() {
-        let generation = ZoneSessionGeneration(13);
-        let mut app = App::new();
-        app.add_message::<GuildIngress>();
-        app.insert_resource(generation);
-        app.insert_resource(GuildUi {
-            pending: Some(PendingGuildMutation {
-                action: "position_edit",
-                generation,
-            }),
-            ..default()
-        });
-        app.init_resource::<emblem::GuildEmblemPreview>()
-            .insert_resource(Assets::<Image>::default());
-        app.add_systems(Update, apply_guild_results);
-        app.world_mut().write_message(GuildIngress {
-            generation,
-            payload: GuildIngressPayload::ActionResult(GuildActionResult {
-                action: "notice_edit".into(),
-                success: false,
-                error: GuildErrorKind::NoPermission,
-            }),
-        });
-        app.update();
-        assert_eq!(
-            app.world()
-                .resource::<GuildUi>()
-                .pending
-                .as_ref()
-                .unwrap()
-                .action,
-            "position_edit"
-        );
-
-        app.world_mut().write_message(GuildIngress {
-            generation,
-            payload: GuildIngressPayload::ActionResult(GuildActionResult {
-                action: "position_edit".into(),
-                success: false,
-                error: GuildErrorKind::InvalidPosition,
-            }),
-        });
-        app.update();
-
-        let ui = app.world().resource::<GuildUi>();
-        assert!(ui.pending.is_none());
-        assert_eq!(ui.feedback.as_deref(), Some("Position is invalid"));
-    }
-
-    #[test]
-    fn one_pending_mutation_disables_every_management_control() {
-        let generation = ZoneSessionGeneration(2);
-        let mut app = App::new();
-        app.insert_resource(GuildUi {
-            pending: Some(PendingGuildMutation {
-                action: "notice_edit",
-                generation,
-            }),
-            ..default()
-        });
-        let first = app.world_mut().spawn(GuildMutationControl).id();
-        let second = app.world_mut().spawn(GuildMutationControl).id();
-        app.add_systems(Update, sync_management_controls);
-
-        app.update();
-        assert!(app.world().entity(first).contains::<InteractionDisabled>());
-        assert!(app.world().entity(second).contains::<InteractionDisabled>());
-
-        app.world_mut().resource_mut::<GuildUi>().pending = None;
-        app.update();
-        assert!(!app.world().entity(first).contains::<InteractionDisabled>());
-        assert!(!app.world().entity(second).contains::<InteractionDisabled>());
-    }
-
-    #[test]
-    fn same_generation_character_switch_resets_ui_and_blocks_old_session_work() {
-        let mut app = App::new();
-        app.add_message::<ZoneDisconnected>()
-            .insert_resource(ZoneSessionGeneration(4))
-            .insert_resource(ZoneSession {
-                char_id: 42,
-                ..default()
-            })
-            .insert_resource(GuildUi {
-                selected_tab: GuildTab::Notice,
-                feedback: Some("pending".into()),
-                pending: Some(PendingGuildMutation {
-                    action: "create",
-                    generation: ZoneSessionGeneration(4),
-                }),
-                ..default()
-            })
-            .insert_resource(GuildUiSession {
-                generation: ZoneSessionGeneration(4),
-                char_id: 42,
-                ..default()
-            });
-        let root = app
-            .world_mut()
-            .spawn((GuildWindowRoot, Visibility::Visible))
-            .id();
-        let position = app
-            .world_mut()
-            .spawn((
-                positions::PositionNameField,
-                EditableText::new("Character A"),
-            ))
-            .id();
-        let invite = app
-            .world_mut()
-            .spawn((GuildInviteNameField, EditableText::new("Old target")))
-            .id();
-        app.add_systems(Update, reset_guild_ui_session);
-
-        app.world_mut().resource_mut::<ZoneSession>().char_id = 43;
-        app.update();
-
-        assert_eq!(*app.world().resource::<GuildUi>(), GuildUi::default());
-        assert_eq!(
-            *app.world().entity(root).get::<Visibility>().unwrap(),
-            Visibility::Hidden
-        );
-        assert!(
-            app.world()
-                .entity(position)
-                .get::<EditableText>()
-                .unwrap()
-                .value()
-                .to_string()
-                .is_empty()
-        );
-        assert!(
-            app.world()
-                .entity(invite)
-                .get::<EditableText>()
-                .unwrap()
-                .value()
-                .to_string()
-                .is_empty()
-        );
-        let session = app.world().resource::<GuildUiSession>();
-        assert_eq!(session.char_id, 43);
-        assert!(session.blocked);
-        assert!(session.reset);
-    }
-
-    #[test]
-    fn own_guild_change_resets_pending_ui_and_relation_fields_before_capture() {
-        let generation = ZoneSessionGeneration(9);
-        let mut app = App::new();
-        app.add_message::<GuildIngress>()
-            .add_message::<ZoneDisconnected>()
-            .insert_resource(generation)
-            .insert_resource(ZoneSession {
-                char_id: 42,
-                ..default()
-            })
-            .insert_resource(GuildUiSession {
-                generation,
-                char_id: 42,
-                guild_id: 7,
-                ..default()
-            })
-            .insert_resource(GuildUi {
-                selected_tab: GuildTab::Relations,
-                feedback: Some("old guild".into()),
-                pending: Some(PendingGuildMutation {
-                    action: "alliance_request",
-                    generation,
-                }),
-                ..default()
-            })
-            .init_resource::<positions::PositionDraftState>()
-            .add_plugins(lifthrasir_client::domain::guild::GuildPlugin)
-            .add_systems(Update, reset_guild_ui_guild.in_set(GuildSystems::UiSync));
-        let alliance = app
-            .world_mut()
-            .spawn((
-                relations::GuildAllianceNameField,
-                EditableText::new("Freya"),
-            ))
-            .id();
-        let antagonist = app
-            .world_mut()
-            .spawn((
-                relations::GuildAntagonistNameField,
-                EditableText::new("Loki"),
-            ))
-            .id();
-        app.world_mut().write_message(GuildIngress {
-            generation,
-            payload: GuildIngressPayload::Info(GuildInfo {
-                guild_id: 11,
-                name: "New Guild".into(),
-                master_char_id: 42,
-                emblem_id: 0,
-                notice_subject: String::new(),
-                notice_body: String::new(),
-                positions: vec![],
-                members: vec![],
-                level: 1,
-                exp: 0,
-                next_exp: 0,
-                skill_points: 0,
-                skills: vec![],
-                relations: vec![],
-            }),
-        });
-
-        app.update();
-
-        assert_eq!(*app.world().resource::<GuildUi>(), GuildUi::default());
-        assert!(
-            app.world()
-                .entity(alliance)
-                .get::<EditableText>()
-                .unwrap()
-                .value()
-                .to_string()
-                .is_empty()
-        );
-        assert!(
-            app.world()
-                .entity(antagonist)
-                .get::<EditableText>()
-                .unwrap()
-                .value()
-                .to_string()
-                .is_empty()
-        );
-        let session = app.world().resource::<GuildUiSession>();
-        assert_eq!(session.guild_id, 11);
-        assert!(session.reset);
-    }
-
-    #[test]
-    fn connection_replacement_disconnect_does_not_block_the_fresh_ui_epoch() {
-        let mut app = App::new();
-        app.add_message::<ZoneDisconnected>()
-            .insert_resource(ZoneSessionGeneration(1))
-            .insert_resource(ZoneSession {
-                char_id: 42,
-                ..default()
-            })
-            .insert_resource(GuildUi {
-                feedback: Some("Character A".into()),
-                ..default()
-            })
-            .insert_resource(GuildUiSession {
-                generation: ZoneSessionGeneration(1),
-                char_id: 42,
-                ..default()
-            });
-        app.add_systems(Update, reset_guild_ui_session);
-
-        *app.world_mut().resource_mut::<ZoneSessionGeneration>() = ZoneSessionGeneration(2);
-        app.world_mut().resource_mut::<ZoneSession>().char_id = 43;
-        app.world_mut().write_message(ZoneDisconnected {
-            reason: "replaced".into(),
-        });
-        app.update();
-
-        assert_eq!(*app.world().resource::<GuildUi>(), GuildUi::default());
-        let session = app.world().resource::<GuildUiSession>();
-        assert_eq!(session.generation, ZoneSessionGeneration(2));
-        assert_eq!(session.char_id, 43);
-        assert!(!session.blocked);
-        assert!(session.reset);
-    }
-}
+mod tests;

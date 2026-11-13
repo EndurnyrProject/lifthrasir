@@ -157,6 +157,34 @@ pub fn window_title_bar(text: impl Into<String>, trailing: impl Scene) -> impl S
     }
 }
 
+/// A [`window_title_bar`] with `lead` right after the title, for a subtitle that
+/// changes at runtime.
+pub fn window_title_bar_led(
+    text: &'static str,
+    lead: impl Scene,
+    trailing: impl Scene,
+) -> impl Scene {
+    bsn! {
+        Node {
+            height: px(TITLE_BAR_HEIGHT),
+            align_items: AlignItems::Center,
+            column_gap: px(12),
+            padding: {UiRect::left(px(46.0 - CONTENT_INSET))},
+            margin: {UiRect { right: px(14.0 - CONTENT_INSET), bottom: px(6), ..default() }},
+        }
+        Children [
+            @title_text(text, 17.0)
+            --
+            @lead
+            --
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @trailing
+        ]
+    }
+}
+
 /// A 22px borderless icon button that lights up under the pointer: the remove and
 /// dismiss marks of list rows. The caller attaches the `Activate` observer.
 pub fn ghost_button(icon: &'static str) -> impl Scene {

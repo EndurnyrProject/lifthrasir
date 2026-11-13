@@ -580,6 +580,7 @@ mod tests {
                 skill_points: 0,
                 skills: vec![],
                 relations: vec![],
+                ..Default::default()
             }),
         });
 

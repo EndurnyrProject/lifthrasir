@@ -1,8 +1,9 @@
 use crate::envelope::Body;
 use crate::proto::aesir::net;
 use net_contract::dto::{
-    GuildActionResult, GuildAllianceInviteInfo, GuildErrorKind, GuildInfo, GuildInviteInfo,
-    GuildMemberInfo, GuildPositionInfo, GuildRelationInfo, GuildRelationKind, GuildSkillInfo,
+    GuildActionResult, GuildActivityInfo, GuildActivityKind, GuildAllianceInviteInfo,
+    GuildErrorKind, GuildInfo, GuildInviteInfo, GuildMemberInfo, GuildPositionInfo,
+    GuildRelationInfo, GuildRelationKind, GuildSkillInfo,
 };
 use net_contract::events::GuildIngressPayload;
 
@@ -43,6 +44,8 @@ fn guild_position(position: net::GuildPosition) -> GuildPositionInfo {
         can_expel: position.can_expel,
         can_storage: position.can_storage,
         tax: position.tax,
+        can_notice: position.can_notice,
+        can_relations: position.can_relations,
     }
 }
 
@@ -61,6 +64,37 @@ fn guild_member(member: net::GuildMember) -> GuildMemberInfo {
         max_sp: member.max_sp,
         ap: member.ap,
         max_ap: member.max_ap,
+        exp: member.exp,
+        last_seen: member.last_seen,
+    }
+}
+
+fn guild_activity(entry: net::GuildActivity) -> GuildActivityInfo {
+    use net::GuildActivityKind as Wire;
+    let kind = match Wire::try_from(entry.kind) {
+        Ok(Wire::GuildActivityCreated) => GuildActivityKind::Created,
+        Ok(Wire::GuildActivityJoined) => GuildActivityKind::Joined,
+        Ok(Wire::GuildActivityLeft) => GuildActivityKind::Left,
+        Ok(Wire::GuildActivityExpelled) => GuildActivityKind::Expelled,
+        Ok(Wire::GuildActivityPositionChanged) => GuildActivityKind::PositionChanged,
+        Ok(Wire::GuildActivitySkillLearned) => GuildActivityKind::SkillLearned,
+        Ok(Wire::GuildActivityLevelUp) => GuildActivityKind::LevelUp,
+        Ok(Wire::GuildActivityAllianceFormed) => GuildActivityKind::AllianceFormed,
+        Ok(Wire::GuildActivityAllianceBroken) => GuildActivityKind::AllianceBroken,
+        Ok(Wire::GuildActivityAntagonistDeclared) => GuildActivityKind::AntagonistDeclared,
+        Ok(Wire::GuildActivityAntagonistRemoved) => GuildActivityKind::AntagonistRemoved,
+        Ok(Wire::GuildActivityCastleTaken) => GuildActivityKind::CastleTaken,
+        Ok(Wire::GuildActivityCastleLost) => GuildActivityKind::CastleLost,
+        Err(_) => GuildActivityKind::Unknown(entry.kind),
+    };
+    GuildActivityInfo {
+        kind,
+        subject: entry.subject,
+        actor: entry.actor,
+        detail: entry.detail,
+        skill_id: entry.skill_id,
+        level: entry.level,
+        at: entry.at,
     }
 }
 
@@ -82,6 +116,11 @@ fn guild_relation(relation: net::GuildRelation) -> GuildRelationInfo {
         guild_id: relation.guild_id,
         name: relation.name,
         kind,
+        level: relation.level,
+        member_count: relation.member_count,
+        master_name: relation.master_name,
+        emblem_id: relation.emblem_id,
+        castles: relation.castles,
     }
 }
 
@@ -101,6 +140,11 @@ fn guild_info(info: net::GuildInfo) -> GuildInfo {
         skill_points: info.skill_points,
         skills: info.skills.into_iter().map(guild_skill).collect(),
         relations: info.relations.into_iter().map(guild_relation).collect(),
+        max_members: info.max_members,
+        notice_author: info.notice_author,
+        notice_posted_at: info.notice_posted_at,
+        castles: info.castles,
+        activity: info.activity.into_iter().map(guild_activity).collect(),
     }
 }
 
@@ -135,6 +179,8 @@ pub(crate) fn guild_payload(body: Body) -> Option<GuildIngressPayload> {
                 guild_id: invite.guild_id,
                 guild_name: invite.guild_name,
                 inviter_name: invite.inviter_name,
+                inviter_char_id: invite.inviter_char_id,
+                guild: invite.guild.map(guild_info).unwrap_or_default(),
             }))
         }
         Body::GuildInfo(info) => Some(GuildIngressPayload::Info(guild_info(info))),
@@ -306,6 +352,7 @@ mod tests {
                 can_expel: true,
                 can_storage: false,
                 tax: 12,
+                ..Default::default()
             }],
             members: vec![net::GuildMember {
                 char_id: 42,
@@ -321,6 +368,7 @@ mod tests {
                 max_sp: u32::MAX as u64 + 4,
                 ap: 5,
                 max_ap: 6,
+                ..Default::default()
             }],
             level: 0,
             exp: 0,
@@ -328,6 +376,7 @@ mod tests {
             skill_points: 0,
             skills: vec![],
             relations: vec![],
+            ..Default::default()
         }))
         .expect("guild info should map");
 
@@ -395,18 +444,22 @@ mod tests {
                     guild_id: 8,
                     name: "Allies".into(),
                     kind: net::GuildRelationKind::GuildRelationAlly as i32,
+                    ..Default::default()
                 },
                 net::GuildRelation {
                     guild_id: 9,
                     name: "Rivals".into(),
                     kind: net::GuildRelationKind::GuildRelationAntagonist as i32,
+                    ..Default::default()
                 },
                 net::GuildRelation {
                     guild_id: 10,
                     name: "Future".into(),
                     kind: 77,
+                    ..Default::default()
                 },
             ],
+            ..Default::default()
         }))
         .expect("guild info should map");
 
@@ -439,16 +492,110 @@ mod tests {
                     guild_id: 8,
                     name: "Allies".into(),
                     kind: GuildRelationKind::Ally,
+                    ..Default::default()
                 },
                 GuildRelationInfo {
                     guild_id: 9,
                     name: "Rivals".into(),
                     kind: GuildRelationKind::Antagonist,
+                    ..Default::default()
                 },
                 GuildRelationInfo {
                     guild_id: 10,
                     name: "Future".into(),
                     kind: GuildRelationKind::Unknown(77),
+                    ..Default::default()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn guild_info_maps_roster_facts_castles_relations_and_activity() {
+        let payload = guild_payload(Body::GuildInfo(net::GuildInfo {
+            guild_id: 7,
+            max_members: 22,
+            notice_author: "Astrid".into(),
+            notice_posted_at: 1_700_000_000,
+            castles: vec!["Kriemhild".into()],
+            positions: vec![net::GuildPosition {
+                index: 1,
+                can_notice: true,
+                can_relations: true,
+                ..Default::default()
+            }],
+            members: vec![net::GuildMember {
+                char_id: 43,
+                exp: u32::MAX as u64 + 5,
+                last_seen: 1_699_999_000,
+                ..Default::default()
+            }],
+            relations: vec![net::GuildRelation {
+                guild_id: 8,
+                name: "Ravens".into(),
+                level: 14,
+                member_count: 47,
+                master_name: "Hrafn".into(),
+                emblem_id: 2,
+                castles: vec!["Swanhild".into()],
+                ..Default::default()
+            }],
+            activity: vec![
+                net::GuildActivity {
+                    kind: net::GuildActivityKind::GuildActivitySkillLearned as i32,
+                    actor: "Astrid".into(),
+                    skill_id: 10_002,
+                    level: 3,
+                    at: 1_700_000_100,
+                    ..Default::default()
+                },
+                net::GuildActivity {
+                    kind: 99,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }))
+        .expect("guild info should map");
+
+        let GuildIngressPayload::Info(info) = payload else {
+            panic!("expected guild info payload");
+        };
+        assert_eq!(info.max_members, 22);
+        assert_eq!(info.notice_author, "Astrid");
+        assert_eq!(info.notice_posted_at, 1_700_000_000);
+        assert_eq!(info.castles, vec!["Kriemhild".to_string()]);
+        assert!(info.positions[0].can_notice);
+        assert!(info.positions[0].can_relations);
+        assert_eq!(info.members[0].exp, u32::MAX as u64 + 5);
+        assert_eq!(info.members[0].last_seen, 1_699_999_000);
+        assert_eq!(
+            info.relations,
+            vec![GuildRelationInfo {
+                guild_id: 8,
+                name: "Ravens".into(),
+                kind: GuildRelationKind::Ally,
+                level: 14,
+                member_count: 47,
+                master_name: "Hrafn".into(),
+                emblem_id: 2,
+                castles: vec!["Swanhild".into()],
+            }]
+        );
+        assert_eq!(
+            info.activity,
+            vec![
+                GuildActivityInfo {
+                    kind: GuildActivityKind::SkillLearned,
+                    actor: "Astrid".into(),
+                    skill_id: 10_002,
+                    level: 3,
+                    at: 1_700_000_100,
+                    ..Default::default()
+                },
+                GuildActivityInfo {
+                    kind: GuildActivityKind::Unknown(99),
+                    ..Default::default()
                 },
             ]
         );
@@ -474,11 +621,23 @@ mod tests {
                     guild_id: 7,
                     guild_name: "Vikings".into(),
                     inviter_name: "Odin".into(),
+                    inviter_char_id: 42,
+                    guild: Some(net::GuildInfo {
+                        guild_id: 7,
+                        level: 12,
+                        ..Default::default()
+                    }),
                 }),
                 GuildIngressPayload::InviteNotified(net_contract::dto::GuildInviteInfo {
                     guild_id: 7,
                     guild_name: "Vikings".into(),
                     inviter_name: "Odin".into(),
+                    inviter_char_id: 42,
+                    guild: GuildInfo {
+                        guild_id: 7,
+                        level: 12,
+                        ..Default::default()
+                    },
                 }),
             ),
             (
@@ -498,6 +657,7 @@ mod tests {
                         max_sp: 11,
                         ap: 12,
                         max_ap: 13,
+                        ..Default::default()
                     }),
                 }),
                 GuildIngressPayload::MemberUpdated {
@@ -516,6 +676,7 @@ mod tests {
                         max_sp: 11,
                         ap: 12,
                         max_ap: 13,
+                        ..Default::default()
                     },
                 },
             ),
@@ -565,6 +726,7 @@ mod tests {
                 guild_id: 0,
                 guild_name: "Invalid".into(),
                 inviter_name: "Odin".into(),
+                ..Default::default()
             }),
             Body::GuildInfo(net::GuildInfo {
                 guild_id: 0,
@@ -581,6 +743,7 @@ mod tests {
                 skill_points: 0,
                 skills: vec![],
                 relations: vec![],
+                ..Default::default()
             }),
             Body::GuildMemberUpdate(net::GuildMemberUpdate {
                 guild_id: 0,
@@ -598,6 +761,7 @@ mod tests {
                     max_sp: 1,
                     ap: 0,
                     max_ap: 0,
+                    ..Default::default()
                 }),
             }),
             Body::GuildEmblemChanged(net::GuildEmblemChanged {

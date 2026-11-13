@@ -3249,6 +3249,12 @@ pub struct GuildPositionEditRequest {
     /// Absent = leave the position's storage permission unchanged.
     #[prost(bool, optional, tag = "6")]
     pub can_storage: ::core::option::Option<bool>,
+    /// Absent = leave the position's notice permission unchanged.
+    #[prost(bool, optional, tag = "7")]
+    pub can_notice: ::core::option::Option<bool>,
+    /// Absent = leave the position's relations permission unchanged.
+    #[prost(bool, optional, tag = "8")]
+    pub can_relations: ::core::option::Option<bool>,
 }
 /// Client -> server, master-only request to assign a member to a position slot.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3293,7 +3299,7 @@ pub struct GuildActionResult {
     pub error: i32,
 }
 /// Server -> client, guild invite notification shown to the invitee.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GuildInviteNotify {
     #[prost(uint32, tag = "1")]
     pub guild_id: u32,
@@ -3301,9 +3307,14 @@ pub struct GuildInviteNotify {
     pub guild_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub inviter_name: ::prost::alloc::string::String,
+    /// Snapshot of the inviting guild, so the invitee sees what they would join.
+    #[prost(message, optional, tag = "4")]
+    pub guild: ::core::option::Option<GuildInfo>,
+    /// The inviter's character id, a member of `guild`.
+    #[prost(uint32, tag = "5")]
+    pub inviter_char_id: u32,
 }
-/// One position slot within a GuildInfo. `can_storage` gates guild storage access;
-/// `tax` is still inert.
+/// One position slot within a GuildInfo. `can_storage` gates guild storage access.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GuildPosition {
     #[prost(uint32, tag = "1")]
@@ -3318,6 +3329,13 @@ pub struct GuildPosition {
     pub can_storage: bool,
     #[prost(uint32, tag = "6")]
     pub tax: u32,
+    /// May edit the guild notice.
+    #[prost(bool, tag = "7")]
+    pub can_notice: bool,
+    /// May request and break alliances and declare or remove antagonists. An
+    /// alliance request is still answered by the target guild's master.
+    #[prost(bool, tag = "8")]
+    pub can_relations: bool,
 }
 /// One member entry within a GuildInfo snapshot.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3348,6 +3366,13 @@ pub struct GuildMember {
     pub ap: u32,
     #[prost(uint32, tag = "13")]
     pub max_ap: u32,
+    /// Base EXP this member has paid to the guild through the position tax.
+    #[prost(uint64, tag = "14")]
+    pub exp: u64,
+    /// Unix seconds of the member's last login, as rAthena's guild_member
+    /// last_login; 0 when unknown. Meaningful only while `online` is false.
+    #[prost(uint64, tag = "15")]
+    pub last_seen: u64,
 }
 /// Server -> client, full guild snapshot sent on any membership, position, or
 /// notice change. The emblem blob is not inlined; clients fetch it via
@@ -3387,6 +3412,44 @@ pub struct GuildInfo {
     /// This guild's ally and antagonist relations, sorted by guild id.
     #[prost(message, repeated, tag = "14")]
     pub relations: ::prost::alloc::vec::Vec<GuildRelation>,
+    /// Member capacity: 16 plus 6 per Guild Extension level.
+    #[prost(uint32, tag = "15")]
+    pub max_members: u32,
+    /// Name of the member who last edited the notice; empty when never edited.
+    #[prost(string, tag = "16")]
+    pub notice_author: ::prost::alloc::string::String,
+    /// Unix seconds of the last notice edit; 0 when never edited.
+    #[prost(uint64, tag = "17")]
+    pub notice_posted_at: u64,
+    /// Display names of the castles this guild holds, sorted by castle id.
+    #[prost(string, repeated, tag = "18")]
+    pub castles: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// The guild's most recent activity, newest first, capped server-side.
+    #[prost(message, repeated, tag = "19")]
+    pub activity: ::prost::alloc::vec::Vec<GuildActivity>,
+}
+/// One entry of a guild's activity log. Unused fields are left at their defaults;
+/// GuildActivityKind says which ones each kind fills.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GuildActivity {
+    #[prost(enumeration = "GuildActivityKind", tag = "1")]
+    pub kind: i32,
+    /// Who or what it happened to: a member, another guild or a castle, by name.
+    #[prost(string, tag = "2")]
+    pub subject: ::prost::alloc::string::String,
+    /// The member who did it, by name; empty when nobody did.
+    #[prost(string, tag = "3")]
+    pub actor: ::prost::alloc::string::String,
+    /// Free text the kind needs (the new position's name).
+    #[prost(string, tag = "4")]
+    pub detail: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "5")]
+    pub skill_id: u32,
+    #[prost(uint32, tag = "6")]
+    pub level: u32,
+    /// Unix seconds the entry was recorded.
+    #[prost(uint64, tag = "7")]
+    pub at: u64,
 }
 /// One learned (or learnable) guild skill in a GuildInfo snapshot.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3398,7 +3461,8 @@ pub struct GuildSkillEntry {
     #[prost(uint32, tag = "3")]
     pub max_level: u32,
 }
-/// One ally or antagonist entry within a GuildInfo snapshot.
+/// One ally or antagonist entry within a GuildInfo snapshot. Everything past
+/// `kind` describes the other guild as it is when the snapshot is built.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GuildRelation {
     #[prost(uint32, tag = "1")]
@@ -3407,6 +3471,18 @@ pub struct GuildRelation {
     pub name: ::prost::alloc::string::String,
     #[prost(enumeration = "GuildRelationKind", tag = "3")]
     pub kind: i32,
+    #[prost(uint32, tag = "4")]
+    pub level: u32,
+    #[prost(uint32, tag = "5")]
+    pub member_count: u32,
+    #[prost(string, tag = "6")]
+    pub master_name: ::prost::alloc::string::String,
+    /// The other guild's emblem version, for GuildEmblemRequest; 0 = no emblem.
+    #[prost(uint32, tag = "7")]
+    pub emblem_id: u32,
+    /// Display names of the castles the other guild holds, sorted by castle id.
+    #[prost(string, repeated, tag = "8")]
+    pub castles: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Client -> server, guild master spends one guild skill point on skill_id.
 /// Rejections come back as GuildActionResult.
@@ -5511,6 +5587,83 @@ impl GuildError {
             "GUILD_ERR_SIEGE_ACTIVE" => Some(Self::GuildErrSiegeActive),
             "GUILD_ERR_REQUEST_PENDING" => Some(Self::GuildErrRequestPending),
             "GUILD_ERR_ALLIANCE_DECLINED" => Some(Self::GuildErrAllianceDeclined),
+            _ => None,
+        }
+    }
+}
+/// What a GuildActivity entry records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum GuildActivityKind {
+    /// The guild was founded; `actor` is the founder.
+    GuildActivityCreated = 0,
+    /// `subject` joined; `actor` is the inviter.
+    GuildActivityJoined = 1,
+    /// `subject` left on their own.
+    GuildActivityLeft = 2,
+    /// `subject` was expelled by `actor`.
+    GuildActivityExpelled = 3,
+    /// `subject` was moved to the position named `detail` by `actor`.
+    GuildActivityPositionChanged = 4,
+    /// `actor` raised guild skill `skill_id` to `level`.
+    GuildActivitySkillLearned = 5,
+    /// The guild reached guild level `level`.
+    GuildActivityLevelUp = 6,
+    /// An alliance with the guild named `subject` was formed.
+    GuildActivityAllianceFormed = 7,
+    /// The alliance with the guild named `subject` ended.
+    GuildActivityAllianceBroken = 8,
+    /// The guild named `subject` was declared an antagonist.
+    GuildActivityAntagonistDeclared = 9,
+    /// The guild named `subject` is no longer an antagonist.
+    GuildActivityAntagonistRemoved = 10,
+    /// The guild took the castle named `subject`.
+    GuildActivityCastleTaken = 11,
+    /// The guild lost the castle named `subject`.
+    GuildActivityCastleLost = 12,
+}
+impl GuildActivityKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::GuildActivityCreated => "GUILD_ACTIVITY_CREATED",
+            Self::GuildActivityJoined => "GUILD_ACTIVITY_JOINED",
+            Self::GuildActivityLeft => "GUILD_ACTIVITY_LEFT",
+            Self::GuildActivityExpelled => "GUILD_ACTIVITY_EXPELLED",
+            Self::GuildActivityPositionChanged => "GUILD_ACTIVITY_POSITION_CHANGED",
+            Self::GuildActivitySkillLearned => "GUILD_ACTIVITY_SKILL_LEARNED",
+            Self::GuildActivityLevelUp => "GUILD_ACTIVITY_LEVEL_UP",
+            Self::GuildActivityAllianceFormed => "GUILD_ACTIVITY_ALLIANCE_FORMED",
+            Self::GuildActivityAllianceBroken => "GUILD_ACTIVITY_ALLIANCE_BROKEN",
+            Self::GuildActivityAntagonistDeclared => "GUILD_ACTIVITY_ANTAGONIST_DECLARED",
+            Self::GuildActivityAntagonistRemoved => "GUILD_ACTIVITY_ANTAGONIST_REMOVED",
+            Self::GuildActivityCastleTaken => "GUILD_ACTIVITY_CASTLE_TAKEN",
+            Self::GuildActivityCastleLost => "GUILD_ACTIVITY_CASTLE_LOST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "GUILD_ACTIVITY_CREATED" => Some(Self::GuildActivityCreated),
+            "GUILD_ACTIVITY_JOINED" => Some(Self::GuildActivityJoined),
+            "GUILD_ACTIVITY_LEFT" => Some(Self::GuildActivityLeft),
+            "GUILD_ACTIVITY_EXPELLED" => Some(Self::GuildActivityExpelled),
+            "GUILD_ACTIVITY_POSITION_CHANGED" => Some(Self::GuildActivityPositionChanged),
+            "GUILD_ACTIVITY_SKILL_LEARNED" => Some(Self::GuildActivitySkillLearned),
+            "GUILD_ACTIVITY_LEVEL_UP" => Some(Self::GuildActivityLevelUp),
+            "GUILD_ACTIVITY_ALLIANCE_FORMED" => Some(Self::GuildActivityAllianceFormed),
+            "GUILD_ACTIVITY_ALLIANCE_BROKEN" => Some(Self::GuildActivityAllianceBroken),
+            "GUILD_ACTIVITY_ANTAGONIST_DECLARED" => {
+                Some(Self::GuildActivityAntagonistDeclared)
+            }
+            "GUILD_ACTIVITY_ANTAGONIST_REMOVED" => {
+                Some(Self::GuildActivityAntagonistRemoved)
+            }
+            "GUILD_ACTIVITY_CASTLE_TAKEN" => Some(Self::GuildActivityCastleTaken),
+            "GUILD_ACTIVITY_CASTLE_LOST" => Some(Self::GuildActivityCastleLost),
             _ => None,
         }
     }

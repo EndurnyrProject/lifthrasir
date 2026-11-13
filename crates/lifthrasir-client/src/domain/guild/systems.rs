@@ -123,6 +123,7 @@ mod tests {
             max_sp: 50,
             ap: 0,
             max_ap: 0,
+            ..Default::default()
         }
     }
 
@@ -141,6 +142,7 @@ mod tests {
                 can_expel: true,
                 can_storage: false,
                 tax: 0,
+                ..Default::default()
             }],
             members: vec![member],
             level: 1,
@@ -149,6 +151,7 @@ mod tests {
             skill_points: 0,
             skills: vec![],
             relations: vec![],
+            ..Default::default()
         }
     }
 
@@ -204,6 +207,7 @@ mod tests {
             guild_id: 8,
             name: "Allies".into(),
             kind: GuildRelationKind::Ally,
+            ..Default::default()
         }];
         ingress(&mut app, 1, GuildIngressPayload::Info(expected.clone()));
         app.update();
@@ -254,6 +258,7 @@ mod tests {
             guild_id: 9,
             name: "Stale allies".into(),
             kind: GuildRelationKind::Ally,
+            ..Default::default()
         }];
         ingress(&mut app, 1, GuildIngressPayload::Info(stale));
         app.update();

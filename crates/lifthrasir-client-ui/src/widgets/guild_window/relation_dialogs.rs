@@ -148,7 +148,7 @@ fn interaction_is_valid(
         && guild
             .info()
             .is_some_and(|info| info.guild_id == own_guild_id)
-        && guild.is_master(session.char_id)
+        && guild.can_relations(session.char_id)
 }
 
 pub(crate) fn reset_invalid_relation_dialogs(
@@ -540,7 +540,9 @@ mod tests {
                 guild_id: 8,
                 name: "Aesir".into(),
                 kind: GuildRelationKind::Ally,
+                ..Default::default()
             }],
+            ..Default::default()
         }
     }
 

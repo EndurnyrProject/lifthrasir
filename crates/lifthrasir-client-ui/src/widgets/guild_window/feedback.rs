@@ -117,11 +117,13 @@ pub(super) fn guild_error_text(error: GuildErrorKind) -> &'static str {
 pub(super) fn guild_action_error_text(action: &str, error: GuildErrorKind) -> &'static str {
     match (action, error) {
         (_, GuildErrorKind::None) => "Guild action failed",
+        ("skill_up" | "alliance_response", GuildErrorKind::NoPermission) => {
+            "Only the guild master can do that"
+        }
         (
-            "skill_up" | "alliance_request" | "alliance_response" | "alliance_break" | "antagonist"
-            | "antagonist_remove",
+            "alliance_request" | "alliance_break" | "antagonist" | "antagonist_remove",
             GuildErrorKind::NoPermission,
-        ) => "Only the guild master can do that",
+        ) => "Your position can\u{2019}t manage guild relations",
         (
             "alliance_request" | "alliance_response" | "alliance_break",
             GuildErrorKind::SiegeActive,
@@ -241,6 +243,7 @@ mod tests {
                 can_expel: true,
                 can_storage: true,
                 tax: 0,
+                ..Default::default()
             }],
             members: vec![GuildMemberInfo {
                 char_id: 42,
@@ -256,6 +259,7 @@ mod tests {
                 max_sp: 50,
                 ap: 0,
                 max_ap: 0,
+                ..Default::default()
             }],
             level: 1,
             exp: 0,
@@ -263,6 +267,7 @@ mod tests {
             skill_points: 0,
             skills: vec![],
             relations: vec![],
+            ..Default::default()
         }
     }
 

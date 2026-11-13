@@ -87,6 +87,7 @@ mod tests {
                 guild_id: 7,
                 guild_name: "Vikings".into(),
                 inviter_name: "Odin".into(),
+                ..Default::default()
             }),
             Body::GuildInfo(crate::proto::aesir::net::GuildInfo {
                 guild_id: 7,
@@ -103,6 +104,7 @@ mod tests {
                 skill_points: 0,
                 skills: vec![],
                 relations: vec![],
+                ..Default::default()
             }),
             Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                 guild_id: 7,
@@ -120,6 +122,7 @@ mod tests {
                     max_sp: 11,
                     ap: 12,
                     max_ap: 13,
+                    ..Default::default()
                 }),
             }),
             Body::GuildEmblemChanged(crate::proto::aesir::net::GuildEmblemChanged {
@@ -168,6 +171,7 @@ mod tests {
                 guild_id: 7,
                 guild_name: "Vikings".into(),
                 inviter_name: "Odin".into(),
+                ..Default::default()
             })
         );
         assert!(matches!(events[2].payload, GuildIngressPayload::Info(_)));
@@ -325,6 +329,7 @@ mod tests {
                     guild_id: 7,
                     guild_name: "Character A".into(),
                     inviter_name: "Odin".into(),
+                    ..Default::default()
                 }),
             });
         app.update();
@@ -345,6 +350,7 @@ mod tests {
                     guild_id: 8,
                     guild_name: "Character A stale".into(),
                     inviter_name: "Odin".into(),
+                    ..Default::default()
                 }),
             });
         app.update();
@@ -364,6 +370,7 @@ mod tests {
                     guild_id: 9,
                     guild_name: "Character B".into(),
                     inviter_name: "Freya".into(),
+                    ..Default::default()
                 }),
             });
         app.update();
@@ -392,6 +399,7 @@ mod tests {
                 guild_id: 0,
                 guild_name: "Invalid".into(),
                 inviter_name: "Odin".into(),
+                ..Default::default()
             }),
             Body::GuildInfo(crate::proto::aesir::net::GuildInfo {
                 guild_id: 0,
@@ -408,6 +416,7 @@ mod tests {
                 skill_points: 0,
                 skills: vec![],
                 relations: vec![],
+                ..Default::default()
             }),
             Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                 guild_id: 0,
@@ -425,6 +434,7 @@ mod tests {
                     max_sp: 1,
                     ap: 0,
                     max_ap: 0,
+                    ..Default::default()
                 }),
             }),
             Body::GuildEmblemChanged(crate::proto::aesir::net::GuildEmblemChanged {

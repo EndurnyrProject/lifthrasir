@@ -203,6 +203,12 @@ impl ChatUi {
         self.jump = true;
     }
 
+    /// Aims the input at a whisper to `name`, for the windows that list heroes.
+    pub(crate) fn aim_whisper(&mut self, name: &str) {
+        self.target = Scope::Whisper(name.to_string());
+        self.menu_open = false;
+    }
+
     fn close_whisper(&mut self, name: &str) {
         let scope = Scope::Whisper(name.to_string());
         self.whispers.retain(|whisper| whisper != name);

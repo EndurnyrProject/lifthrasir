@@ -4,6 +4,7 @@
 use bevy::color::{Luminance, Mix};
 use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
+use bevy::scene::EntityScene;
 use bevy::text::{
     EditableText, EditableTextFilter, FontSize, FontSourceTemplate, LetterSpacing, TextEdit,
 };
@@ -13,7 +14,7 @@ use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::placeholder::Placeholder;
 use lifthrasir_ui::widgets::primitives::{
-    BUTTON_SHADOW, ButtonArt, INPUT_SHADOW, button, button_with, input_frame,
+    BUTTON_SHADOW, ButtonArt, INPUT_SHADOW, PRIMITIVES_DIR, button, button_with, input_frame,
 };
 
 /// Art tint of a button that cannot be used.
@@ -108,7 +109,7 @@ pub fn small_button(icon: &'static str, size: f32) -> impl Scene {
 
 /// A 24px-high art button `width` px wide, for list rows and inline prompts. It is
 /// laid out by its shape like [`flush_button`].
-pub fn row_button(art: ButtonArt, label: &'static str, width: f32) -> impl Scene {
+pub fn row_button(art: ButtonArt, label: impl Into<String>, width: f32) -> impl Scene {
     bsn! {
         @button_with(art, chrome_text(label.into(), 11.0, ro_dark::BUTTON_LABEL))
         Node {
@@ -220,14 +221,22 @@ pub const QTY_DIGITS: usize = 5;
 /// A bordered field for a number of at most `digits` digits, starting at `value`. The
 /// caller adds its marker, width and text alignment.
 pub fn number_field(value: String, digits: usize) -> impl Scene {
+    bsn! {
+        @text_field(value, digits)
+        EditableTextFilter::new(|c| c.is_ascii_digit())
+    }
+}
+
+/// A bordered one-line field of at most `max_chars` characters, starting at `value`.
+/// The caller adds its marker and width; [`light_field_focus`] rings it on focus.
+pub fn text_field(value: String, max_chars: usize) -> impl Scene {
     let field = EditableText {
-        max_characters: Some(digits),
+        max_characters: Some(max_chars),
         ..EditableText::new(value)
     };
     bsn! {
         field
         TextInput
-        EditableTextFilter::new(|c| c.is_ascii_digit())
         TextFont {
             font: FontSourceTemplate::Handle(theme::FONT_BODY),
             font_size: {FontSize::Px(13.0)},
@@ -587,6 +596,141 @@ pub fn slate_lines(lines: Vec<Vec<(Color, String)>>) -> impl Scene {
         })
         .collect();
     colored_lines(lines)
+}
+
+/// An inviter's job, then what else is known about them, on one line.
+pub fn about_line(job: Option<String>, about: String) -> Option<EntityScene<impl Scene>> {
+    let mut runs = Vec::new();
+    if let Some(job) = job {
+        runs.push((ro_dark::BRONZE_LIGHT, job));
+    }
+    if !about.is_empty() {
+        let lead = if runs.is_empty() { "" } else { " \u{b7} " };
+        runs.push((ro_dark::MUTED, format!("{lead}{about}")));
+    }
+    (!runs.is_empty()).then(|| EntityScene(colored_lines(vec![runs])))
+}
+
+/// Which part of an invitation's countdown a node shows.
+#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InviteClock {
+    #[default]
+    Bar,
+    Label,
+}
+
+/// The nodes of an [`invite_clock`], as [`tick_invite_clock`] writes them.
+pub type InviteClockNode<'a> = (
+    &'a InviteClock,
+    &'a mut Node,
+    Option<&'a mut BackgroundColor>,
+    Option<&'a mut Text>,
+    Option<&'a mut TextColor>,
+);
+
+/// The countdown turns red for its last seconds.
+const INVITE_LOW_SECS: f32 = 5.0;
+
+/// An invitation's countdown: a draining bar and the seconds left. `F` marks both so
+/// the owner's system drives only its own clock through [`tick_invite_clock`].
+pub fn invite_clock<F>() -> impl Scene
+where
+    F: Component + Default + Clone + Unpin,
+{
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(10) }
+        @ignore_picking()
+        Children [
+            Node {
+                flex_grow: 1.0,
+                height: px(10),
+                padding: px(1),
+                border: px(1),
+                border_radius: BorderRadius::all(px(5)),
+            }
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::BAR_FRAME)
+            @ignore_picking()
+            Children [
+                F::default()
+                InviteClock::Bar
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor(ro_dark::SP)
+                @ignore_picking()
+            ]
+            --
+            Node { width: px(96), flex_shrink: 0.0, justify_content: JustifyContent::FlexEnd }
+            @ignore_picking()
+            Children [
+                F::default()
+                InviteClock::Label
+                @chrome_text(String::new(), 11.0, ro_dark::MUTED)
+            ]
+        ]
+    }
+}
+
+/// Drains the bar of the `F` [`invite_clock`] to what `timer` has left and counts the
+/// seconds down beside it.
+pub fn tick_invite_clock<F: Component>(
+    timer: &Timer,
+    clocks: &mut Query<InviteClockNode, With<F>>,
+) {
+    let left = timer.remaining_secs();
+    let low = left <= INVITE_LOW_SECS;
+    for (clock, mut node, fill, text, color) in clocks {
+        match clock {
+            InviteClock::Bar => {
+                node.width = Val::Percent(timer.fraction_remaining() * 100.0);
+                let tone = if low { ro_dark::HP } else { ro_dark::SP };
+                if let Some(mut fill) = fill
+                    && fill.0 != tone
+                {
+                    fill.0 = tone;
+                }
+            }
+            InviteClock::Label => {
+                let label = format!("Expires in {} s", left.ceil() as u32);
+                if let Some(mut text) = text
+                    && text.0 != label
+                {
+                    text.0 = label;
+                }
+                let tone = if low {
+                    ro_dark::STATUS_FULL
+                } else {
+                    ro_dark::MUTED
+                };
+                if let Some(mut color) = color
+                    && color.0 != tone
+                {
+                    color.0 = tone;
+                }
+            }
+        }
+    }
+}
+
+/// A checkbox that cannot be ticked yet, with its `label` greyed out.
+pub fn disabled_checkbox(label: &'static str) -> impl Scene {
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(4) }
+        @ignore_picking()
+        Children [
+            ImageNode {
+                image: {format!("{PRIMITIVES_DIR}control/checkbox_off.png")},
+                color: DISABLED_TINT,
+            }
+            Node { width: px(34), height: px(34) }
+            @ignore_picking()
+            --
+            @chrome_text(label.into(), 12.0, ro_dark::DISABLED_LABEL)
+        ]
+    }
 }
 
 /// RO colour codes were authored for a white window, so dark hues are mixed towards

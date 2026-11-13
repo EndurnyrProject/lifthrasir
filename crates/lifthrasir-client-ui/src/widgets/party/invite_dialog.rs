@@ -15,20 +15,23 @@ use lifthrasir_client::domain::guild::GuildState;
 use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{
-    ButtonArt, PRIMITIVES_DIR, WINDOW_SHADOW, diamond, inset, window_title, window_titled,
+    ButtonArt, WINDOW_SHADOW, diamond, inset, window_title, window_titled,
 };
 use net_contract::events::PartyInviteNotified;
 
 use super::view::{self, InviteMember, InviteView};
 use super::{PartyAction, PartyData, PartyHost, on_party_button};
-use crate::screens::shared::{DISABLED_TINT, colored_lines, overline, wide_button};
+#[cfg(test)]
+use crate::screens::shared::InviteClock;
+use crate::screens::shared::{
+    InviteClockNode, about_line, colored_lines, disabled_checkbox, invite_clock, overline,
+    tick_invite_clock, wide_button,
+};
 use crate::widgets::system_dialog;
 
 /// The server declines for the invitee after this; the client mirrors it so a dead
 /// invitation never lingers.
 const INVITE_TTL_SECS: f32 = 30.0;
-/// The countdown turns red for its last seconds.
-const LOW_SECS: f32 = 5.0;
 /// Under the death and system dialogs, so a disconnect notice stays on top.
 const DIALOG_Z: i32 = i32::MAX - 4;
 
@@ -70,14 +73,6 @@ impl PendingPartyInvite {
     }
 }
 
-/// Which part of the countdown a node shows.
-#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InviteClock {
-    #[default]
-    Bar,
-    Label,
-}
-
 /// Records the latest invitation. The server keeps one live invitation per player, so
 /// a newer one replaces whatever was pending.
 pub fn receive_invite(
@@ -110,52 +105,22 @@ pub fn expire_pending_invite(time: Res<Time>, mut pending: ResMut<PendingPartyIn
     }
 }
 
-type ClockNode<'a> = (
-    &'a InviteClock,
-    &'a mut Node,
-    Option<&'a mut BackgroundColor>,
-    Option<&'a mut Text>,
-    Option<&'a mut TextColor>,
-);
+/// Marks the party invitation's countdown, apart from any other invitation on screen.
+#[derive(Component, Default, Clone)]
+pub struct PartyClock;
 
 /// Drains the countdown bar and counts the seconds down beside it.
-pub fn sync_invite_clock(pending: Res<PendingPartyInvite>, mut clocks: Query<ClockNode>) {
-    if !pending.is_pending() {
-        return;
+pub fn sync_invite_clock(
+    pending: Res<PendingPartyInvite>,
+    mut clocks: Query<InviteClockNode, With<PartyClock>>,
+) {
+    if pending.is_pending() {
+        tick_invite_clock(&pending.timer, &mut clocks);
     }
-    let left = pending.timer.remaining_secs();
-    let low = left <= LOW_SECS;
-    for (clock, mut node, fill, text, color) in &mut clocks {
-        match clock {
-            InviteClock::Bar => {
-                node.width = Val::Percent(pending.timer.fraction_remaining() * 100.0);
-                let tone = if low { ro_dark::HP } else { ro_dark::SP };
-                if let Some(mut fill) = fill
-                    && fill.0 != tone
-                {
-                    fill.0 = tone;
-                }
-            }
-            InviteClock::Label => {
-                let label = format!("Expires in {} s", left.ceil() as u32);
-                if let Some(mut text) = text
-                    && text.0 != label
-                {
-                    text.0 = label;
-                }
-                let tone = if low {
-                    ro_dark::STATUS_FULL
-                } else {
-                    ro_dark::MUTED
-                };
-                if let Some(mut color) = color
-                    && color.0 != tone
-                {
-                    color.0 = tone;
-                }
-            }
-        }
-    }
+}
+
+fn clock() -> impl Scene {
+    invite_clock::<PartyClock>()
 }
 
 /// The screen-wide region the dialog is centred in. It lets every click through.
@@ -270,19 +235,6 @@ fn run(text: String, font: &'static str, color: Color) -> impl Scene {
     }
 }
 
-/// The inviter's job, then what else is known about them.
-fn about_line(job: Option<String>, about: String) -> Option<EntityScene<impl Scene>> {
-    let mut runs = Vec::new();
-    if let Some(job) = job {
-        runs.push((ro_dark::BRONZE_LIGHT, job));
-    }
-    if !about.is_empty() {
-        let lead = if runs.is_empty() { "" } else { " \u{b7} " };
-        runs.push((ro_dark::MUTED, format!("{lead}{about}")));
-    }
-    (!runs.is_empty()).then(|| EntityScene(colored_lines(vec![runs])))
-}
-
 fn roster(count: String, members: Vec<InviteMember>) -> impl Scene {
     let rows: Vec<_> = members.into_iter().map(roster_row).collect();
     bsn! {
@@ -390,64 +342,10 @@ fn gap_warning((headline, consequence): (String, String)) -> impl Scene {
     }
 }
 
-/// The countdown: a draining bar and the seconds left. [`sync_invite_clock`] drives both.
-fn clock() -> impl Scene {
-    bsn! {
-        Node { align_items: AlignItems::Center, column_gap: px(10) }
-        @ignore_picking()
-        Children [
-            Node {
-                flex_grow: 1.0,
-                height: px(10),
-                padding: px(1),
-                border: px(1),
-                border_radius: BorderRadius::all(px(5)),
-            }
-            BackgroundColor(ro_dark::BAR_TROUGH)
-            BorderColor::all(ro_dark::BAR_FRAME)
-            @ignore_picking()
-            Children [
-                InviteClock::Bar
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    border_radius: BorderRadius::all(px(3)),
-                }
-                BackgroundColor(ro_dark::SP)
-                @ignore_picking()
-            ]
-            --
-            Node { width: px(96), flex_shrink: 0.0, justify_content: JustifyContent::FlexEnd }
-            @ignore_picking()
-            Children [
-                InviteClock::Label
-                @chrome_text(String::new(), 11.0, ro_dark::MUTED)
-            ]
-        ]
-    }
-}
-
 /// NOTE: drawn disabled, because the client has no friends list and the server no such
 /// filter. Make it an `ArtCheckbox` once invitations can be filtered.
 fn friends_only() -> impl Scene {
-    bsn! {
-        Node { align_items: AlignItems::Center, column_gap: px(4) }
-        @ignore_picking()
-        Children [
-            ImageNode {
-                image: {format!("{PRIMITIVES_DIR}control/checkbox_off.png")},
-                color: DISABLED_TINT,
-            }
-            Node { width: px(34), height: px(34) }
-            @ignore_picking()
-            --
-            @chrome_text(
-                "Only accept party invites from friends and guild mates".into(),
-                12.0,
-                ro_dark::DISABLED_LABEL,
-            )
-        ]
-    }
+    disabled_checkbox("Only accept party invites from friends and guild mates")
 }
 
 #[cfg(test)]

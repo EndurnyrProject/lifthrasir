@@ -447,6 +447,10 @@ pub struct GuildPositionEditRequested {
     pub can_expel: bool,
     pub tax: Option<u32>,
     pub can_storage: Option<bool>,
+    /// `None` leaves the position's notice permission unchanged.
+    pub can_notice: Option<bool>,
+    /// `None` leaves the position's relations permission unchanged.
+    pub can_relations: Option<bool>,
 }
 
 /// Request to spend one guild skill point on `skill_id`.

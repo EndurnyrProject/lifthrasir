@@ -1,6 +1,5 @@
 use crate::widgets::guild_window::{
-    GuildHeaderEmblemFallback, GuildHeaderEmblemImage, GuildUi, GuildUiSession, GuildWindowRoot,
-    PendingGuildMutation,
+    EmblemSlot, GuildUi, GuildUiSession, GuildWindowRoot, PendingGuildMutation,
 };
 use bevy::{
     prelude::*,
@@ -73,14 +72,14 @@ fn completed_picker_bytes(
     Ok(Some(data))
 }
 
-pub(crate) fn on_select_emblem(
-    _: On<bevy::ui_widgets::Activate>,
-    guild: Res<GuildState>,
-    session: Res<net_contract::state::ZoneSession>,
-    generation: Res<ZoneSessionGeneration>,
-    mut images: ResMut<GuildEmblemPreview>,
+/// Opens the file picker for a new emblem; [`poll_picker`] uploads what it returns.
+pub(crate) fn pick_emblem(
+    guild: &GuildState,
+    session: &net_contract::state::ZoneSession,
+    generation: ZoneSessionGeneration,
+    images: &mut GuildEmblemPreview,
 ) {
-    if !can_upload_emblem(&guild, &session) || images.picker.is_some() {
+    if !can_upload_emblem(guild, session) || images.picker.is_some() {
         return;
     }
     let form_generation = images.form_generation;
@@ -92,7 +91,7 @@ pub(crate) fn on_select_emblem(
         Some(file.read().await)
     });
     images.picker = Some(PickerTask {
-        generation: *generation,
+        generation,
         form_generation,
         task,
     });
@@ -164,39 +163,41 @@ pub(crate) fn queue_current_guild_emblem(
     images.request(key);
 }
 
-pub(crate) fn sync_header_emblem(
+/// Fills every [`EmblemSlot`] on show with its guild's emblem, fetching the ones not
+/// cached yet. A slot stays hidden, showing the plate behind it, until its image is
+/// in. The player's own guild shows the emblem being uploaded while one is.
+pub(crate) fn sync_emblems(
     guild: Res<GuildState>,
-    images: Res<GuildEmblemImages>,
+    mut images: ResMut<GuildEmblemImages>,
     preview: Res<GuildEmblemPreview>,
-    mut header: Query<(&mut ImageNode, &mut Visibility), With<GuildHeaderEmblemImage>>,
-    mut fallback: Query<
-        &mut Visibility,
-        (
-            With<GuildHeaderEmblemFallback>,
-            Without<GuildHeaderEmblemImage>,
-        ),
-    >,
+    mut slots: Query<(&EmblemSlot, &mut ImageNode, &mut Visibility)>,
 ) {
-    let Ok((mut image, mut visibility)) = header.single_mut() else {
-        return;
-    };
-    let Ok(mut fallback) = fallback.single_mut() else {
-        return;
-    };
-    let handle = preview.preview.clone().or_else(|| {
-        guild
-            .info()
-            .and_then(|info| EmblemKey::new(info.guild_id, info.emblem_id))
-            .and_then(|key| images.cached(key))
-    });
-    let Some(handle) = handle else {
-        *visibility = Visibility::Hidden;
-        *fallback = Visibility::Inherited;
-        return;
-    };
-    image.image = handle;
-    *visibility = Visibility::Inherited;
-    *fallback = Visibility::Hidden;
+    let own = guild.info().map(|info| info.guild_id);
+    for (slot, mut image, mut visibility) in &mut slots {
+        let key = EmblemKey::new(slot.guild_id, slot.emblem_id);
+        let uploading = preview
+            .preview
+            .clone()
+            .filter(|_| own == Some(slot.guild_id));
+        let handle = uploading.or_else(|| key.and_then(|key| images.cached(key)));
+        let shown = match handle {
+            Some(handle) => {
+                if image.image != handle {
+                    image.image = handle;
+                }
+                Visibility::Inherited
+            }
+            None => {
+                if let Some(key) = key {
+                    images.request(key);
+                }
+                Visibility::Hidden
+            }
+        };
+        if *visibility != shown {
+            *visibility = shown;
+        }
+    }
 }
 
 pub(crate) fn invalidate_picker_when_hidden(
@@ -364,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn rejected_upload_discards_preview_and_restores_header_fallback() {
+    fn rejected_upload_discards_preview_and_hides_the_emblem_slot() {
         let generation = ZoneSessionGeneration(7);
         let mut app = App::new();
         app.add_message::<GuildIngress>()
@@ -386,15 +387,13 @@ mod tests {
         };
         app.world_mut().resource_mut::<GuildEmblemPreview>().preview = Some(preview.clone());
         app.world_mut().spawn((
-            GuildHeaderEmblemImage,
+            EmblemSlot::default(),
             ImageNode::default(),
             Visibility::Inherited,
         ));
-        app.world_mut()
-            .spawn((GuildHeaderEmblemFallback, Visibility::Hidden));
         app.add_systems(
             Update,
-            (super::super::apply_guild_results, sync_header_emblem).chain(),
+            (super::super::feedback::apply_guild_results, sync_emblems).chain(),
         );
         app.world_mut().write_message(GuildIngress {
             generation,
@@ -422,17 +421,10 @@ mod tests {
         let world = app.world_mut();
         assert_eq!(
             *world
-                .query_filtered::<&Visibility, With<GuildHeaderEmblemImage>>()
+                .query_filtered::<&Visibility, With<EmblemSlot>>()
                 .single(world)
                 .unwrap(),
             Visibility::Hidden
-        );
-        assert_eq!(
-            *world
-                .query_filtered::<&Visibility, With<GuildHeaderEmblemFallback>>()
-                .single(world)
-                .unwrap(),
-            Visibility::Inherited
         );
     }
 

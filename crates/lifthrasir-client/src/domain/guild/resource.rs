@@ -39,16 +39,31 @@ impl GuildState {
             .find(|position| position.index == index)
     }
 
+    /// The position `char_id` holds, when they are a member.
+    pub fn position_of(&self, char_id: u32) -> Option<&GuildPositionInfo> {
+        self.position(self.member(char_id)?.position_index)
+    }
+
+    /// Whether `char_id` may do what `flag` gates. The master always may, as on
+    /// the server; everyone else needs the flag on their position.
+    fn permits(&self, char_id: u32, flag: fn(&GuildPositionInfo) -> bool) -> bool {
+        self.is_master(char_id) || self.position_of(char_id).is_some_and(flag)
+    }
+
     pub fn can_invite(&self, char_id: u32) -> bool {
-        self.member(char_id)
-            .and_then(|member| self.position(member.position_index))
-            .is_some_and(|position| position.can_invite)
+        self.permits(char_id, |position| position.can_invite)
     }
 
     pub fn can_expel(&self, char_id: u32) -> bool {
-        self.member(char_id)
-            .and_then(|member| self.position(member.position_index))
-            .is_some_and(|position| position.can_expel)
+        self.permits(char_id, |position| position.can_expel)
+    }
+
+    pub fn can_notice(&self, char_id: u32) -> bool {
+        self.permits(char_id, |position| position.can_notice)
+    }
+
+    pub fn can_relations(&self, char_id: u32) -> bool {
+        self.permits(char_id, |position| position.can_relations)
     }
 
     pub(crate) fn replace(&mut self, info: GuildInfo) {
@@ -105,6 +120,7 @@ mod tests {
                     can_expel: true,
                     can_storage: false,
                     tax: 0,
+                    ..Default::default()
                 },
                 GuildPositionInfo {
                     index: 1,
@@ -113,6 +129,14 @@ mod tests {
                     can_expel: false,
                     can_storage: false,
                     tax: 0,
+                    ..Default::default()
+                },
+                GuildPositionInfo {
+                    index: 2,
+                    name: "Scribe".into(),
+                    can_notice: true,
+                    can_relations: true,
+                    ..Default::default()
                 },
             ],
             members: vec![
@@ -130,6 +154,13 @@ mod tests {
                     max_sp: 50,
                     ap: 0,
                     max_ap: 0,
+                    ..Default::default()
+                },
+                GuildMemberInfo {
+                    char_id: 44,
+                    name: "Bragi".into(),
+                    position_index: 2,
+                    ..Default::default()
                 },
                 GuildMemberInfo {
                     char_id: 43,
@@ -145,6 +176,7 @@ mod tests {
                     max_sp: 50,
                     ap: 0,
                     max_ap: 0,
+                    ..Default::default()
                 },
             ],
             level: 1,
@@ -153,6 +185,7 @@ mod tests {
             skill_points: 0,
             skills: vec![],
             relations: vec![],
+            ..Default::default()
         }
     }
 
@@ -172,6 +205,7 @@ mod tests {
             guild_id: 8,
             name: "Allies".into(),
             kind: GuildRelationKind::Ally,
+            ..Default::default()
         }];
         let mut state = GuildState::default();
 
@@ -210,5 +244,20 @@ mod tests {
         assert!(!state.can_expel(43));
         assert!(!state.can_invite(999));
         assert!(!state.can_expel(999));
+    }
+
+    #[test]
+    fn notice_and_relations_follow_the_position_and_the_master_always_may() {
+        let mut state = GuildState::default();
+        state.replace(info());
+
+        // The master's own position carries neither flag.
+        assert!(state.can_notice(42));
+        assert!(state.can_relations(42));
+        assert!(state.can_notice(44));
+        assert!(state.can_relations(44));
+        assert!(!state.can_notice(43));
+        assert!(!state.can_relations(43));
+        assert!(!state.can_notice(999));
     }
 }

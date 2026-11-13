@@ -1,7 +1,7 @@
 //! Protocol-neutral guild types.
 
 /// Complete authoritative guild snapshot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GuildInfo {
     pub guild_id: u32,
     pub name: String,
@@ -17,29 +17,97 @@ pub struct GuildInfo {
     pub skill_points: u32,
     pub skills: Vec<GuildSkillInfo>,
     pub relations: Vec<GuildRelationInfo>,
+    /// Member capacity.
+    pub max_members: u32,
+    /// Name of the member who last edited the notice; empty when never edited.
+    pub notice_author: String,
+    /// Unix seconds of the last notice edit; `0` when never edited.
+    pub notice_posted_at: u64,
+    /// Display names of the castles the guild holds.
+    pub castles: Vec<String>,
+    /// Most recent activity, newest first.
+    pub activity: Vec<GuildActivityInfo>,
 }
 
 /// One learned or learnable guild skill.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GuildSkillInfo {
     pub skill_id: u32,
     pub level: u32,
     pub max_level: u32,
 }
 
-/// One authoritative guild relation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One authoritative guild relation. Everything past `kind` describes the
+/// other guild as it was when the snapshot was built.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GuildRelationInfo {
     pub guild_id: u32,
     pub name: String,
     pub kind: GuildRelationKind,
+    pub level: u32,
+    pub member_count: u32,
+    pub master_name: String,
+    /// The other guild's emblem version; `0` means it has no emblem.
+    pub emblem_id: u32,
+    pub castles: Vec<String>,
 }
 
 /// Protocol-neutral guild relation kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum GuildRelationKind {
+    #[default]
     Ally,
     Antagonist,
+    Unknown(i32),
+}
+
+/// One entry of a guild's activity log. Each kind fills only the fields it
+/// documents; the rest stay at their defaults.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GuildActivityInfo {
+    pub kind: GuildActivityKind,
+    /// Who or what it happened to: a member, another guild or a castle.
+    pub subject: String,
+    /// The member who did it; empty when nobody did.
+    pub actor: String,
+    /// Free text the kind needs (the new position's name).
+    pub detail: String,
+    pub skill_id: u32,
+    pub level: u32,
+    /// Unix seconds the entry was recorded.
+    pub at: u64,
+}
+
+/// What a [`GuildActivityInfo`] records.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GuildActivityKind {
+    /// The guild was founded by `actor`.
+    #[default]
+    Created,
+    /// `subject` joined, invited by `actor`.
+    Joined,
+    /// `subject` left on their own.
+    Left,
+    /// `subject` was expelled by `actor`.
+    Expelled,
+    /// `subject` was moved to the position named `detail`.
+    PositionChanged,
+    /// `actor` raised guild skill `skill_id` to `level`.
+    SkillLearned,
+    /// The guild reached guild level `level`.
+    LevelUp,
+    /// An alliance with the guild `subject` was formed.
+    AllianceFormed,
+    /// The alliance with the guild `subject` ended.
+    AllianceBroken,
+    /// The guild `subject` was declared an antagonist.
+    AntagonistDeclared,
+    /// The guild `subject` is no longer an antagonist.
+    AntagonistRemoved,
+    /// The guild took the castle `subject`.
+    CastleTaken,
+    /// The guild lost the castle `subject`.
+    CastleLost,
     Unknown(i32),
 }
 
@@ -52,7 +120,7 @@ pub struct GuildAllianceInviteInfo {
 }
 
 /// One fixed guild position slot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GuildPositionInfo {
     pub index: u32,
     pub name: String,
@@ -60,10 +128,14 @@ pub struct GuildPositionInfo {
     pub can_expel: bool,
     pub can_storage: bool,
     pub tax: u32,
+    /// May edit the guild notice.
+    pub can_notice: bool,
+    /// May manage alliances and antagonists.
+    pub can_relations: bool,
 }
 
 /// One complete guild roster entry.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GuildMemberInfo {
     pub char_id: u32,
     pub name: String,
@@ -78,14 +150,23 @@ pub struct GuildMemberInfo {
     pub max_sp: u64,
     pub ap: u32,
     pub max_ap: u32,
+    /// Base EXP this member has paid to the guild through the position tax.
+    pub exp: u64,
+    /// Unix seconds of the member's last login; `0` when unknown. Meaningful
+    /// only while `online` is false.
+    pub last_seen: u64,
 }
 
-/// An incoming guild invitation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// An incoming guild invitation, with the guild as its members see it so the
+/// invitee can judge it before answering.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GuildInviteInfo {
     pub guild_id: u32,
     pub guild_name: String,
     pub inviter_name: String,
+    /// One of `guild.members`.
+    pub inviter_char_id: u32,
+    pub guild: GuildInfo,
 }
 
 /// Result of an outbound guild action.
