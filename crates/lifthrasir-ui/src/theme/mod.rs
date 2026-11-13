@@ -38,6 +38,8 @@ pub const RARITY_MAGIC: Color = Color::srgb_u8(0x6f, 0xc4, 0xec);
 
 pub const FONT_TITLE: &str = "ro://fonts/cinzel.ttf";
 pub const FONT_BODY: &str = "ro://fonts/manrope.ttf";
+/// Spectral Medium: the serif that text written on parchment is set in.
+pub const FONT_PROSE: &str = "ro://fonts/spectral-medium.ttf";
 
 /// Asset directory for the SVG glyph icons extracted from the Endurnir mockups.
 pub const ICON_DIR: &str = "ro://ui/icons/";

@@ -121,6 +121,24 @@ pub fn row_button(art: ButtonArt, label: &'static str, width: f32) -> impl Scene
     }
 }
 
+/// The key that also triggers a button, drawn beside its label.
+pub fn key_cap(key: &'static str) -> impl Scene {
+    bsn! {
+        Node {
+            min_width: px(16),
+            height: px(16),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            padding: {UiRect::horizontal(px(4))},
+            border_radius: BorderRadius::all(px(3)),
+        }
+        BackgroundColor({Color::BLACK.with_alpha(0.25)})
+        @ignore_picking()
+        Children [ @chrome_text(key.into(), 10.0, ro_dark::BUTTON_LABEL) ]
+    }
+}
+
 /// A small filled tag beside a name: a count or a warning.
 pub fn chip(text: String, fill: Color, ink: Color) -> impl Scene {
     bsn! {

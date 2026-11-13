@@ -12,14 +12,13 @@ use bevy::prelude::*;
 use bevy::ui::UiSystems;
 use bevy::ui_widgets::Activate;
 use bevy::window::PrimaryWindow;
-use bevy_feathers::controls::FeathersButton;
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
 use lifthrasir_client::core::state::GameState;
 use net_contract::events::{CutinDisplayChanged, CutinPlacement};
 
-use lifthrasir_ui::theme::feathers_theme::{TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BORDER};
+use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::ignore_picking;
 use lifthrasir_ui::widgets::draggable::px_or_zero;
+use lifthrasir_ui::widgets::primitives::close_button;
 
 /// Canonical rAthena illustration directory inside the `ro://` namespace.
 const CUTIN_DIR: &str = "ro://data/texture/유저인터페이스/illust/";
@@ -30,14 +29,15 @@ const CUTIN_Z: i32 = -1;
 /// Base mode-3 titlebar height; it scales with the presentation during fit-down.
 const TITLEBAR_HEIGHT: f32 = 30.0;
 
-/// Base mode-4 close-control side length; scales with the presentation fit factor.
-const CLOSE_BUTTON_SIZE: f32 = 22.0;
+/// Base mode-4 close-control side length, that of the primitives' `close_button`;
+/// scales with the presentation fit factor.
+const CLOSE_BUTTON_SIZE: f32 = 20.0;
 
 /// Base mode-4 close-control inset from the top-right corner.
 const CLOSE_BUTTON_OFFSET: f32 = 4.0;
 
 /// Base mode-4 close glyph side length; scales with the presentation fit factor.
-const CLOSE_GLYPH_SIZE: f32 = 12.0;
+const CLOSE_GLYPH_SIZE: f32 = 10.0;
 
 pub struct CutinPlugin;
 
@@ -99,9 +99,6 @@ struct CutinDragHandle;
 
 #[derive(Component, Default, Clone, Debug)]
 struct CutinClose;
-
-#[derive(Component, Default, Clone, Debug)]
-struct CutinCloseGlyph;
 
 /// Why a server-provided cutin image name is not a canonical illustration filename.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -283,6 +280,22 @@ fn static_cutin(path: String) -> impl Scene {
     }
 }
 
+/// The bronze ring and drop shadow of a centred cutin, after the `NPC Dialog`
+/// artboard. Neither takes layout space, so the fitted sizes stay the picture's.
+fn frame() -> impl Scene {
+    let shadow = BoxShadow::new(
+        Color::BLACK.with_alpha(0.75),
+        Val::ZERO,
+        px(10),
+        Val::ZERO,
+        px(30),
+    );
+    bsn! {
+        Outline { width: px(1), offset: px(0), color: ro_dark::BUTTON_STROKE }
+        shadow
+    }
+}
+
 fn windowed_cutin(path: String) -> impl Scene {
     bsn! {
         Node {
@@ -294,6 +307,7 @@ fn windowed_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
+        @frame()
         @ignore_picking()
         on(drag_cutin)
         Children [
@@ -307,8 +321,8 @@ fn windowed_cutin(path: String) -> impl Scene {
                 height: px(TITLEBAR_HEIGHT),
                 border: {UiRect { bottom: Val::Px(1.0), ..default() }},
             }
-            ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-            ThemeBorderColor({TOKEN_WINDOW_BORDER})
+            BackgroundColor(ro_dark::TITLE_BAR)
+            BorderColor::all(ro_dark::BUTTON_STROKE)
             Pickable
             --
             CutinImage
@@ -337,6 +351,7 @@ fn chromeless_cutin(path: String) -> impl Scene {
         }
         Visibility::Hidden
         GlobalZIndex(CUTIN_Z)
+        @frame()
         @ignore_picking()
         on(drag_cutin)
         Children [
@@ -353,29 +368,11 @@ fn chromeless_cutin(path: String) -> impl Scene {
             Pickable
             --
             CutinClose
-            @FeathersButton {
-                @caption: bsn! {
-                    CutinCloseGlyph
-                    ImageNode {
-                        image: {format!("{}{}.svg", lifthrasir_ui::theme::ICON_DIR, "close")},
-                        color: lifthrasir_ui::theme::TEXT_DIM,
-                    }
-                    Node { width: px(CLOSE_GLYPH_SIZE), height: px(CLOSE_GLYPH_SIZE) }
-                    @ignore_picking()
-                }
-            }
+            @close_button()
             Node {
                 position_type: PositionType::Absolute,
                 top: px(CLOSE_BUTTON_OFFSET),
                 right: px(CLOSE_BUTTON_OFFSET),
-                width: px(CLOSE_BUTTON_SIZE),
-                height: px(CLOSE_BUTTON_SIZE),
-                // Feathers' 8px button padding inflates the laid-out box beyond the
-                // factor-scaled width at extreme fit-down; zero it so the button's
-                // computed size matches the fitted dimensions.
-                padding: UiRect::ZERO,
-                min_width: px(0.0),
-                min_height: px(0.0),
             }
             ZIndex(1)
             on(dismiss_cutin)
@@ -458,7 +455,7 @@ type CutinTitlebarNodeQuery<'w, 's> = Query<
 type CutinCloseNodeQuery<'w, 's> = Query<
     'w,
     's,
-    &'static mut Node,
+    (&'static mut Node, &'static Children),
     (
         With<CutinClose>,
         Without<CutinRoot>,
@@ -467,12 +464,13 @@ type CutinCloseNodeQuery<'w, 's> = Query<
     ),
 >;
 
+/// The glyph nodes a close control may hold; only its own children are resized.
 type CutinCloseGlyphNodeQuery<'w, 's> = Query<
     'w,
     's,
     &'static mut Node,
     (
-        With<CutinCloseGlyph>,
+        With<ImageNode>,
         Without<CutinRoot>,
         Without<CutinImage>,
         Without<CutinTitlebar>,
@@ -534,18 +532,21 @@ fn layout_cutin(
             titlebar.width = Val::Px(fitted.root.x);
             titlebar.height = Val::Px(fitted.titlebar);
         }
-        for mut close in &mut closes {
+        for (mut close, children) in &mut closes {
             let size = CLOSE_BUTTON_SIZE * fitted.factor;
             let offset = CLOSE_BUTTON_OFFSET * fitted.factor;
             close.top = Val::Px(offset);
             close.right = Val::Px(offset);
             close.width = Val::Px(size);
             close.height = Val::Px(size);
-        }
-        for mut glyph in &mut glyphs {
-            let size = CLOSE_GLYPH_SIZE * fitted.factor;
-            glyph.width = Val::Px(size);
-            glyph.height = Val::Px(size);
+            let glyph_size = CLOSE_GLYPH_SIZE * fitted.factor;
+            for child in children.iter() {
+                let Ok(mut glyph) = glyphs.get_mut(child) else {
+                    continue;
+                };
+                glyph.width = Val::Px(glyph_size);
+                glyph.height = Val::Px(glyph_size);
+            }
         }
     }
 }
@@ -589,6 +590,7 @@ mod tests {
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
     use bevy::state::app::StatesPlugin;
     use bevy::ui::IsDefaultUiCamera;
+    use bevy::ui_widgets::Button;
     use bevy::window::WindowResolution;
     use lifthrasir_assets::loaders::bmp_loader::BmpLoader;
 
@@ -1429,7 +1431,7 @@ mod tests {
             1
         );
         assert_eq!(
-            world.query::<&FeathersButton>().iter(world).count(),
+            world.query::<&Button>().iter(world).count(),
             0,
             "mode 3 must not expose a close button"
         );
@@ -1462,7 +1464,7 @@ mod tests {
                 .count(),
             1
         );
-        let mut buttons = world.query::<(Entity, &FeathersButton)>();
+        let mut buttons = world.query::<(Entity, &Button)>();
         assert_eq!(buttons.iter(world).count(), 1);
         let (button, _) = buttons.iter(world).next().unwrap();
         assert_eq!(world.get::<ZIndex>(button).unwrap().0, 1);
@@ -1647,41 +1649,24 @@ mod tests {
         assert!(root_bounds.max.x <= 10.0 + 1e-3);
         assert!(root_bounds.max.y <= 10.0 + 1e-3);
 
-        // Root clipping keeps Feathers focus-outline visuals from escaping.
+        // Root clipping keeps the close control from escaping the fitted picture.
         let root_node = app.world().get::<Node>(root).unwrap();
         assert!(!root_node.overflow.is_visible());
 
-        // The actual chromeless-scene close control: a Feathers button carrying
-        // the focus-indicator and tab-index markers, with the glyph as a child.
+        // The actual chromeless-scene close control: the primitives' close button,
+        // with the glyph as its child.
         let close = app
             .world_mut()
             .query_filtered::<Entity, With<CutinClose>>()
             .iter(app.world())
             .next()
             .unwrap();
-        assert!(app.world().get::<FeathersButton>(close).is_some());
-        assert!(
-            app.world()
-                .get::<bevy_feathers::focus::FocusIndicator>(close)
-                .is_some()
-        );
-        assert!(
-            app.world()
-                .get::<bevy::input_focus::tab_navigation::TabIndex>(close)
-                .is_some()
-        );
+        assert!(app.world().get::<Button>(close).is_some());
+        let glyph = app.world().get::<Children>(close).unwrap()[0];
+        assert!(app.world().get::<ImageNode>(glyph).is_some());
 
-        let glyph = app
-            .world_mut()
-            .query_filtered::<Entity, With<CutinCloseGlyph>>()
-            .iter(app.world())
-            .next()
-            .unwrap();
-        let close_children = app.world().get::<Children>(close).unwrap();
-        assert!(close_children.contains(&glyph));
-
-        // The complete laid-out presentation — Feathers padding included in the
-        // button box, its pickable bounds, and the caption glyph — fits the root.
+        // The complete laid-out presentation fits the root: the button box with its
+        // border, which is also its pickable bounds, and the glyph.
         assert_rect_contains(root_bounds, node_bounds(&app, close));
         assert_rect_contains(root_bounds, node_bounds(&app, glyph));
     }

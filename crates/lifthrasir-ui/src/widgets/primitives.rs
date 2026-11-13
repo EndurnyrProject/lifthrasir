@@ -216,6 +216,24 @@ pub fn inset() -> impl Scene {
     }
 }
 
+/// The parchment page that NPC dialogue is written on. Text on it takes
+/// [`ro_dark::INK`]; the caller adds padding and picking.
+pub fn parchment() -> impl Scene {
+    let paper = BackgroundGradient::from(LinearGradient::new(
+        170.0_f32.to_radians(),
+        vec![
+            ColorStop::new(ro_dark::HERO, percent(0)),
+            ColorStop::new(ro_dark::TITLE, percent(55)),
+            ColorStop::new(ro_dark::PARCHMENT_SHADE, percent(100)),
+        ],
+    ));
+    bsn! {
+        Node { border: px(1), border_radius: BorderRadius::all(px(4)) }
+        paper
+        BorderColor::all(ro_dark::BRONZE_SHADOW.with_alpha(0.55))
+    }
+}
+
 /// The frame of one tab in a strip over an [`inset`] panel. The active tab drops its
 /// bottom stroke so it joins the panel below. The caller adds its marker, the click
 /// observer and the children, coloured by [`tab_text`].

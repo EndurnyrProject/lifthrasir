@@ -95,6 +95,13 @@ pub const STATUS_OFFLINE: Color = Color::srgb_u8(0x7d, 0x84, 0x8e);
 /// Hairline around rows and troughs inside an [`INSET`] panel.
 pub const INSET_RULE: Color = Color::srgb_u8(0x2c, 0x32, 0x3b);
 
+// Parchment: a page runs from `HERO` through `TITLE` to `PARCHMENT_SHADE`, is ruled
+// in `BRONZE_SHADOW` and written on in `INK`. `PARCHMENT_GLAZE` lightens the fields
+// and options that sit on it.
+pub const PARCHMENT_SHADE: Color = Color::srgb_u8(0xd6, 0xc3, 0x9b);
+pub const PARCHMENT_GLAZE: Color = Color::srgb_u8(0xff, 0xfa, 0xeb);
+pub const INK: Color = Color::srgb_u8(0x3f, 0x31, 0x20);
+
 // Text.
 pub const HERO: Color = Color::srgb_u8(0xf0, 0xe4, 0xc4);
 pub const STRONG: Color = Color::srgb_u8(0xf4, 0xf6, 0xf8);
