@@ -27,7 +27,7 @@ use net_contract::dto::{
     VendingBoard, VendingBuyLine, VendingClosureReason, VendingListOutcome, VendingListing,
     VendingOffer, VendingOpenOutcome, VendingPurchaseOutcome, VendingSetup, VendingSnapshot,
 };
-use net_contract::events::{ChatHeard, VendingIngress, VendingIngressPayload};
+use net_contract::events::{ChatNotice, VendingIngress, VendingIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
 
 const SETUP_ID: &str = "setup-1";
@@ -97,9 +97,9 @@ fn app() -> App {
         .init_resource::<ZoneSessionGeneration>()
         .add_message::<lifthrasir_client::domain::skill::SkillCastRequested>()
         .add_message::<net_contract::events::ZoneDisconnected>()
-        .init_resource::<Messages<ChatHeard>>()
+        .init_resource::<Messages<ChatNotice>>()
         .add_message::<VendingIngress>()
-        .add_message::<ChatHeard>()
+        .add_message::<ChatNotice>()
         .add_message::<RevealVendingSeller>()
         .add_message::<OpenVendingRequested>()
         .add_message::<ListVendingRequested>()
@@ -130,7 +130,7 @@ fn push(app: &mut App, payload: VendingIngressPayload) {
 
 fn chat(app: &mut App) -> Vec<String> {
     app.world_mut()
-        .resource_mut::<Messages<ChatHeard>>()
+        .resource_mut::<Messages<ChatNotice>>()
         .drain()
         .map(|line| line.message.clone())
         .collect()

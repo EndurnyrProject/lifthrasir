@@ -2,14 +2,14 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use bevy_quinnet::client::client_connected;
 
-use super::super::mapping::social::{chat_message, emotion, name_response};
+use super::super::mapping::social::{chat_line, chat_notice, emotion, name_response};
 use crate::dispatch::IncomingMessage;
 use crate::envelope::Body;
-use net_contract::events::{ChatHeard, EmoteShown, EntityNamed};
+use net_contract::events::{ChatHeard, ChatNotice, EmoteShown, EntityNamed};
 
-/// Drains social bodies (chat, entity names, and emotes). All ride the world
-/// channel, but the match is on the `Body` variant for consistency with the
-/// other channel-spanning interaction drains.
+/// Drains social bodies (chat, chat notices, entity names, and emotes). All ride
+/// the world channel, but the match is on the `Body` variant for consistency with
+/// the other channel-spanning interaction drains.
 #[auto_add_system(
     plugin = crate::AesirNetPlugin,
     schedule = Update,
@@ -18,13 +18,17 @@ use net_contract::events::{ChatHeard, EmoteShown, EntityNamed};
 pub fn zone_drain_social(
     mut incoming: MessageReader<IncomingMessage>,
     mut chat: MessageWriter<ChatHeard>,
+    mut notices: MessageWriter<ChatNotice>,
     mut named: MessageWriter<EntityNamed>,
     mut emote: MessageWriter<EmoteShown>,
 ) {
     for msg in incoming.read() {
         match msg.body.clone() {
-            Body::ChatMessage(c) => {
-                chat.write(chat_message(c));
+            Body::ChatLine(c) => {
+                chat.write(chat_line(c));
+            }
+            Body::ChatNotice(n) => {
+                notices.write(chat_notice(n));
             }
             Body::NameResponse(n) => {
                 named.write(name_response(n));
@@ -47,6 +51,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<IncomingMessage>()
             .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_message::<EntityNamed>()
             .add_message::<EmoteShown>()
             .add_systems(Update, zone_drain_social);
@@ -60,20 +65,37 @@ mod tests {
     }
 
     #[test]
-    fn chat_message_produces_one_chat_heard() {
+    fn chat_line_produces_one_chat_heard() {
         let app = drain(vec![(
             WORLD,
-            Body::ChatMessage(net::ChatMessage {
-                gid: 150001,
-                message: "hello".into(),
-                raw_message: vec![],
+            Body::ChatLine(net::ChatLine {
+                sender_gid: 150001,
+                text: "hello".into(),
+                ..Default::default()
             }),
         )]);
 
         let chat = app.world().resource::<Messages<ChatHeard>>();
         let events: Vec<_> = chat.iter_current_update_messages().collect();
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].message, "hello");
+        assert_eq!(events[0].text, "hello");
+    }
+
+    #[test]
+    fn chat_notice_produces_one_notice_and_no_speech() {
+        let app = drain(vec![(
+            WORLD,
+            Body::ChatNotice(net::ChatNotice {
+                kind: net::chat_notice::Kind::Error.into(),
+                text: "Freyja is not online.".into(),
+            }),
+        )]);
+
+        let notices = app.world().resource::<Messages<ChatNotice>>();
+        let events: Vec<_> = notices.iter_current_update_messages().collect();
+        assert_eq!(events.len(), 1);
+        assert!(events[0].error);
+        assert!(app.world().resource::<Messages<ChatHeard>>().is_empty());
     }
 
     #[test]

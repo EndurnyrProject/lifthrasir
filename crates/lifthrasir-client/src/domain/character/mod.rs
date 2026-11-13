@@ -1,5 +1,4 @@
 pub mod char_server_send;
-pub mod chat;
 pub mod events;
 pub mod forms;
 pub mod local_player;

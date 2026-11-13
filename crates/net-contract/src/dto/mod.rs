@@ -2,6 +2,7 @@
 
 mod cart;
 mod char_types;
+mod chat;
 mod errors;
 mod gameplay;
 mod guild;
@@ -18,6 +19,7 @@ mod vending;
 
 pub use cart::*;
 pub use char_types::*;
+pub use chat::*;
 pub use errors::*;
 pub use gameplay::*;
 pub use guild::*;

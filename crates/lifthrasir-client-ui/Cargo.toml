@@ -15,6 +15,7 @@ net-contract = { path = "../net-contract" }
 leafwing-input-manager = { workspace = true }
 secrecy = { workspace = true }
 rfd = { workspace = true }
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 
 [features]
 dlss = ["bevy/dlss"]

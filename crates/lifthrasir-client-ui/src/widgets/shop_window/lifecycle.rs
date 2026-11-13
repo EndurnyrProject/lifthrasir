@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
 use net_contract::{
     dto::ShopResult,
-    events::{ChatHeard, ShopBuyResulted, ShopSellResulted},
+    events::{ChatNotice, ShopBuyResulted, ShopSellResulted},
 };
 
 use super::trade_summary;
@@ -24,16 +24,22 @@ pub(super) fn on_shop_result(
     mut sell_results: MessageReader<ShopSellResulted>,
     mut pending: ResMut<PendingShopDeal>,
     item_db: Option<Res<ItemDb>>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     for event in buy_results.read() {
         if let Some(message) = settle(&mut pending, true, event.result, item_db.as_deref()) {
-            chat.write(ChatHeard { gid: 0, message });
+            chat.write(ChatNotice {
+                error: false,
+                message,
+            });
         }
     }
     for event in sell_results.read() {
         if let Some(message) = settle(&mut pending, false, event.result, item_db.as_deref()) {
-            chat.write(ChatHeard { gid: 0, message });
+            chat.write(ChatNotice {
+                error: false,
+                message,
+            });
         }
     }
 }
@@ -80,7 +86,7 @@ mod tests {
             })));
             app.add_message::<ShopBuyResulted>()
                 .add_message::<ShopSellResulted>()
-                .add_message::<ChatHeard>()
+                .add_message::<ChatNotice>()
                 .add_systems(Update, on_shop_result);
             if buy {
                 app.world_mut().write_message(ShopBuyResulted { result });
@@ -93,7 +99,7 @@ mod tests {
             assert!(app.world().resource::<PendingShopDeal>().0.is_none());
             let lines: Vec<_> = app
                 .world()
-                .resource::<Messages<ChatHeard>>()
+                .resource::<Messages<ChatNotice>>()
                 .iter_current_update_messages()
                 .collect();
             assert_eq!(lines.len(), 1);

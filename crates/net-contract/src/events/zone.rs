@@ -109,11 +109,30 @@ pub struct EntityNamed {
     pub position_name: String,
 }
 
-/// An entity's chat message.
-#[derive(Message, Debug, Clone)]
+/// One line of speech on a chat channel. The speaker hears its own lines too.
+#[derive(Message, Debug, Clone, Default, PartialEq)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct ChatHeard {
-    pub gid: u32,
+    pub channel: crate::dto::ChatChannel,
+    /// The speaking unit: a player, an NPC or a Talkie Box cell.
+    pub sender_gid: u32,
+    /// Empty when the speaker has no name (a Talkie Box).
+    pub sender_name: String,
+    pub text: String,
+    /// Whispers only: who the whisper was sent to.
+    pub whisper_to: String,
+    /// The linked items: the n-th
+    /// [`CHAT_LINK_MARK`](crate::dto::CHAT_LINK_MARK) in `text` shows the n-th.
+    pub links: Vec<ZoneInventoryItem>,
+}
+
+/// A chat log line that nobody said: command replies, refusals and notices, from
+/// the server or from the client itself.
+#[derive(Message, Debug, Clone, Default, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct ChatNotice {
+    /// Whether the line reports a failure.
+    pub error: bool,
     pub message: String,
 }
 

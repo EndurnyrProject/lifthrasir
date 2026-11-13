@@ -9,7 +9,7 @@ use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::inventory::Inventory;
 use net_contract::commands::ComposeCardRequested;
 use net_contract::events::{
-    CardComposeOutcome, CardCompositionFinished, CardTargetsOffered, ChatHeard,
+    CardComposeOutcome, CardCompositionFinished, CardTargetsOffered, ChatNotice,
 };
 
 use crate::widgets::info_modal::InfoModalRoot;
@@ -254,7 +254,7 @@ fn result_message(outcome: CardComposeOutcome) -> String {
 fn handle_result(
     mut results: MessageReader<CardCompositionFinished>,
     picker: Option<Res<ActiveCardPicker>>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
     mut commands: Commands,
 ) {
     let mut matched = false;
@@ -265,8 +265,8 @@ fn handle_result(
         {
             continue;
         }
-        chat.write(ChatHeard {
-            gid: 0,
+        chat.write(ChatNotice {
+            error: false,
             message: result_message(result.outcome),
         });
         commands.remove_resource::<ActiveCardPicker>();
@@ -299,7 +299,7 @@ mod tests {
         app.add_message::<CardTargetsOffered>();
         app.add_message::<CardCompositionFinished>();
         app.add_message::<ComposeCardRequested>();
-        app.add_message::<ChatHeard>();
+        app.add_message::<ChatNotice>();
         app.insert_resource(Inventory::default());
         crate::install_test_ui_primitives(&mut app);
         app.add_systems(
@@ -451,7 +451,7 @@ mod tests {
         );
         assert_eq!(
             app.world()
-                .resource::<Messages<ChatHeard>>()
+                .resource::<Messages<ChatNotice>>()
                 .iter_current_update_messages()
                 .count(),
             0
@@ -462,7 +462,7 @@ mod tests {
             .write_message(result(9, CardComposeOutcome::NoFreeSocket));
         app.update();
         assert!(!app.world().contains_resource::<ActiveCardPicker>());
-        let messages = app.world().resource::<Messages<ChatHeard>>();
+        let messages = app.world().resource::<Messages<ChatNotice>>();
         let feedback: Vec<_> = messages.iter_current_update_messages().collect();
         assert_eq!(feedback.len(), 1);
         assert!(feedback[0].message.contains("No free socket"));
@@ -494,7 +494,7 @@ mod tests {
             });
             app.update();
             assert!(!app.world().contains_resource::<ActiveCardPicker>());
-            let chat = app.world().resource::<Messages<ChatHeard>>();
+            let chat = app.world().resource::<Messages<ChatNotice>>();
             let feedback: Vec<_> = chat.iter_current_update_messages().collect();
             assert_eq!(feedback.len(), 1);
             assert_eq!(feedback[0].message, expected);

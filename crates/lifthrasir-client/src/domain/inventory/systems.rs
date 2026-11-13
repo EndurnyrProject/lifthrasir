@@ -22,7 +22,7 @@ fn to_item_options(options: &[net_contract::dto::ItemOption]) -> Vec<ItemOption>
 /// aesir sends the *worn* bitmask in `location` (`item.equip` server-side; 0 for a
 /// bag item), so `wear_state` is taken straight from it — that is what drives
 /// `is_equipped()`, the paperdoll, and the inventory filter on (re)login.
-fn to_item(slot: &ZoneInventoryItem) -> Item {
+pub fn to_item(slot: &ZoneInventoryItem) -> Item {
     let mut cards = [0u32; 4];
     for (dst, src) in cards.iter_mut().zip(slot.cards.iter()) {
         *dst = *src;

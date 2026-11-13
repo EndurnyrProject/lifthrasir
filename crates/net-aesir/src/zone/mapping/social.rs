@@ -1,5 +1,7 @@
+use super::inventory::inventory_item;
 use crate::proto::aesir::net;
-use net_contract::events::{ChatHeard, EmoteShown, EntityNamed};
+use net_contract::dto::ChatChannel;
+use net_contract::events::{ChatHeard, ChatNotice, EmoteShown, EntityNamed};
 
 pub fn name_response(n: net::NameResponse) -> EntityNamed {
     EntityNamed {
@@ -11,14 +13,32 @@ pub fn name_response(n: net::NameResponse) -> EntityNamed {
     }
 }
 
-pub fn chat_message(c: net::ChatMessage) -> ChatHeard {
+pub fn chat_line(c: net::ChatLine) -> ChatHeard {
+    let channel = match c.channel() {
+        net::ChatChannel::ChatLocal => ChatChannel::Local,
+        net::ChatChannel::ChatParty => ChatChannel::Party,
+        net::ChatChannel::ChatGuild => ChatChannel::Guild,
+        net::ChatChannel::ChatTrade => ChatChannel::Trade,
+        net::ChatChannel::ChatWhisper => ChatChannel::Whisper,
+    };
     ChatHeard {
-        gid: c.gid,
-        message: if c.raw_message.is_empty() {
-            c.message
+        channel,
+        sender_gid: c.sender_gid,
+        sender_name: c.sender_name,
+        text: if c.raw_text.is_empty() {
+            c.text
         } else {
-            net_contract::dto::display_skill_text(&c.raw_message)
+            net_contract::dto::display_skill_text(&c.raw_text)
         },
+        whisper_to: c.whisper_to,
+        links: c.links.into_iter().map(inventory_item).collect(),
+    }
+}
+
+pub fn chat_notice(n: net::ChatNotice) -> ChatNotice {
+    ChatNotice {
+        error: n.kind() == net::chat_notice::Kind::Error,
+        message: n.text,
     }
 }
 
@@ -51,25 +71,53 @@ mod tests {
     }
 
     #[test]
-    fn chat_message_maps_gid_and_text() {
-        let heard = chat_message(net::ChatMessage {
-            gid: 150001,
-            message: "hello world".into(),
-            raw_message: vec![],
+    fn chat_line_maps_speaker_channel_and_links() {
+        let heard = chat_line(net::ChatLine {
+            channel: net::ChatChannel::ChatWhisper.into(),
+            sender_gid: 150001,
+            sender_name: "Freyja".into(),
+            text: "take my \u{fffc}".into(),
+            whisper_to: "Ygor".into(),
+            links: vec![net::InventoryItem {
+                nameid: 610,
+                ..Default::default()
+            }],
+            ..Default::default()
         });
 
-        assert_eq!(heard.gid, 150001);
-        assert_eq!(heard.message, "hello world");
+        assert_eq!(heard.channel, ChatChannel::Whisper);
+        assert_eq!(heard.sender_gid, 150001);
+        assert_eq!(heard.sender_name, "Freyja");
+        assert_eq!(heard.text, "take my \u{fffc}");
+        assert_eq!(heard.whisper_to, "Ygor");
+        assert_eq!(heard.links[0].nameid, 610);
     }
 
     #[test]
     fn talkie_chat_uses_raw_bytes_and_sanitizes_them() {
-        let heard = chat_message(net::ChatMessage {
-            gid: 1,
-            message: "fallback".into(),
-            raw_message: vec![b'A', 0xff, b'\n', b'B'],
+        let heard = chat_line(net::ChatLine {
+            sender_gid: 1,
+            text: "fallback".into(),
+            raw_text: vec![b'A', 0xff, b'\n', b'B'],
+            ..Default::default()
         });
-        assert_eq!(heard.message, "A\u{fffd}B");
+        assert_eq!(heard.text, "A\u{fffd}B");
+    }
+
+    #[test]
+    fn chat_notice_maps_kind_to_the_error_flag() {
+        let notice = |kind: net::chat_notice::Kind| {
+            chat_notice(net::ChatNotice {
+                kind: kind.into(),
+                text: "Unknown command".into(),
+            })
+        };
+        assert!(notice(net::chat_notice::Kind::Error).error);
+        assert!(!notice(net::chat_notice::Kind::Info).error);
+        assert_eq!(
+            notice(net::chat_notice::Kind::Info).message,
+            "Unknown command"
+        );
     }
 
     #[test]

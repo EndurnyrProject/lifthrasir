@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_system;
 use net_contract::{
     dto::ItemSkillTargetKind,
-    events::{ChatHeard, ItemSkillOffered},
+    events::{ChatNotice, ItemSkillOffered},
     state::ZoneSession,
 };
 
@@ -28,7 +28,7 @@ pub fn handle_item_skill_offer(
     mut offers: MessageReader<ItemSkillOffered>,
     mut targeting: ResMut<TargetingMode>,
     mut resolved: MessageWriter<SkillCastResolved>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
     session: Res<ZoneSession>,
 ) {
     for offer in offers.read() {
@@ -54,8 +54,8 @@ pub fn handle_item_skill_offer(
             ItemSkillTargetKind::Ground => TargetingMode::AwaitingGround { skill_id, level },
         };
         if target_kind != ItemSkillTargetKind::SelfTarget {
-            chat.write(ChatHeard {
-                gid: 0,
+            chat.write(ChatNotice {
+                error: false,
                 message: "Choose a target in range. The item is consumed when casting, even if the target is out of range.".into(),
             });
         }
@@ -89,7 +89,7 @@ mod tests {
             let mut app = App::new();
             app.add_message::<ItemSkillOffered>()
                 .add_message::<SkillCastResolved>()
-                .add_message::<ChatHeard>()
+                .add_message::<ChatNotice>()
                 .init_resource::<TargetingMode>()
                 .init_resource::<SkillTreeState>()
                 .insert_resource(ZoneSession {
@@ -118,7 +118,7 @@ mod tests {
                 assert!(casts.is_empty());
                 assert!(
                     app.world()
-                        .resource::<Messages<ChatHeard>>()
+                        .resource::<Messages<ChatNotice>>()
                         .iter_current_update_messages()
                         .any(|line| line.message.contains("range"))
                 );

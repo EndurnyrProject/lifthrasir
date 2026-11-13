@@ -74,11 +74,25 @@ pub struct PickupRequested {
     pub ground_id: u64,
 }
 
-/// Request to send a chat line; `message` is the wire-ready, formatted string.
-#[derive(Message, Debug, Clone)]
+/// Request to say `text` on `channel`. The server knows the speaker, so `text` is
+/// the words only.
+#[derive(Message, Debug, Clone, Default, PartialEq, Eq)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]
 pub struct ChatSent {
-    pub message: String,
+    pub channel: crate::dto::ChatChannel,
+    pub text: String,
+    /// Recipient character name; whispers only.
+    pub whisper_to: String,
+    /// Inventory indices of the linked items: the n-th
+    /// [`CHAT_LINK_MARK`](crate::dto::CHAT_LINK_MARK) in `text` shows the n-th.
+    pub link_indices: Vec<u32>,
+}
+
+/// Request to run a GM command; `command` has no leading `@`.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct GmCommandSent {
+    pub command: String,
 }
 
 /// Request to perform an emote identified by `emote_type`.

@@ -331,6 +331,7 @@ fn item_slot(view: CellView) -> impl Scene {
         @slot_frame(SLOT, ring)
         Pickable
         on(on_cell_click)
+        on(crate::widgets::chat_box::link_item_on_shift_click)
         on(on_cell_drag_start)
         on(show_slot_name)
         on(hide_slot_name)

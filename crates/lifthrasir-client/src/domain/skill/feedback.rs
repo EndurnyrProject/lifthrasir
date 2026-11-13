@@ -3,7 +3,7 @@ use bevy_auto_plugin::prelude::auto_add_system;
 
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
 use net_contract::events::{
-    ChatHeard, LearnSkillResultReceived, ProductionResult, SkillCastFailed, SkillCastFailureReason,
+    ChatNotice, LearnSkillResultReceived, ProductionResult, SkillCastFailed, SkillCastFailureReason,
 };
 
 fn cast_failure_message(
@@ -54,12 +54,12 @@ fn cast_failure_message(
 )]
 pub fn report_skill_cast_failure(
     mut failures: MessageReader<SkillCastFailed>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
     item_db: Option<Res<ItemDb>>,
 ) {
     for failure in failures.read() {
-        chat.write(ChatHeard {
-            gid: 0,
+        chat.write(ChatNotice {
+            error: false,
             message: cast_failure_message(failure.reason, failure.detail, item_db.as_deref()),
         });
     }
@@ -71,15 +71,15 @@ pub fn report_skill_cast_failure(
 )]
 pub fn report_learn_skill_reject(
     mut results: MessageReader<LearnSkillResultReceived>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     for result in results.read() {
         if result.ok {
             continue;
         }
 
-        chat.write(ChatHeard {
-            gid: 0,
+        chat.write(ChatNotice {
+            error: false,
             message: format!("Cannot learn skill (reason {})", result.reason),
         });
     }
@@ -94,7 +94,7 @@ pub fn report_learn_skill_reject(
 )]
 pub fn report_production_result(
     mut results: MessageReader<ProductionResult>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
     item_db: Option<Res<ItemDb>>,
 ) {
     for result in results.read() {
@@ -109,7 +109,10 @@ pub fn report_production_result(
             format!("You failed to create {name}.")
         };
 
-        chat.write(ChatHeard { gid: 0, message });
+        chat.write(ChatNotice {
+            error: false,
+            message,
+        });
     }
 }
 
@@ -121,7 +124,7 @@ pub fn report_production_result(
 pub fn report_gameplay_feedback(
     mut failures: MessageReader<net_contract::events::InventoryAddRejected>,
     mut notices: MessageReader<net_contract::events::GameplayNoticeReceived>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     use net_contract::dto::{GameplayNoticeKind as Notice, ItemAddFailure as Failure};
     for failure in failures.read() {
@@ -135,7 +138,10 @@ pub fn report_gameplay_feedback(
             Failure::StackLimit => "This item would exceed its stack limit.".into(),
             Failure::Unknown(code) => format!("Cannot add item to inventory (reason {code})."),
         };
-        chat.write(ChatHeard { gid: 0, message });
+        chat.write(ChatNotice {
+            error: false,
+            message,
+        });
     }
     for notice in notices.read() {
         let message = match notice.kind {
@@ -151,7 +157,10 @@ pub fn report_gameplay_feedback(
             Notice::MapCannotUseSkill => "This skill cannot be used on this map.".into(),
             Notice::Unknown(code) => format!("Server notice (code {code})."),
         };
-        chat.write(ChatHeard { gid: 0, message });
+        chat.write(ChatNotice {
+            error: false,
+            message,
+        });
     }
 }
 
@@ -168,7 +177,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<GameplayNoticeReceived>()
             .add_message::<InventoryAddRejected>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_systems(Update, report_gameplay_feedback);
         for kind in [
             Notice::ImpossibleSkillArea,
@@ -184,7 +193,7 @@ mod tests {
         app.update();
         let lines: Vec<_> = app
             .world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .map(|line| line.message.as_str())
             .collect();
@@ -203,10 +212,10 @@ mod tests {
         assert!(lines.iter().any(|line| line.contains("weight")));
     }
 
-    fn production_chat(result: ProductionResult, item_db: Option<ItemDb>) -> Vec<ChatHeard> {
+    fn production_chat(result: ProductionResult, item_db: Option<ItemDb>) -> Vec<ChatNotice> {
         let mut app = App::new();
         app.add_message::<ProductionResult>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_systems(Update, report_production_result);
         if let Some(db) = item_db {
             app.insert_resource(db);
@@ -218,7 +227,7 @@ mod tests {
         app.update();
 
         app.world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .cloned()
             .collect()
@@ -247,7 +256,7 @@ mod tests {
         );
 
         assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].gid, 0);
+        assert!(!msgs[0].error);
         assert_eq!(msgs[0].message, "You successfully created Knife.");
     }
 
@@ -279,10 +288,10 @@ mod tests {
         assert_eq!(msgs[0].message, "You successfully created item #999.");
     }
 
-    fn run_with(result: LearnSkillResultReceived) -> Vec<ChatHeard> {
+    fn run_with(result: LearnSkillResultReceived) -> Vec<ChatNotice> {
         let mut app = App::new();
         app.add_message::<LearnSkillResultReceived>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_systems(Update, report_learn_skill_reject);
 
         app.world_mut()
@@ -292,7 +301,7 @@ mod tests {
         app.update();
 
         app.world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .cloned()
             .collect()
@@ -307,7 +316,7 @@ mod tests {
         });
 
         assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].gid, 0);
+        assert!(!msgs[0].error);
         assert_eq!(msgs[0].message, "Cannot learn skill (reason 3)");
     }
 
@@ -326,7 +335,7 @@ mod tests {
     fn cast_failure_reports_required_spheres_and_equipment() {
         let mut app = App::new();
         app.add_message::<SkillCastFailed>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .insert_resource(item_db_with(1201, "Knife"))
             .add_systems(Update, report_skill_cast_failure);
         for (reason, detail) in [
@@ -344,7 +353,7 @@ mod tests {
         }
         app.update();
 
-        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let chat = app.world().resource::<Messages<ChatNotice>>();
         let messages: Vec<_> = chat
             .iter_current_update_messages()
             .map(|m| m.message.as_str())
@@ -362,7 +371,7 @@ mod tests {
         app.update();
         assert_eq!(
             app.world()
-                .resource::<Messages<ChatHeard>>()
+                .resource::<Messages<ChatNotice>>()
                 .iter_current_update_messages()
                 .count(),
             0
@@ -375,7 +384,7 @@ mod tests {
             detail: 1201,
         });
         app.update();
-        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let chat = app.world().resource::<Messages<ChatNotice>>();
         let messages: Vec<_> = chat.iter_current_update_messages().collect();
         assert_eq!(messages.len(), 1);
         assert_eq!(
@@ -388,7 +397,7 @@ mod tests {
     fn missing_catalyst_reports_chat_feedback() {
         let mut app = App::new();
         app.add_message::<SkillCastFailed>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_systems(Update, report_skill_cast_failure);
 
         app.world_mut()
@@ -401,7 +410,7 @@ mod tests {
 
         app.update();
 
-        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let chat = app.world().resource::<Messages<ChatNotice>>();
         let messages: Vec<_> = chat.iter_current_update_messages().collect();
         assert_eq!(messages.len(), 1);
         assert_eq!(

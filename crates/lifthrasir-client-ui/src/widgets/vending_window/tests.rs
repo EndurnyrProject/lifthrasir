@@ -16,7 +16,7 @@ use net_contract::dto::{
     CartItem, VendingCloseOutcome, VendingCloseTarget, VendingListing, VendingOpenOutcome,
     VendingPurchaseOutcome, VendingSetup, VendingSnapshot,
 };
-use net_contract::events::{ChatHeard, VendingIngress, VendingIngressPayload};
+use net_contract::events::{ChatNotice, VendingIngress, VendingIngressPayload};
 use net_contract::state::ZoneSessionGeneration;
 
 use super::buyer::BuyerBasket;
@@ -198,7 +198,7 @@ fn app(state: VendingState) -> App {
         .add_message::<VendingIntent>()
         .add_message::<VendingNotice>()
         .add_message::<RevealVendingSeller>()
-        .add_message::<ChatHeard>()
+        .add_message::<ChatNotice>()
         .add_message::<super::ShowInfoModal>();
     app
 }
@@ -708,7 +708,7 @@ fn notices_become_exactly_one_chat_line_each() {
         .write(notice.clone());
     let chat = |app: &mut App| -> Vec<String> {
         app.world_mut()
-            .resource_mut::<Messages<ChatHeard>>()
+            .resource_mut::<Messages<ChatNotice>>()
             .drain()
             .map(|line| line.message.clone())
             .collect()

@@ -90,7 +90,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     announcement::spawn_announcement_layer(&mut commands, root);
     character_info::spawn_status_frame(&mut commands, root, &asset_server);
     character_window::shell::build(&mut commands, root);
-    chat_box::spawn_chat_box(&mut commands, root, &asset_server);
+    chat_box::spawn_chat_box(&mut commands, root);
     emote::spawn_emote_picker(&mut commands, root);
     guild_window::scene::build(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root, &asset_server);

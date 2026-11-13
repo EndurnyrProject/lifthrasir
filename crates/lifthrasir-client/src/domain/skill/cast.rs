@@ -8,7 +8,7 @@ use net_contract::state::ZoneSession;
 
 use crate::core::state::GameState;
 use crate::domain::input::TargetingMode;
-use net_contract::events::ChatHeard;
+use net_contract::events::ChatNotice;
 
 use crate::domain::skill::{Form, SkillCooldownTracker, SkillTreeState, Target, form, target};
 
@@ -103,9 +103,9 @@ pub fn send_skill_cast(
     }
 }
 
-fn reject(chat: &mut MessageWriter<ChatHeard>, message: &str) {
-    chat.write(ChatHeard {
-        gid: 0,
+fn reject(chat: &mut MessageWriter<ChatNotice>, message: &str) {
+    chat.write(ChatNotice {
+        error: false,
         message: message.to_string(),
     });
 }
@@ -117,7 +117,7 @@ fn reject(chat: &mut MessageWriter<ChatHeard>, message: &str) {
 pub fn resolve_skill_cast(
     mut requests: MessageReader<SkillCastRequested>,
     mut resolved: MessageWriter<SkillCastResolved>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
     mut targeting: ResMut<TargetingMode>,
     book: SkillBook,
     session: Res<ZoneSession>,
@@ -194,7 +194,7 @@ mod tests {
         let mut app = App::new();
         app.add_message::<SkillCastRequested>()
             .add_message::<SkillCastResolved>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .init_resource::<crate::domain::vending::VendingState>()
             .init_resource::<SkillTreeState>()
             .init_resource::<SkillCooldownTracker>()
@@ -230,9 +230,9 @@ mod tests {
             .collect()
     }
 
-    fn chats(app: &App) -> Vec<ChatHeard> {
+    fn chats(app: &App) -> Vec<ChatNotice> {
         app.world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .cloned()
             .collect()

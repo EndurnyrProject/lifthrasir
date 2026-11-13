@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
 use crate::domain::inventory::Inventory;
-use net_contract::events::{ChatHeard, ItemEquipped, ItemUnequipped};
+use net_contract::events::{ChatNotice, ItemEquipped, ItemUnequipped};
 
 const EQUIP_RESULT_OK: u32 = 0;
 const UNEQUIP_RESULT_OK: u32 = 0;
@@ -17,13 +17,13 @@ const UNEQUIP_RESULT_OK: u32 = 0;
 pub fn apply_equip_results(
     mut equipped: MessageReader<ItemEquipped>,
     mut unequipped: MessageReader<ItemUnequipped>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
     mut inventory: ResMut<Inventory>,
 ) {
     for result in equipped.read() {
         if result.result != EQUIP_RESULT_OK {
-            chat.write(ChatHeard {
-                gid: 0,
+            chat.write(ChatNotice {
+                error: false,
                 message: equip_failure_message(result.result).to_string(),
             });
             continue;
@@ -34,8 +34,8 @@ pub fn apply_equip_results(
 
     for result in unequipped.read() {
         if result.result != UNEQUIP_RESULT_OK {
-            chat.write(ChatHeard {
-                gid: 0,
+            chat.write(ChatNotice {
+                error: false,
                 message: "You cannot unequip this item.".to_string(),
             });
             continue;
@@ -63,7 +63,7 @@ mod tests {
         app.init_resource::<Inventory>()
             .add_message::<ItemEquipped>()
             .add_message::<ItemUnequipped>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_systems(Update, apply_equip_results);
 
         app.world_mut().resource_mut::<Inventory>().upsert(Item {
@@ -84,7 +84,7 @@ mod tests {
 
     fn chat_count(app: &App) -> usize {
         app.world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .count()
     }

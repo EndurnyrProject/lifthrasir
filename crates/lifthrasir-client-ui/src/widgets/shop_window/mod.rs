@@ -807,7 +807,7 @@ mod tests {
     use super::*;
     use net_contract::{
         dto::ShopResult,
-        events::{ChatHeard, ShopBuyResulted, ShopSellResulted},
+        events::{ChatNotice, ShopBuyResulted, ShopSellResulted},
     };
 
     fn session(tab: ShopTab) -> ShopSession {
@@ -1052,7 +1052,7 @@ mod tests {
             })));
             app.add_message::<ShopBuyResulted>()
                 .add_message::<ShopSellResulted>()
-                .add_message::<ChatHeard>()
+                .add_message::<ChatNotice>()
                 .add_systems(Update, on_shop_result);
             app.world_mut().write_message(ShopSellResulted {
                 result: ShopResult::Ok,
@@ -1070,7 +1070,7 @@ mod tests {
             assert!(app.world().resource::<PendingShopDeal>().0.is_none());
             let lines: Vec<_> = app
                 .world()
-                .resource::<Messages<ChatHeard>>()
+                .resource::<Messages<ChatNotice>>()
                 .iter_current_update_messages()
                 .collect();
             assert_eq!(lines.len(), 1);
@@ -1080,7 +1080,7 @@ mod tests {
             app.world_mut().remove_resource::<ShopSession>();
             app.world_mut().write_message(ShopBuyResulted { result });
             app.update();
-            assert_eq!(app.world().resource::<Messages<ChatHeard>>().len(), 1);
+            assert_eq!(app.world().resource::<Messages<ChatNotice>>().len(), 1);
         }
     }
 
@@ -1172,7 +1172,7 @@ mod tests {
         app.init_state::<GameState>();
         app.add_message::<ShopBuyResulted>();
         app.add_message::<ShopSellResulted>();
-        app.add_message::<ChatHeard>();
+        app.add_message::<ChatNotice>();
         app.add_systems(
             Update,
             rebuild_body.run_if(

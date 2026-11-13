@@ -9,7 +9,7 @@ use crate::domain::input::{HOTBAR_ACTIONS, PlayerAction, ui_unfocused};
 use crate::domain::inventory::{Inventory, UseItemRequested};
 use crate::domain::skill::SkillCastRequested;
 use crate::domain::vending::{VENDING_SKILL_ID, VendingIntent};
-use net_contract::events::ChatHeard;
+use net_contract::events::ChatNotice;
 
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
@@ -47,7 +47,7 @@ pub fn dispatch_hotbar_activation(
     mut cast: MessageWriter<SkillCastRequested>,
     mut vending: MessageWriter<VendingIntent>,
     mut use_item: MessageWriter<UseItemRequested>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     for activation in activations.read() {
         let Some(slot) = hotbar.get(activation.index) else {
@@ -67,8 +67,8 @@ pub fn dispatch_hotbar_activation(
                     });
                 }
                 None => {
-                    chat.write(ChatHeard {
-                        gid: 0,
+                    chat.write(ChatNotice {
+                        error: false,
                         message: "You don't have that item.".to_string(),
                     });
                 }
@@ -88,7 +88,7 @@ mod tests {
             .add_message::<SkillCastRequested>()
             .add_message::<VendingIntent>()
             .add_message::<UseItemRequested>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .init_resource::<Hotbar>()
             .init_resource::<Inventory>()
             .add_systems(Update, dispatch_hotbar_activation);
@@ -118,9 +118,9 @@ mod tests {
             .collect()
     }
 
-    fn chats(app: &App) -> Vec<ChatHeard> {
+    fn chats(app: &App) -> Vec<ChatNotice> {
         app.world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .cloned()
             .collect()
@@ -172,7 +172,7 @@ mod tests {
 
         let chat = chats(&app);
         assert_eq!(chat.len(), 1);
-        assert_eq!(chat[0].gid, 0);
+        assert!(!chat[0].error);
         assert!(uses(&app).is_empty());
     }
 

@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -120,10 +120,10 @@ pub mod envelope {
         NameResponse(super::NameResponse),
         /// c2s zone
         #[prost(message, tag = "43")]
-        ChatRequest(super::ChatRequest),
+        ChatSend(super::ChatSend),
         /// s2c zone world
         #[prost(message, tag = "44")]
-        ChatMessage(super::ChatMessage),
+        ChatLine(super::ChatLine),
         /// s2c zone snapshots
         #[prost(message, tag = "45")]
         Snapshot(super::Snapshot),
@@ -775,6 +775,14 @@ pub mod envelope {
         /// s2c zone gameplay
         #[prost(message, tag = "231")]
         FameUpdate(super::FameUpdate),
+        /// 232-233: GM command line and non-speech text for the chat log
+        ///
+        /// c2s zone
+        #[prost(message, tag = "232")]
+        GmCommand(super::GmCommand),
+        /// s2c zone world
+        #[prost(message, tag = "233")]
+        ChatNotice(super::ChatNotice),
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -1663,22 +1671,105 @@ pub struct NameResponse {
     #[prost(string, tag = "5")]
     pub position_name: ::prost::alloc::string::String,
 }
-/// Client -> server, public chat message (replaces RO CZ_REQUEST_CHAT 0x008C).
+/// Client -> server, say something on a channel. The server knows who is
+/// speaking, so `text` is the words only and never carries the sender's name.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ChatRequest {
-    #[prost(string, tag = "1")]
-    pub message: ::prost::alloc::string::String,
-}
-/// Server -> client, an entity's chat message (replaces RO ZC_NOTIFY_CHAT 0x008D).
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ChatMessage {
-    #[prost(uint32, tag = "1")]
-    pub gid: u32,
+pub struct ChatSend {
+    #[prost(enumeration = "ChatChannel", tag = "1")]
+    pub channel: i32,
+    /// At most 255 bytes, not blank.
     #[prost(string, tag = "2")]
-    pub message: ::prost::alloc::string::String,
-    /// Talkie Box bytes, when present; otherwise use message.
-    #[prost(bytes = "vec", tag = "3")]
-    pub raw_message: ::prost::alloc::vec::Vec<u8>,
+    pub text: ::prost::alloc::string::String,
+    /// Recipient character name. CHAT_WHISPER only.
+    #[prost(string, tag = "3")]
+    pub whisper_to: ::prost::alloc::string::String,
+    /// Inventory indices of the items linked in `text`, in order: the n-th
+    /// U+FFFC in `text` marks where the n-th link is shown. At most 3, and the
+    /// number of U+FFFC must equal the number of indices.
+    #[prost(uint32, repeated, tag = "4")]
+    pub link_indices: ::prost::alloc::vec::Vec<u32>,
+}
+/// Server -> client, one line of speech. The sender also gets its own line back,
+/// so the client never draws what it typed until the server accepted it.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChatLine {
+    #[prost(enumeration = "ChatChannel", tag = "1")]
+    pub channel: i32,
+    /// The speaking unit (player, NPC or Talkie Box cell).
+    #[prost(uint32, tag = "2")]
+    pub sender_gid: u32,
+    /// Display name of the speaker. Empty for a Talkie Box.
+    #[prost(string, tag = "3")]
+    pub sender_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub text: ::prost::alloc::string::String,
+    /// Talkie Box bytes, when present; otherwise use `text`.
+    #[prost(bytes = "vec", tag = "5")]
+    pub raw_text: ::prost::alloc::vec::Vec<u8>,
+    /// CHAT_WHISPER only: the recipient's name, so the sender's own copy can be
+    /// told apart from a whisper it received.
+    #[prost(string, tag = "6")]
+    pub whisper_to: ::prost::alloc::string::String,
+    /// The linked items, one per U+FFFC in `text`, in order. `index`, `amount`,
+    /// `location` and `favorite` are zeroed: a link shows an item, not a slot.
+    #[prost(message, repeated, tag = "7")]
+    pub links: ::prost::alloc::vec::Vec<InventoryItem>,
+}
+/// Client -> server, a GM command line without the leading `@`
+/// (for example `item 501 10`). The reply is a ChatNotice.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GmCommand {
+    #[prost(string, tag = "1")]
+    pub command: ::prost::alloc::string::String,
+}
+/// Server -> client, free text for the chat log that nobody said: command
+/// replies, chat refusals and server notices. A notice the client has its own
+/// wording for goes through SystemNotice instead.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ChatNotice {
+    #[prost(enumeration = "chat_notice::Kind", tag = "1")]
+    pub kind: i32,
+    #[prost(string, tag = "2")]
+    pub text: ::prost::alloc::string::String,
+}
+/// Nested message and enum types in `ChatNotice`.
+pub mod chat_notice {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Kind {
+        Info = 0,
+        Error = 1,
+    }
+    impl Kind {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Info => "INFO",
+                Self::Error => "ERROR",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "INFO" => Some(Self::Info),
+                "ERROR" => Some(Self::Error),
+                _ => None,
+            }
+        }
+    }
 }
 /// Client -> server, emote/emoticon request (replaces RO CZ_REQ_EMOTION 0x00bf).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -4571,6 +4662,47 @@ impl NavigationEndReason {
             "NAVIGATION_END_REASON_UNSPECIFIED" => Some(Self::Unspecified),
             "NAVIGATION_END_REASON_ARRIVED" => Some(Self::Arrived),
             "NAVIGATION_END_REASON_CANCELLED" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+}
+/// Who a chat line reaches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ChatChannel {
+    /// Players in view of the speaker.
+    ChatLocal = 0,
+    /// Online members of the speaker's party.
+    ChatParty = 1,
+    /// Online members of the speaker's guild.
+    ChatGuild = 2,
+    /// Every online player.
+    ChatTrade = 3,
+    /// One player, named by `whisper_to`.
+    ChatWhisper = 4,
+}
+impl ChatChannel {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::ChatLocal => "CHAT_LOCAL",
+            Self::ChatParty => "CHAT_PARTY",
+            Self::ChatGuild => "CHAT_GUILD",
+            Self::ChatTrade => "CHAT_TRADE",
+            Self::ChatWhisper => "CHAT_WHISPER",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CHAT_LOCAL" => Some(Self::ChatLocal),
+            "CHAT_PARTY" => Some(Self::ChatParty),
+            "CHAT_GUILD" => Some(Self::ChatGuild),
+            "CHAT_TRADE" => Some(Self::ChatTrade),
+            "CHAT_WHISPER" => Some(Self::ChatWhisper),
             _ => None,
         }
     }

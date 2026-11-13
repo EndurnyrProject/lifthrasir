@@ -3,7 +3,7 @@ use bevy_auto_plugin::prelude::*;
 use net_contract::commands::UseRequested;
 
 use crate::core::state::GameState;
-use net_contract::events::{ChatHeard, ItemUseFailed};
+use net_contract::events::{ChatNotice, ItemUseFailed};
 
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin)]
@@ -36,11 +36,11 @@ fn use_failure_message(reason: u32) -> &'static str {
 #[auto_add_system(plugin = crate::domain::world::plugin::ZoneDomainAutoPlugin, schedule = Update)]
 pub fn report_item_use_failure(
     mut failures: MessageReader<ItemUseFailed>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     for failure in failures.read() {
-        chat.write(ChatHeard {
-            gid: 0,
+        chat.write(ChatNotice {
+            error: false,
             message: use_failure_message(failure.reason).to_string(),
         });
     }
@@ -66,7 +66,7 @@ mod tests {
     fn report_item_use_failure_writes_chat_heard() {
         let mut app = App::new();
         app.add_message::<ItemUseFailed>()
-            .add_message::<ChatHeard>()
+            .add_message::<ChatNotice>()
             .add_systems(Update, report_item_use_failure);
 
         app.world_mut()
@@ -78,10 +78,10 @@ mod tests {
 
         app.update();
 
-        let chat = app.world().resource::<Messages<ChatHeard>>();
+        let chat = app.world().resource::<Messages<ChatNotice>>();
         let msgs: Vec<_> = chat.iter_current_update_messages().collect();
         assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].gid, 0);
+        assert!(!msgs[0].error);
         assert_eq!(msgs[0].message, "You cannot use this item.");
     }
 }

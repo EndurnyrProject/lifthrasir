@@ -31,7 +31,7 @@ use lifthrasir_ui::widgets::primitives::WINDOW_SHADOW;
 use net_contract::dto::{
     VendingCloseTarget, VendingListOutcome, VendingPurchaseOutcome, VendingSnapshot,
 };
-use net_contract::events::ChatHeard;
+use net_contract::events::ChatNotice;
 
 pub mod buyer;
 pub mod feedback;
@@ -1012,11 +1012,11 @@ fn cancel_on_escape(
 
 fn deliver_vending_feedback(
     mut notices: MessageReader<VendingNotice>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     for notice in notices.read() {
-        chat.write(ChatHeard {
-            gid: 0,
+        chat.write(ChatNotice {
+            error: false,
             message: vending_notice_text(notice),
         });
     }

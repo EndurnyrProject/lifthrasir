@@ -101,10 +101,10 @@ mod tests {
     fn unrelated_body_produces_no_shop_events() {
         let app = drain(vec![(
             WORLD,
-            Body::ChatMessage(net::ChatMessage {
-                gid: 150001,
-                message: "hello".into(),
-                raw_message: vec![],
+            Body::ChatLine(net::ChatLine {
+                sender_gid: 150001,
+                text: "hello".into(),
+                ..Default::default()
             }),
         )]);
 

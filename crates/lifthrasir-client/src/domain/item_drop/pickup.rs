@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use net_contract::events::{ChatHeard, PickupOutcome, PickupResult};
+use net_contract::events::{ChatNotice, PickupOutcome, PickupResult};
 
 use lifthrasir_assets::catalogs::item::registry::ItemDb;
 
@@ -35,7 +35,7 @@ pub fn handle_pickup_result(
     mut results: MessageReader<PickupResult>,
     mut pending: ResMut<PendingPickups>,
     item_db: Res<ItemDb>,
-    mut chat: MessageWriter<ChatHeard>,
+    mut chat: MessageWriter<ChatNotice>,
 ) {
     for result in results.read() {
         let info = pending.0.remove(&result.ground_id);
@@ -46,15 +46,15 @@ pub fn handle_pickup_result(
                     continue;
                 };
                 let name = item_db.name(info.nameid, info.identified).unwrap_or("item");
-                chat.write(ChatHeard {
-                    gid: 0,
+                chat.write(ChatNotice {
+                    error: false,
                     message: format!("You got {} {}", info.amount, name),
                 });
             }
             outcome => {
                 if let Some(message) = pickup_error_message(outcome) {
-                    chat.write(ChatHeard {
-                        gid: 0,
+                    chat.write(ChatNotice {
+                        error: false,
                         message: message.to_string(),
                     });
                 }
@@ -74,16 +74,16 @@ mod tests {
     fn result_app() -> App {
         let mut app = App::new();
         app.add_message::<PickupResult>();
-        app.add_message::<ChatHeard>();
+        app.add_message::<ChatNotice>();
         app.init_resource::<PendingPickups>();
         app.init_resource::<ItemDb>();
         app.add_systems(Update, handle_pickup_result);
         app
     }
 
-    fn chat_messages(app: &App) -> Vec<ChatHeard> {
+    fn chat_messages(app: &App) -> Vec<ChatNotice> {
         app.world()
-            .resource::<Messages<ChatHeard>>()
+            .resource::<Messages<ChatNotice>>()
             .iter_current_update_messages()
             .cloned()
             .collect()
