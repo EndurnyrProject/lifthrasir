@@ -25,7 +25,9 @@ use crate::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 
 pub const PRIMITIVES_DIR: &str = "ro://ui/primitives/";
 /// The art is the 2x cut and slicing runs in logical px, so capping the corner scale
-/// at 0.5 keeps corners at their 1x design size on any DPI.
+/// at 0.5 keeps corners at their 1x design size on any DPI. Bevy also caps it at
+/// `node / image` size, so sliced art must stay at most twice the smallest node using
+/// it: the button art is cropped to its borders (82px) for 41px+ buttons.
 const ART_SCALE: f32 = 0.5;
 /// Baked shadow around each shape (`pad` in `prims.py`), 1x px.
 pub const WINDOW_SHADOW: f32 = 22.0;
