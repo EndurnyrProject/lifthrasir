@@ -18,6 +18,7 @@ pub mod emote;
 pub mod escape_menu;
 pub mod guild_window;
 pub mod hotbar;
+pub mod hud_layout;
 pub mod info_modal;
 pub mod inventory_window;
 pub mod minimap;
@@ -64,6 +65,7 @@ impl Plugin for InGameHudPlugin {
             storage_window::StorageWindowPlugin,
         ));
         app.add_plugins(inventory_window::InventoryWindowPlugin);
+        app.add_plugins(hud_layout::HudLayoutPlugin);
         app.add_plugins(skills_window::SkillsWindowPlugin);
         app.add_plugins(trade_window::TradeWindowPlugin);
         app.add_plugins(vending_window::VendingWindowPlugin);

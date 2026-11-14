@@ -11,6 +11,8 @@ use lifthrasir_client::domain::world::viewpoint::ViewpointMarker;
 use lifthrasir_runtime::actors::sprites::legacy::CharacterDirection;
 use lifthrasir_runtime::rendering::coordinates::{Direction, world_position_to_spawn_coords};
 
+use crate::widgets::hud_layout::{HudWidget, make_movable};
+
 /// Marks the minimap root.
 #[derive(Component)]
 pub struct MinimapRoot;
@@ -88,7 +90,8 @@ const DOT_HALF: f32 = 3.0;
 
 /// Builds the minimap under `parent`: a fixed-size map image anchored top-right
 /// with the player marker over it and a coordinate readout below. The image stays
-/// empty and the marker hidden until the loading/tracking systems run.
+/// empty and the marker hidden until the loading/tracking systems run. The root is
+/// pickable so the player can drag it.
 pub fn spawn_minimap(commands: &mut Commands, parent: Entity, asset_server: &AssetServer) {
     let font_body = asset_server.load(lifthrasir_ui::theme::FONT_BODY);
 
@@ -103,10 +106,10 @@ pub fn spawn_minimap(commands: &mut Commands, parent: Entity, asset_server: &Ass
                 align_items: AlignItems::Center,
                 ..default()
             },
-            Pickable::IGNORE,
             ChildOf(parent),
         ))
         .id();
+    make_movable(commands, root, HudWidget::Minimap);
 
     let frame = commands
         .spawn((

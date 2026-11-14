@@ -22,6 +22,7 @@ use crate::screens::shared::{
     badge, glow, hud_plate, link, overline, plate_button, plate_sheen, thousands, tooltip_frame,
 };
 use crate::widgets::chat_box::CHAT_RIGHT;
+use crate::widgets::hud_layout::{HudWidget, movable};
 
 const SLOT: f32 = 44.0;
 const ICON: f32 = 30.0;
@@ -94,6 +95,7 @@ fn plate() -> impl Scene {
     let rows: Vec<_> = (0..2).map(row).collect();
     bsn! {
         @hud_plate()
+        @movable(HudWidget::Hotbar)
         Node {
             flex_shrink: 0.0,
             align_items: AlignItems::FlexEnd,

@@ -18,6 +18,7 @@ use super::{
     StatusTip, Trail, hide_tip, on_bar_button, show_tip,
 };
 use crate::screens::shared::{hud_plate, overline, plate_button, plate_sheen, tooltip};
+use crate::widgets::hud_layout::{HudWidget, movable};
 use crate::widgets::status_icons;
 
 /// Gap between the bar and the screen's top-left corner.
@@ -57,10 +58,12 @@ pub(super) fn root() -> impl Scene {
         @ignore_picking()
         Children [
             PlateHost
+            @movable(HudWidget::StatusBar)
             Node { flex_shrink: 0.0 }
             @ignore_picking()
             --
             @status_icons::icon_row()
+            @movable(HudWidget::StatusEffects)
             Node { max_width: px(FULL.x) }
         ]
     }

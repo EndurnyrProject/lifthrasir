@@ -30,6 +30,7 @@ mod view;
 mod tests;
 
 use crate::widgets::character_window::CharacterWindowState;
+use crate::widgets::hud_layout::HudLayout;
 use view::{Field, Gauge, LevelUp, StatusView, Tip};
 
 /// How long a spent resource's ghost stays put before it drains, in seconds.
@@ -425,7 +426,7 @@ fn show_tip(
     mut commands: Commands,
     parts: Query<&Tip>,
     hero: Hero,
-    settings: Res<HudSettings>,
+    (settings, layout): (Res<HudSettings>, Res<HudLayout>),
     roots: Query<Entity, With<StatusBarRoot>>,
     shown: Query<Entity, With<StatusTip>>,
 ) {
@@ -436,8 +437,9 @@ fn show_tip(
     for tip in &shown {
         commands.entity(tip).despawn();
     }
-    let left = (over.pointer.position.x - scene::MARGIN - TIP_LEAD).max(0.0);
-    let top = scene::plate_height(settings.character_info_minimal) + 8.0;
+    let offset = layout.status_bar;
+    let left = (over.pointer.position.x - scene::MARGIN - TIP_LEAD).max(offset.x);
+    let top = scene::plate_height(settings.character_info_minimal) + 8.0 + offset.y;
     commands
         .spawn_scene(scene::tip(view.tip(*part), left, top))
         .insert(ChildOf(root));

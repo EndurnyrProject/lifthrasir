@@ -19,6 +19,7 @@ use super::{
     ChatLogFrame, LOG_END, on_chat_button, on_line_click,
 };
 use crate::screens::shared::{overline, usable, wide_button};
+use crate::widgets::hud_layout::{HudWidget, movable};
 
 pub(super) const PANEL_LEFT: f32 = 16.0;
 pub(super) const PANEL_WIDTH: f32 = 540.0;
@@ -39,6 +40,7 @@ pub(super) fn panel() -> impl Scene {
     );
     bsn! {
         ChatBoxRoot
+        @movable(HudWidget::Chat)
         Node {
             position_type: PositionType::Absolute,
             left: px(PANEL_LEFT),
