@@ -1028,9 +1028,17 @@ fn modifier_label(modifier: Modifier) -> Option<&'static str> {
 /// `left`/`right`/`top`/`bottom`.
 pub fn badge(text: String, size: f32, color: Color) -> impl Scene {
     bsn! {
-        @chrome_text(text, size, color)
-        TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
+        @outlined_text(text, size, color)
         Node { position_type: PositionType::Absolute }
+    }
+}
+
+/// One line of text with a black drop shadow, legible over the world or an icon.
+pub fn outlined_text(text: String, size: f32, color: Color) -> impl Scene {
+    bsn! {
+        @chrome_text(text, size, color)
+        TextLayout { linebreak: LineBreak::NoWrap }
+        TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
     }
 }
 

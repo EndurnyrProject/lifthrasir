@@ -1,27 +1,39 @@
-//! Combat health bars over mobs. A bar pops above a mob on each
-//! `DisplayDamageNumber` it is the target of, tracks the server-authoritative
-//! `UnitHealth`, and fades out a few seconds after the last hit. Same
-//! screen-projection pattern as nameplates: an absolute `bevy_ui` node whose
-//! `left`/`top` follow `Camera::world_to_viewport` every frame.
+//! Health bars over monsters. A bar pops above a monster when a damage number
+//! lands on it, tracks the server-authoritative `UnitHealth` and fades out a few
+//! seconds after the last hit. The locked attack target keeps its bar for as long
+//! as the lock holds, and a boss always shows a wider bar with its health percent.
 
+use std::collections::HashSet;
+
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use lifthrasir_client::core::state::GameState;
+use bevy::text::LetterSpacing;
+use lifthrasir_client::domain::combat::components::DeadEntity;
 use lifthrasir_client::domain::combat::events::DisplayDamageNumber;
 use lifthrasir_client::domain::entities::components::UnitHealth;
-use lifthrasir_client::domain::entities::markers::Mob;
+use lifthrasir_client::domain::entities::markers::{Boss, Mob};
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::ignore_picking;
 
-use crate::worldspace::{WorldCameraFilter, viewport_to_ui};
+use crate::screens::shared::outlined_text;
+use crate::worldspace::{
+    LockedUnit, WorldAnchor, WorldOverlaySystems, fill_width, raised_root, world_bar,
+};
 
-const BAR_WIDTH: f32 = 44.0;
-const BAR_HEIGHT: f32 = 6.0;
-/// Pixels above the entity origin, below skill cast labels (88).
-const BAR_HEAD_GAP: f32 = 74.0;
+const BAR_SIZE: Vec2 = Vec2::new(44.0, 6.0);
+const BOSS_BAR_SIZE: Vec2 = Vec2::new(110.0, 8.0);
+/// Wider than the boss bar and its label, so both centre on the monster.
+const ROOT_WIDTH: f32 = 160.0;
+/// Pixels from the monster's origin up to the bar's bottom edge, clearing the head.
+const BAR_HEAD_GAP: f32 = 68.0;
 /// How long a bar lingers after the last hit before it is gone.
 const LINGER_SECS: f32 = 5.0;
 /// Fade-out window at the end of the linger.
 const FADE_SECS: f32 = 0.8;
 /// Above nameplates (+100), below damage numbers (+150).
 const BAR_Z: i32 = super::WORLD_OVERLAY_Z + 120;
+const HP_TOP: Color = Color::srgb_u8(0xd0, 0x54, 0x4a);
+const HP_BOTTOM: Color = Color::srgb_u8(0x8e, 0x2f, 0x28);
 
 pub struct MobHealthBarPlugin;
 
@@ -29,162 +41,239 @@ impl Plugin for MobHealthBarPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (engage_bars, tick_bars, follow_bars)
+            (engage_bars, tick_bars)
                 .chain()
-                .run_if(in_state(GameState::InGame)),
+                .in_set(WorldOverlaySystems::Sync),
         );
-        app.add_systems(OnExit(GameState::InGame), despawn_all);
     }
 }
 
+/// A monster's bar; its [`WorldAnchor`] names the monster.
 #[derive(Component)]
 struct MobHealthBar {
-    target: Entity,
     linger: Timer,
 }
 
-#[derive(Component)]
-struct MobHealthBarFill;
-
-fn fill_percent(hp: u32, max_hp: u32) -> f32 {
-    (hp as f32 / max_hp.max(1) as f32).clamp(0.0, 1.0) * 100.0
+/// The bar's trough, which fades with the bar back from its `ring` colour.
+#[derive(Component, Default, Clone)]
+struct MobBarTrough {
+    ring: Color,
 }
+
+#[derive(Component, Default, Clone)]
+struct MobBarFill;
+
+/// A boss bar's health percent.
+#[derive(Component, Default, Clone)]
+struct MobBarLabel;
 
 /// Alpha multiplier for the fade-out window at the end of the linger.
 fn fade_alpha(remaining_secs: f32) -> f32 {
     (remaining_secs / FADE_SECS).clamp(0.0, 1.0)
 }
 
-fn spawn_bar(commands: &mut Commands, target: Entity) {
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            width: Val::Px(BAR_WIDTH),
-            height: Val::Px(BAR_HEIGHT),
-            padding: UiRect::all(Val::Px(1.0)),
-            ..default()
-        },
-        BackgroundColor(lifthrasir_ui::theme::FIELD),
-        GlobalZIndex(BAR_Z),
-        Visibility::Hidden,
-        Pickable::IGNORE,
-        MobHealthBar {
-            target,
-            linger: Timer::from_seconds(LINGER_SECS, TimerMode::Once),
-        },
-        children![(
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                ..default()
-            },
-            BackgroundColor(lifthrasir_ui::theme::HEALTH_RED),
-            Pickable::IGNORE,
-            MobHealthBarFill,
-        )],
-    ));
+fn hp_gradient(alpha: f32) -> BackgroundGradient {
+    BackgroundGradient::from(LinearGradient::to_bottom(vec![
+        ColorStop::new(HP_TOP.with_alpha(alpha), percent(0)),
+        ColorStop::new(HP_BOTTOM.with_alpha(alpha), percent(100)),
+    ]))
 }
 
-/// Pops (or re-arms) a bar for every mob a damage number targets.
+/// NOTE: the server's boss class covers minibosses too, so the label says BOSS
+/// where the design says MVP. Switch once the protocol tells the two apart.
+fn boss_label(health: &UnitHealth) -> String {
+    let percent = u64::from(health.hp) * 100 / u64::from(health.max_hp.max(1));
+    format!("BOSS · {}%", percent.min(100))
+}
+
+fn bar(boss: bool) -> impl Scene {
+    let (size, ring) = if boss {
+        (BOSS_BAR_SIZE, ro_dark::PRIMARY_STROKE)
+    } else {
+        (BAR_SIZE, Color::BLACK.with_alpha(0.6))
+    };
+    let spacing = LetterSpacing::Px(1.2);
+    let label: Vec<_> = boss
+        .then(|| {
+            bsn! {
+                MobBarLabel
+                @outlined_text(String::new(), 10.0, ro_dark::RARE_RING)
+                spacing
+            }
+        })
+        .into_iter()
+        .collect();
+    let trough = MobBarTrough { ring };
+    let paint = hp_gradient(1.0);
+    let content = bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: px(2),
+        }
+        @ignore_picking()
+        Children [
+            {label}
+            --
+            trough
+            @world_bar(size, ring, bsn! { MobBarFill paint })
+        ]
+    };
+    raised_root(ROOT_WIDTH, BAR_Z, content)
+}
+
+/// A monster that can carry a bar: alive, with known health.
+type LiveMob = (With<Mob>, With<UnitHealth>, Without<DeadEntity>);
+
+/// Pops a bar for every live monster that was just hit, is the locked target or is
+/// a boss, and re-arms the bars those monsters already have.
 fn engage_bars(
     mut events: MessageReader<DisplayDamageNumber>,
     mut commands: Commands,
-    mobs: Query<(), (With<Mob>, With<UnitHealth>)>,
-    mut bars: Query<&mut MobHealthBar>,
-    mut spawned: Local<Vec<Entity>>,
+    locked: LockedUnit,
+    mobs: Query<(Entity, Has<Boss>), LiveMob>,
+    mut bars: Query<(&WorldAnchor, &mut MobHealthBar)>,
+    mut engaged: Local<HashSet<Entity>>,
 ) {
-    spawned.clear();
-    for event in events.read() {
-        if mobs.get(event.entity).is_err() || spawned.contains(&event.entity) {
-            continue;
+    engaged.clear();
+    engaged.extend(events.read().map(|event| event.entity));
+    engaged.extend(locked.entity());
+    engaged.extend(mobs.iter().filter(|(_, boss)| *boss).map(|(mob, _)| mob));
+
+    for (anchor, mut bar) in &mut bars {
+        if engaged.remove(&anchor.target) {
+            bar.linger.reset();
         }
-        match bars.iter_mut().find(|bar| bar.target == event.entity) {
-            Some(mut bar) => bar.linger.reset(),
-            None => {
-                spawn_bar(&mut commands, event.entity);
-                spawned.push(event.entity);
+    }
+    for target in engaged.drain() {
+        let Ok((_, boss)) = mobs.get(target) else {
+            continue;
+        };
+        commands.spawn_scene(bar(boss)).insert((
+            WorldAnchor {
+                target,
+                width: ROOT_WIDTH,
+                drop: -BAR_HEAD_GAP,
+            },
+            MobHealthBar {
+                linger: Timer::from_seconds(LINGER_SECS, TimerMode::Once),
+            },
+        ));
+    }
+}
+
+/// The nodes of a bar that follow its monster's health and its fade.
+#[derive(SystemParam)]
+struct BarParts<'w, 's> {
+    children: Query<'w, 's, &'static Children>,
+    troughs: Query<
+        'w,
+        's,
+        (
+            &'static MobBarTrough,
+            &'static mut BackgroundColor,
+            &'static mut BorderColor,
+        ),
+    >,
+    fills: Query<'w, 's, (&'static mut Node, &'static mut BackgroundGradient), With<MobBarFill>>,
+    labels: Query<'w, 's, &'static mut Text, With<MobBarLabel>>,
+}
+
+impl BarParts<'_, '_> {
+    fn paint(&mut self, bar: Entity, health: &UnitHealth, alpha: f32) {
+        for part in self.children.iter_descendants(bar) {
+            if let Ok((trough, mut fill, mut ring)) = self.troughs.get_mut(part) {
+                fill.0 = Color::BLACK.with_alpha(0.7 * alpha);
+                *ring = BorderColor::all(trough.ring.with_alpha(trough.ring.alpha() * alpha));
+            }
+            if let Ok((mut node, mut gradient)) = self.fills.get_mut(part) {
+                node.width = fill_width(health.hp.into(), health.max_hp.into());
+                *gradient = hp_gradient(alpha);
+            }
+            if let Ok(mut text) = self.labels.get_mut(part) {
+                let label = boss_label(health);
+                if text.0 != label {
+                    text.0 = label;
+                }
             }
         }
     }
 }
 
-/// Ticks the linger, despawns expired/orphaned bars, and updates fill + fade.
+/// Ticks the linger, drops the bars that ran out or whose monster died, and paints
+/// the rest.
 fn tick_bars(
     time: Res<Time>,
     mut commands: Commands,
-    mut bars: Query<
-        (Entity, &mut MobHealthBar, &mut BackgroundColor, &Children),
-        Without<MobHealthBarFill>,
-    >,
-    targets: Query<&UnitHealth>,
-    mut fills: Query<(&mut Node, &mut BackgroundColor), With<MobHealthBarFill>>,
+    mut bars: Query<(Entity, &WorldAnchor, &mut MobHealthBar)>,
+    units: Query<&UnitHealth, Without<DeadEntity>>,
+    mut parts: BarParts,
 ) {
-    for (entity, mut bar, mut background, children) in &mut bars {
+    for (entity, anchor, mut bar) in &mut bars {
         bar.linger.tick(time.delta());
-        let Ok(health) = targets.get(bar.target) else {
+        let live = units
+            .get(anchor.target)
+            .ok()
+            .filter(|_| !bar.linger.is_finished());
+        let Some(health) = live else {
             commands.entity(entity).despawn();
             continue;
         };
-        if bar.linger.is_finished() {
-            commands.entity(entity).despawn();
-            continue;
-        }
-
-        let alpha = fade_alpha(bar.linger.remaining_secs());
-        background.0 =
-            lifthrasir_ui::theme::FIELD.with_alpha(lifthrasir_ui::theme::FIELD.alpha() * alpha);
-        for child in children {
-            let Ok((mut node, mut fill_color)) = fills.get_mut(*child) else {
-                continue;
-            };
-            node.width = Val::Percent(fill_percent(health.hp, health.max_hp));
-            fill_color.0 = lifthrasir_ui::theme::HEALTH_RED.with_alpha(alpha);
-        }
-    }
-}
-
-fn follow_bars(
-    camera: Query<(&Camera, &GlobalTransform), WorldCameraFilter>,
-    targets: Query<&GlobalTransform>,
-    ui_scale: Res<UiScale>,
-    mut bars: Query<(&MobHealthBar, &mut Node, &mut Visibility)>,
-) {
-    let Ok((camera, camera_transform)) = camera.single() else {
-        return;
-    };
-    for (bar, mut node, mut visibility) in &mut bars {
-        let Ok(target_transform) = targets.get(bar.target) else {
-            continue;
-        };
-        match camera.world_to_viewport(camera_transform, target_transform.translation()) {
-            Ok(screen) => {
-                let pos = viewport_to_ui(screen, &ui_scale);
-                node.left = Val::Px(pos.x - BAR_WIDTH / 2.0);
-                node.top = Val::Px(pos.y - BAR_HEAD_GAP);
-                *visibility = Visibility::Visible;
-            }
-            Err(_) => *visibility = Visibility::Hidden,
-        }
-    }
-}
-
-fn despawn_all(mut commands: Commands, bars: Query<Entity, With<MobHealthBar>>) {
-    for entity in &bars {
-        commands.entity(entity).despawn();
+        parts.paint(entity, health, fade_alpha(bar.linger.remaining_secs()));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::scene::ScenePlugin;
+    use lifthrasir_client::domain::combat::events::DamageDisplayType;
+    use lifthrasir_client::domain::entities::EntityRegistry;
+    use lifthrasir_client::domain::input::LockedTarget;
     use std::time::Duration;
 
-    #[test]
-    fn fill_percent_is_clamped() {
-        assert_eq!(fill_percent(50, 100), 50.0);
-        assert_eq!(fill_percent(0, 100), 0.0);
-        assert_eq!(fill_percent(200, 100), 100.0);
-        assert_eq!(fill_percent(5, 0), 100.0);
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>().init_asset::<Font>();
+        app.add_message::<DisplayDamageNumber>()
+            .init_resource::<LockedTarget>()
+            .init_resource::<EntityRegistry>()
+            .add_systems(Update, (engage_bars, tick_bars).chain());
+        app
+    }
+
+    fn mob(app: &mut App, hp: u32) -> Entity {
+        app.world_mut()
+            .spawn((Mob, UnitHealth { hp, max_hp: 60 }))
+            .id()
+    }
+
+    fn hit(app: &mut App, entity: Entity) {
+        app.world_mut().write_message(DisplayDamageNumber {
+            entity,
+            amount: 10,
+            damage_type: DamageDisplayType::Normal,
+            delay_secs: 0.0,
+        });
+    }
+
+    fn barred(app: &mut App) -> Vec<Entity> {
+        let world = app.world_mut();
+        world
+            .query_filtered::<&WorldAnchor, With<MobHealthBar>>()
+            .iter(world)
+            .map(|anchor| anchor.target)
+            .collect()
+    }
+
+    /// Runs the bars' timers past `secs`.
+    fn age(app: &mut App, secs: f32) {
+        let world = app.world_mut();
+        for mut bar in world.query::<&mut MobHealthBar>().iter_mut(world) {
+            bar.linger.set_elapsed(Duration::from_secs_f32(secs));
+        }
+        app.update();
     }
 
     #[test]
@@ -195,58 +284,77 @@ mod tests {
         assert_eq!(fade_alpha(0.0), 0.0);
     }
 
-    fn tick_app(target_alive: bool, elapsed: f32) -> (App, Entity) {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        let target = app.world_mut().spawn_empty().id();
-        if target_alive {
-            app.world_mut()
-                .entity_mut(target)
-                .insert(UnitHealth { hp: 30, max_hp: 60 });
-        }
-        let mut linger = Timer::from_seconds(LINGER_SECS, TimerMode::Once);
-        linger.set_elapsed(Duration::from_secs_f32(elapsed));
-        let fill = app
-            .world_mut()
-            .spawn((
-                Node::default(),
-                BackgroundColor(lifthrasir_ui::theme::HEALTH_RED),
-                MobHealthBarFill,
-            ))
-            .id();
-        let bar = app
-            .world_mut()
-            .spawn((
-                MobHealthBar { target, linger },
-                BackgroundColor(lifthrasir_ui::theme::FIELD),
-                Node::default(),
-            ))
-            .add_child(fill)
-            .id();
-        app.add_systems(Update, tick_bars);
+    #[test]
+    fn a_hit_pops_one_bar_that_tracks_health_and_runs_out() {
+        let mut app = app();
+        let poring = mob(&mut app, 30);
+        mob(&mut app, 60);
+        hit(&mut app, poring);
+        hit(&mut app, poring);
+
         app.update();
-        (app, bar)
-    }
+        app.update();
 
-    #[test]
-    fn expired_bar_despawns() {
-        let (mut app, bar) = tick_app(true, LINGER_SECS);
-        assert!(app.world_mut().get_entity(bar).is_err());
-    }
-
-    #[test]
-    fn orphaned_bar_despawns() {
-        let (mut app, bar) = tick_app(false, 0.0);
-        assert!(app.world_mut().get_entity(bar).is_err());
-    }
-
-    #[test]
-    fn live_bar_tracks_hp_fill() {
-        let (mut app, bar) = tick_app(true, 0.0);
+        assert_eq!(barred(&mut app), [poring]);
         let world = app.world_mut();
-        let children = world.entity(bar).get::<Children>().unwrap();
-        let fill = children[0];
-        let node = world.entity(fill).get::<Node>().unwrap();
-        assert_eq!(node.width, Val::Percent(50.0));
+        let fill = world
+            .query_filtered::<&Node, With<MobBarFill>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(fill.width, Val::Percent(50.0));
+
+        age(&mut app, LINGER_SECS);
+        assert!(barred(&mut app).is_empty());
+    }
+
+    #[test]
+    fn the_locked_target_keeps_its_bar_past_the_linger() {
+        let mut app = app();
+        let poring = mob(&mut app, 30);
+        app.world_mut()
+            .resource_mut::<EntityRegistry>()
+            .register_entity(7, poring);
+        app.world_mut().resource_mut::<LockedTarget>().gid = Some(7);
+        app.update();
+
+        age(&mut app, LINGER_SECS);
+        assert_eq!(barred(&mut app), [poring]);
+
+        app.world_mut().resource_mut::<LockedTarget>().gid = None;
+        age(&mut app, LINGER_SECS);
+        assert!(barred(&mut app).is_empty());
+    }
+
+    #[test]
+    fn a_boss_always_shows_its_bar_with_a_percent_until_it_dies() {
+        let mut app = app();
+        let lord = mob(&mut app, 45);
+        app.world_mut().entity_mut(lord).insert(Boss);
+
+        app.update();
+        app.update();
+
+        assert_eq!(barred(&mut app), [lord]);
+        let world = app.world_mut();
+        let label = world
+            .query_filtered::<&Text, With<MobBarLabel>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(label.0, "BOSS · 75%");
+
+        app.world_mut().entity_mut(lord).insert(DeadEntity);
+        app.update();
+        assert!(barred(&mut app).is_empty());
+    }
+
+    #[test]
+    fn a_hit_on_something_that_is_no_monster_pops_nothing() {
+        let mut app = app();
+        let player = app.world_mut().spawn(UnitHealth { hp: 1, max_hp: 2 }).id();
+        hit(&mut app, player);
+
+        app.update();
+
+        assert!(barred(&mut app).is_empty());
     }
 }

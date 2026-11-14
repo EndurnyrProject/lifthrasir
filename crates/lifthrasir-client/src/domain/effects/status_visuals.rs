@@ -568,6 +568,7 @@ mod tests {
             emblem_id: 0,
             sex: 0,
             is_boss: false,
+            aggressive: false,
             name: String::new(),
             display_size: 0,
             moving: false,

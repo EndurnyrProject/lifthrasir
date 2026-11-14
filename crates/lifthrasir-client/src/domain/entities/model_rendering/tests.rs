@@ -95,6 +95,7 @@ fn unit(gid: u32, job: u32, object_type: u32) -> UnitEntered {
         emblem_id: 7,
         sex: 0,
         is_boss: false,
+        aggressive: false,
         name: "Actor".into(),
         display_size: 0,
         moving: false,

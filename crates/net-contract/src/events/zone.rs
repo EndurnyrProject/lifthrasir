@@ -81,6 +81,8 @@ pub struct UnitEntered {
     pub emblem_id: u32,
     pub sex: u32,
     pub is_boss: bool,
+    /// Monsters only: attacks players on sight.
+    pub aggressive: bool,
     pub name: String,
     /// Visual size category: 0 normal, 1 small, 2 big.
     pub display_size: u32,

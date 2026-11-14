@@ -15,8 +15,8 @@ use {
                     states::{AnimationState, StatusEffects},
                 },
                 components::{
-                    GuildIdentity, NetworkEntity, PendingDespawn, SpawnGuildIdentityKnown,
-                    UnitHealth,
+                    EntityName, GuildIdentity, NetworkEntity, PendingDespawn,
+                    SpawnGuildIdentityKnown, UnitHealth,
                 },
                 markers::*,
                 model_rendering::GuildFlag,
@@ -75,6 +75,8 @@ struct SpawnFields {
     guild_name: String,
     emblem_id: u32,
     riding: bool,
+    is_boss: bool,
+    aggressive: bool,
 }
 
 impl From<&UnitEntered> for SpawnFields {
@@ -109,6 +111,8 @@ impl From<&UnitEntered> for SpawnFields {
             emblem_id: e.emblem_id,
             riding: e.effect_state & crate::domain::entities::character::systems::OPTION_RIDING
                 != 0,
+            is_boss: e.is_boss,
+            aggressive: e.aggressive,
         }
     }
 }
@@ -326,6 +330,12 @@ pub fn spawn_network_entity_system(
                         max_hp: event.max_hp,
                     },
                 ));
+                if event.is_boss {
+                    entity_cmd.insert(Boss);
+                }
+                if event.aggressive {
+                    entity_cmd.insert(Aggressive);
+                }
                 debug!("Spawned mob: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Homunculus => {
@@ -343,6 +353,12 @@ pub fn spawn_network_entity_system(
             crate::domain::entities::types::ObjectType::SkillUnit => {
                 unreachable!("SkillUnit is client-spawned only, never parsed from UnitEntered")
             }
+        }
+
+        // The spawn already names the unit, so its plate needs no name request;
+        // hovering still asks for the party and guild position.
+        if !event.name.is_empty() {
+            entity_cmd.insert(EntityName::new(event.name.clone()));
         }
 
         entity_cmd.insert((AnimationState::Idle, StatusEffects::default()));
@@ -776,6 +792,7 @@ mod tests {
             emblem_id,
             sex: 1,
             is_boss: false,
+            aggressive: false,
             name: "Alice".into(),
             display_size: 0,
             moving: false,
@@ -843,6 +860,28 @@ mod tests {
             (original_translation, Vec3::splat(2.0))
         );
     }
+
+    #[test]
+    fn mob_spawn_names_the_unit_and_marks_boss_and_aggressive() {
+        let mut app = app();
+        let mut mob = unit(0, "", 0);
+        mob.object_type = 5;
+        mob.is_boss = true;
+        mob.aggressive = true;
+        app.world_mut().write_message(mob);
+
+        app.update();
+
+        let mut query = app
+            .world_mut()
+            .query::<(&EntityName, Has<Boss>, Has<Aggressive>)>();
+        let (name, boss, aggressive) = query.single(app.world()).unwrap();
+        assert_eq!(
+            (name.name.as_str(), boss, aggressive),
+            ("Alice", true, true)
+        );
+    }
+
     #[test]
     fn mob_spawn_seeds_unit_health_and_hp_broadcasts_apply() {
         let mut app = app();

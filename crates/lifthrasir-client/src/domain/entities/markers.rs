@@ -24,6 +24,14 @@ pub struct WarpPortal;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Mob;
 
+/// Marker for boss-class monsters (MVPs and minibosses).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Boss;
+
+/// Marker for monsters that attack players on sight.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Aggressive;
+
 /// Marker for Homunculus entities (player's summoned creature)
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Homunculus;

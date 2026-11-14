@@ -1376,6 +1376,9 @@ pub struct UnitSpawn {
     pub spirit_sphere_revision: u64,
     #[prost(enumeration = "DisplaySize", tag = "38")]
     pub size: i32,
+    /// Monsters only: attacks players on sight (the aggressive mode).
+    #[prost(bool, tag = "39")]
+    pub aggressive: bool,
 }
 /// Server -> client, authoritative absolute spirit-sphere state for a unit.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
