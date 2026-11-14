@@ -37,6 +37,7 @@ pub mod status_bar;
 pub mod status_icons;
 pub mod storage_window;
 pub mod system_dialog;
+pub mod toasts;
 pub mod trade_window;
 pub mod vending_window;
 
@@ -72,6 +73,7 @@ impl Plugin for InGameHudPlugin {
         app.add_plugins(navigation::NavigationUiPlugin);
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);
         app.add_plugins(cutin::CutinPlugin);
+        app.add_plugins(toasts::ToastsPlugin);
     }
 }
 
@@ -106,6 +108,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     pushcart_window::spawn_pushcart_window(&mut commands, root);
     skills_window::shell::build(&mut commands, root);
     storage_window::scene::build(&mut commands, root);
+    toasts::spawn_toast_stack(&mut commands, root);
     trade_window::scene::build(&mut commands, root);
     vending_window::spawn_vending_window(&mut commands, root);
 }

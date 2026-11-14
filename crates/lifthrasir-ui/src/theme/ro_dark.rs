@@ -92,6 +92,14 @@ pub const STATUS_BUSY: Color = Color::srgb_u8(0xd9, 0xb2, 0x65);
 pub const STATUS_FULL: Color = Color::srgb_u8(0xd0, 0x67, 0x5c);
 pub const STATUS_OFFLINE: Color = Color::srgb_u8(0x7d, 0x84, 0x8e);
 
+// Tones of alerts and toasts. A warning takes `RARE_RING` and a plain notice
+// `FROST_GLOW`.
+pub const TONE_ERROR: Color = Color::srgb_u8(0xe0, 0x7a, 0x6e);
+pub const TONE_OK: Color = Color::srgb_u8(0xa9, 0xd3, 0x94);
+pub const TONE_WHISPER: Color = Color::srgb_u8(0xd6, 0xa6, 0xf0);
+/// The headline over a fallen hero.
+pub const FALLEN: Color = Color::srgb_u8(0xe8, 0xa4, 0x9d);
+
 /// Hairline around rows and troughs inside an [`INSET`] panel.
 pub const INSET_RULE: Color = Color::srgb_u8(0x2c, 0x32, 0x3b);
 

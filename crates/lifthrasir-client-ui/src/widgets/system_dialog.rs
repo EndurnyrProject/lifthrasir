@@ -1,38 +1,35 @@
-//! System dialog: a reusable, message-driven modal notice (BSN + Feathers).
+//! System dialog: a reusable, message-driven modal notice, after the `System Dialogs`
+//! artboard.
 //!
-//! Ported from the `designs/Endurnir Project` System Dialog mockup. Any system can
-//! summon it by writing a [`ShowSystemDialog`] message; the widget spawns a dimmed,
-//! click-eating backdrop centering a glass card (severity badge, kicker, title,
-//! message, optional code chip, primary button). The primary button — or Enter —
-//! dismisses the card and, when the request carried a `confirm_state`, navigates
-//! there via `NextState<GameState>`.
+//! Any system summons it by writing a [`ShowSystemDialog`] message. The dialog dims
+//! the screen and shows a window whose title bar carries the kicker in the severity
+//! tone, over a severity badge, the title, the message, an optional code chip and one
+//! or two buttons. The primary button, or Enter, dismisses it and, when the request
+//! carried a `confirm_state`, navigates there.
 //!
 //! Only one dialog lives at a time: a second request while one is open is ignored,
 //! which absorbs the duplicate lost/failed events quinnet can emit on a drop.
-//!
-//! The card chrome is one declarative `bsn!` tree; the primary button is a Feathers
-//! `@FeathersButton` (Primary variant) whose `on(Activate)` observer runs the shared
-//! dismiss + navigate logic. The severity accent tints the badge border/glyph and the
-//! code chip; Feathers owns the button fill from its own tokens, so the severity
-//! colour is carried by the badge rather than the button (see the note on `card`).
 
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
+use bevy::scene::EntityScene;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::{ButtonVariant, FeathersButton};
-use bevy_feathers::theme::ThemedText;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::presentation::ui::events::{
     DialogSeverity, ShowSystemDialog, SystemDialogChoice, SystemDialogKind,
 };
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    ButtonArt, CONTENT_INSET, WINDOW_SHADOW, diamond, display_text, window_titled,
+};
 
-use lifthrasir_ui::widgets::chrome::ignore_picking;
+use crate::screens::shared::{fit_button, glow, key_cap, modal_layer, overline};
 
 /// Sits just below the fade transition so the modal renders over every screen.
 /// `pub` so sibling modals (e.g. the death dialog) can anchor strictly below it.
 pub const DIALOG_Z: i32 = i32::MAX - 2;
-const DIALOG_WIDTH: f32 = 384.0;
+const DIALOG_WIDTH: f32 = 420.0;
 
 pub struct SystemDialogPlugin;
 
@@ -69,13 +66,13 @@ impl SystemDialogRoot {
     }
 }
 
-/// Accent colour for a severity — drives the badge border, glyph, and code chip.
-pub fn severity_accent(severity: DialogSeverity) -> Color {
+/// The tone of a severity: the kicker, the badge and the code chip take it.
+fn severity_tone(severity: DialogSeverity) -> Color {
     match severity {
-        DialogSeverity::Error => lifthrasir_ui::theme::BAD,
-        DialogSeverity::Warn => lifthrasir_ui::theme::WARN,
-        DialogSeverity::Info => lifthrasir_ui::theme::MANA_BLUE,
-        DialogSeverity::Ok => lifthrasir_ui::theme::EMERALD,
+        DialogSeverity::Error => ro_dark::TONE_ERROR,
+        DialogSeverity::Warn => ro_dark::RARE_RING,
+        DialogSeverity::Info => ro_dark::FROST_GLOW,
+        DialogSeverity::Ok => ro_dark::TONE_OK,
     }
 }
 
@@ -104,248 +101,155 @@ pub(crate) fn show_system_dialog(
     commands.spawn_scene(system_dialog(request));
 }
 
-/// The whole modal as one scene: a dimmed, click-eating backdrop centering the glass card.
+/// The whole modal as one scene: a dimmed, click-eating layer centring the window.
 fn system_dialog(request: &ShowSystemDialog) -> impl Scene + use<> {
     let confirm_state = request.confirm_state.clone();
     let kind = request.kind;
     let correlation = request.correlation;
     bsn! {
+        @modal_layer(DIALOG_Z)
         SystemDialogRoot::new(confirm_state, kind, correlation)
-        Node {
-            position_type: PositionType::Absolute,
-            width: percent(100),
-            height: percent(100),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-        }
-        BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
-        GlobalZIndex({DIALOG_Z})
-        Pickable
-        Children [ @card(request) ]
+        BackgroundColor({ro_dark::WINDOW_OUTLINE.with_alpha(0.6)})
+        Children [ @window(request) ]
     }
 }
 
-/// The glass card. The severity accent tints the badge border/glyph and the code chip;
-/// the primary button is a Feathers Primary `@FeathersButton`, which drives its own fill
-/// from `BUTTON_PRIMARY_*` tokens — a per-severity button tint is not expressible through
-/// Feathers, so the severity cue lives on the badge, not the button.
-fn card(request: &ShowSystemDialog) -> impl Scene + use<> {
-    let accent = severity_accent(request.severity);
-    let code_display = if request.code.is_empty() {
-        Display::None
-    } else {
-        Display::Flex
-    };
-    let code_text = format!("CODE  {}", request.code);
+fn window(request: &ShowSystemDialog) -> impl Scene + use<> {
+    let tone = severity_tone(request.severity);
+    let code = (!request.code.is_empty()).then(|| EntityScene(code_chip(&request.code, tone)));
+    let secondary = (!request.secondary_label.is_empty())
+        .then(|| EntityScene(secondary_button(request.secondary_label.clone())));
     bsn! {
+        @window_titled()
         Node {
-            width: px(DIALOG_WIDTH),
-            padding: {UiRect::axes(px(30), px(26))},
+            width: px(DIALOG_WIDTH + 2.0 * WINDOW_SHADOW),
             flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            border: px(1),
-            border_radius: BorderRadius::all(px(16)),
+            align_items: AlignItems::Stretch,
         }
-        BackgroundColor({lifthrasir_ui::theme::GLASS})
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
         Children [
-            @badge(severity_icon(request.severity), accent) --
-            @card_text(request.kicker.to_uppercase(), lifthrasir_ui::theme::FONT_BODY, 10.0, lifthrasir_ui::theme::GOLD, 16.0) --
-            @card_text(request.title.clone(), lifthrasir_ui::theme::FONT_TITLE, 23.0, lifthrasir_ui::theme::DISPLAY_GOLD, 7.0) --
-            @message(request.message.clone()) --
-            @code_chip(code_text, accent, code_display) --
-            @divider() --
-            @button_row(request)
-        ]
-    }
-}
-
-/// Decide whether the secondary button participates in layout: collapsed to
-/// `Display::None` (removed from flow, so the primary keeps full width) when the
-/// request carried no secondary label.
-fn secondary_display(label: &str) -> Display {
-    if label.is_empty() {
-        Display::None
-    } else {
-        Display::Flex
-    }
-}
-
-/// The action row: an optional lesser secondary button beside the primary button.
-/// Both grow to share the row; when the secondary is collapsed the primary spans
-/// the full width, preserving the single-button look.
-fn button_row(request: &ShowSystemDialog) -> impl Scene + use<> {
-    let secondary = secondary_button(
-        request.secondary_label.clone(),
-        secondary_display(&request.secondary_label),
-    );
-    bsn! {
-        Node {
-            width: percent(100),
-            flex_direction: FlexDirection::Row,
-            column_gap: px(10),
-        }
-        @ignore_picking()
-        Children [
-            @secondary --
-            @primary_button(request.button_label.clone())
-        ]
-    }
-}
-
-/// Round-cornered severity badge holding the tinted line glyph.
-fn badge(icon_name: &'static str, accent: Color) -> impl Scene {
-    bsn! {
-        Node {
-            width: px(60),
-            height: px(60),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: px(1),
-            border_radius: BorderRadius::all(px(16)),
-        }
-        BackgroundColor({lifthrasir_ui::theme::FIELD})
-        BorderColor::all(accent.with_alpha(0.4))
-        Children [ @severity_glyph(icon_name, accent) ]
-    }
-}
-
-/// A square white SVG glyph tinted with the severity accent. `ImageNode` has no theme
-/// token, so its colour stays a raw palette value.
-fn severity_glyph(name: &'static str, color: Color) -> impl Scene {
-    bsn! {
-        ImageNode {
-            image: {format!("{}{}.svg", lifthrasir_ui::theme::ICON_DIR, name)},
-            color: color,
-        }
-        Node { width: px(30), height: px(30) }
-        @ignore_picking()
-    }
-}
-
-/// Standalone card line: Feathers has no font token and this text sits outside a Feathers
-/// ancestor, so font and colour are set explicitly. `margin_top` spaces it from the line above.
-fn card_text(
-    text: String,
-    font: &'static str,
-    size: f32,
-    color: Color,
-    margin_top: f32,
-) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle(font),
-            font_size: {FontSize::Px(size)},
-        }
-        TextColor(color)
-        Node { margin: {UiRect::top(px(margin_top))} }
-        @ignore_picking()
-    }
-}
-
-/// The wrapped body message; capped width so long copy stays inside the card.
-fn message(text: String) -> impl Scene {
-    bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-            font_size: {FontSize::Px(13.5)},
-        }
-        TextColor({lifthrasir_ui::theme::TEXT_DIM})
-        Node {
-            max_width: px(DIALOG_WIDTH - 80.0),
-            margin: {UiRect::top(px(11))},
-        }
-        @ignore_picking()
-    }
-}
-
-/// Optional error-code chip. Rendered always but collapsed to `Display::None` (removing it
-/// and its top margin from layout) when the request carried no code.
-fn code_chip(text: String, accent: Color, display: Display) -> impl Scene {
-    bsn! {
-        Node {
-            display: {display},
-            padding: {UiRect::axes(px(12), px(5))},
-            margin: {UiRect::top(px(16))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(7)),
-        }
-        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.30)})
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        Children [
-            Text(text)
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(11.0)},
-            }
-            TextColor(accent)
+            @kicker_bar(request.kicker.to_uppercase(), tone)
+            --
+            Node { column_gap: px(14), margin: {UiRect::top(px(8))} }
             @ignore_picking()
-        ]
-    }
-}
-
-/// Hairline separator between the copy and the primary button.
-fn divider() -> impl Scene {
-    bsn! {
-        Node {
-            width: percent(100),
-            height: px(1),
-            margin: {UiRect::vertical(px(20))},
-        }
-        BackgroundColor({lifthrasir_ui::theme::STROKE_STRONG})
-        @ignore_picking()
-    }
-}
-
-/// The primary action: a Feathers Primary button captioned with the request label and an
-/// "Enter" hint, wired to the shared confirm handler via `on(Activate)`.
-fn primary_button(label: String) -> impl Scene {
-    bsn! {
-        @FeathersButton {
-            @caption: bsn! {
+            Children [
+                @badge(severity_icon(request.severity), tone)
+                --
                 Node {
-                    flex_direction: FlexDirection::Row,
-                    align_items: AlignItems::Center,
-                    column_gap: px(9),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::FlexStart,
+                    flex_grow: 1.0,
+                    flex_basis: px(0),
+                    min_width: px(0),
+                    row_gap: px(4),
                 }
                 @ignore_picking()
                 Children [
-                    Text(label) ThemedText--
-                    Text("Enter")
-                    TextFont {
-                        font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                        font_size: {FontSize::Px(9.5)},
-                    }
-                    TextColor({Color::WHITE.with_alpha(0.55)})
-                    @ignore_picking()
+                    @display_text(request.title.clone(), 18.0, ro_dark::HERO)
+                    --
+                    @chrome_text(request.message.clone(), 13.0, ro_dark::LABEL)
+                    --
+                    {code}
                 ]
-            },
-            @variant: ButtonVariant::Primary,
-        }
+            ]
+            --
+            Node {
+                justify_content: JustifyContent::FlexEnd,
+                column_gap: px(8),
+                margin: {UiRect::top(px(18))},
+            }
+            @ignore_picking()
+            Children [
+                {secondary}
+                --
+                @primary_button(request.button_label.clone())
+            ]
+        ]
+    }
+}
+
+/// The window's title row, holding the kicker instead of a title.
+fn kicker_bar(kicker: String, tone: Color) -> impl Scene {
+    let halo = glow(tone);
+    bsn! {
         Node {
-            flex_grow: 1.0,
-            height: px(46),
-            border_radius: BorderRadius::all(px(11)),
+            height: px(40),
+            align_items: AlignItems::Center,
+            column_gap: px(10),
+            padding: {UiRect::left(px(46.0 - CONTENT_INSET))},
+            margin: {UiRect::bottom(px(6))},
         }
+        @ignore_picking()
+        Children [
+            @diamond(8.0, tone, tone)
+            halo
+            --
+            @overline(kicker, tone)
+        ]
+    }
+}
+
+/// The round severity badge holding the tinted line glyph.
+fn badge(icon: &'static str, tone: Color) -> impl Scene {
+    let halo = glow(tone.with_alpha(0.4));
+    bsn! {
+        Node {
+            width: px(40),
+            height: px(40),
+            flex_shrink: 0.0,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: px(1),
+            border_radius: BorderRadius::MAX,
+        }
+        BackgroundColor({tone.with_alpha(0.16)})
+        BorderColor::all(tone)
+        halo
+        @ignore_picking()
+        Children [ @glyph_icon(icon, 18.0, tone) ]
+    }
+}
+
+/// The error code under the message.
+fn code_chip(code: &str, tone: Color) -> impl Scene + use<> {
+    let code = code.to_string();
+    bsn! {
+        Node {
+            height: px(20),
+            align_items: AlignItems::Center,
+            padding: {UiRect::horizontal(px(7))},
+            margin: {UiRect::top(px(6))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(3)),
+        }
+        BackgroundColor({tone.with_alpha(0.14)})
+        BorderColor::all(tone.with_alpha(0.4))
+        @ignore_picking()
+        Children [ @chrome_text(code, 11.0, tone) ]
+    }
+}
+
+/// The primary action, captioned with the request label and the key that triggers it.
+fn primary_button(label: String) -> impl Scene {
+    let caption = bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(8) }
+        @ignore_picking()
+        Children [
+            @chrome_text(label, 13.0, ro_dark::STRONG)
+            --
+            @key_cap("Enter")
+        ]
+    };
+    bsn! {
+        @fit_button(ButtonArt::PRIMARY, caption)
         on(confirm_on_click)
     }
 }
 
-/// The lesser secondary action: a Normal-variant Feathers button. Rendered but
-/// collapsed to `Display::None` when the request carried no secondary label. Its
-/// `on(Activate)` dismisses the dialog and reports a non-primary choice — it never
-/// navigates `confirm_state`.
-fn secondary_button(label: String, display: Display) -> impl Scene {
+/// The lesser action. It dismisses the dialog and reports a non-primary choice, and
+/// never navigates `confirm_state`.
+fn secondary_button(label: String) -> impl Scene {
     bsn! {
-        @FeathersButton { @caption: bsn! { Text(label) ThemedText } }
-        Node {
-            display: {display},
-            flex_grow: 1.0,
-            height: px(46),
-            border_radius: BorderRadius::all(px(11)),
-        }
+        @fit_button(ButtonArt::NORMAL, chrome_text(label, 13.0, ro_dark::BUTTON_LABEL))
         on(dismiss_on_click)
     }
 }
@@ -404,7 +308,7 @@ fn confirm_on_enter(
 }
 
 /// Secondary button: report a non-primary choice and dismiss the dialog. Unlike
-/// the primary path it never navigates `confirm_state` — a decline just closes.
+/// the primary path it never navigates `confirm_state`: a decline just closes.
 fn dismiss_on_click(
     _activate: On<Activate>,
     dialog: Query<(Entity, &SystemDialogRoot)>,
@@ -425,33 +329,98 @@ fn dismiss_on_click(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::scene::ScenePlugin;
+    use bevy::ui_widgets::Button;
 
     #[test]
-    fn severity_accent_maps_each_variant() {
-        assert_eq!(
-            severity_accent(DialogSeverity::Error),
-            lifthrasir_ui::theme::BAD
-        );
-        assert_eq!(
-            severity_accent(DialogSeverity::Warn),
-            lifthrasir_ui::theme::WARN
-        );
-        assert_eq!(
-            severity_accent(DialogSeverity::Info),
-            lifthrasir_ui::theme::MANA_BLUE
-        );
-        assert_eq!(
-            severity_accent(DialogSeverity::Ok),
-            lifthrasir_ui::theme::EMERALD
-        );
+    fn each_severity_has_its_own_tone_and_glyph() {
+        let severities = [
+            DialogSeverity::Error,
+            DialogSeverity::Warn,
+            DialogSeverity::Info,
+            DialogSeverity::Ok,
+        ];
+        for (i, a) in severities.iter().enumerate() {
+            for b in &severities[i + 1..] {
+                assert_ne!(severity_tone(*a), severity_tone(*b));
+                assert_ne!(severity_icon(*a), severity_icon(*b));
+            }
+        }
+    }
+
+    fn request(code: &str, secondary: &str) -> ShowSystemDialog {
+        ShowSystemDialog {
+            severity: DialogSeverity::Error,
+            kind: SystemDialogKind::Generic,
+            kicker: "Connection".into(),
+            title: "Disconnected".into(),
+            message: "The server stopped answering.".into(),
+            code: code.into(),
+            button_label: "Back to Sign In".into(),
+            secondary_label: secondary.into(),
+            confirm_state: None,
+            correlation: None,
+        }
+    }
+
+    /// The texts and the number of buttons of the dialog a request spawns.
+    fn spawned(request: ShowSystemDialog) -> (Vec<String>, usize) {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.add_message::<ShowSystemDialog>();
+        app.add_systems(Update, show_system_dialog);
+        app.world_mut().write_message(request);
+        app.update();
+        let world = app.world_mut();
+        let texts = world
+            .query::<&Text>()
+            .iter(world)
+            .map(|text| text.0.clone())
+            .collect();
+        let buttons = world.query::<&Button>().iter(world).count();
+        (texts, buttons)
     }
 
     #[test]
-    fn severity_icon_distinguishes_tone() {
-        assert_eq!(severity_icon(DialogSeverity::Error), "bang");
-        assert_eq!(severity_icon(DialogSeverity::Warn), "triangle");
-        assert_eq!(severity_icon(DialogSeverity::Info), "info");
-        assert_eq!(severity_icon(DialogSeverity::Ok), "ok");
+    fn a_request_spawns_its_kicker_title_message_and_primary_button() {
+        let (texts, buttons) = spawned(request("", ""));
+        for expected in [
+            "CONNECTION",
+            "Disconnected",
+            "The server stopped answering.",
+            "Back to Sign In",
+            "Enter",
+        ] {
+            assert!(texts.iter().any(|text| text == expected), "{expected}");
+        }
+        assert_eq!(buttons, 1, "no secondary button without a label");
+    }
+
+    #[test]
+    fn the_code_and_the_secondary_button_show_only_when_asked_for() {
+        let (texts, buttons) = spawned(request("NET-03", "Try Again"));
+        assert!(texts.iter().any(|text| text == "NET-03"));
+        assert!(texts.iter().any(|text| text == "Try Again"));
+        assert_eq!(buttons, 2);
+    }
+
+    #[test]
+    fn a_second_request_does_not_stack_a_second_dialog() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+        app.init_asset::<Image>();
+        app.init_asset::<Font>();
+        app.add_message::<ShowSystemDialog>();
+        app.add_systems(Update, show_system_dialog);
+        app.world_mut().write_message(request("", ""));
+        app.update();
+        app.world_mut().write_message(request("", ""));
+        app.update();
+        let world = app.world_mut();
+        let roots = world.query::<&SystemDialogRoot>().iter(world).count();
+        assert_eq!(roots, 1);
     }
 
     fn choices(app: &App) -> Vec<(bool, SystemDialogKind, Option<u64>)> {
@@ -461,12 +430,6 @@ mod tests {
             .read(messages)
             .map(|choice| (choice.primary, choice.kind, choice.correlation))
             .collect()
-    }
-
-    #[test]
-    fn secondary_display_collapses_when_label_empty() {
-        assert_eq!(secondary_display(""), Display::None);
-        assert_eq!(secondary_display("Decline"), Display::Flex);
     }
 
     #[test]

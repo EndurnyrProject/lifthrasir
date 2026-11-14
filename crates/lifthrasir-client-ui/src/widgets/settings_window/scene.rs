@@ -1,57 +1,45 @@
-//! Idiomatic BSN chrome for the settings window (mirrors the inventory/shop
-//! windows). [`build`] spawns the whole window — root, titlebar, tab rail, a
-//! fixed-height scrollable content pane holding the three tab bodies, and the
-//! footer — as one `bsn!` tree. The tree is static: the `refresh_*` systems in
-//! [`super`] project the live `SettingsUi` draft onto the controls via their
-//! marker components, so nothing here is rebuilt at runtime (rebuilding would
-//! despawn the slider rails mid-drag).
-//!
-//! The window is fixed-size: the content pane has a fixed [`PANE_HEIGHT`] and
-//! scrolls internally (`ScrollArea` + `FeathersScrollbar`) instead of growing
-//! with the active tab — the Input tab's seventeen bind rows scroll.
+//! The Settings window scenes: the frame [`build`] spawns once, and the rail, heading,
+//! rows and footer that [`rebuild`](super::rebuild) projects from their views. Sizes
+//! follow the `Settings` artboard of the Lifthrasir Widgets design.
 
+use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::text::{FontSize, FontSourceTemplate};
 use bevy::ui::RelativeCursorPosition;
-use bevy::ui_widgets::{ControlOrientation, ScrollArea};
-use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use lifthrasir_client::domain::input::{HOTBAR_ACTIONS, PlayerAction};
-use lifthrasir_client::domain::settings::DisplayMode;
-
-use lifthrasir_ui::theme::feathers_theme::{
-    TOKEN_TITLEBAR_BG, TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER,
-};
-use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking, titlebar};
-
-use crate::widgets::settings_window::{
-    ApplyButton, AudioChannel, BindSlot, DirtyDot, GraphicsField, Keycap, MuteButton, SegButton,
-    SettingsTab, SettingsTitlebar, SettingsWindowRoot, SliderFill, SliderKnob, SliderPercent,
-    SliderRail, StepDir, StepperArrow, StepperValue, SwitchKnob, SwitchPill, TabBody, TabButton,
-    on_apply, on_cancel, on_keycap_click, on_mute_click, on_reset, on_segment_click,
-    on_slider_drag, on_slider_press, on_stepper_click, on_switch_click, on_tab_click,
+use bevy::ui_widgets::{Button, ControlOrientation, ScrollArea};
+use bevy_feathers::controls::FeathersScrollbar;
+use lifthrasir_client::domain::input::PlayerAction;
+use lifthrasir_client::domain::settings::AudioConfig;
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    ButtonArt, HoverColors, WINDOW_SHADOW, close_button, diamond, display_text, inset, segment,
+    tab_text, window_title_bar, window_titled,
 };
 
-const WINDOW_LEFT: f32 = 360.0;
-const WINDOW_TOP: f32 = 120.0;
-const WINDOW_WIDTH: f32 = 560.0;
-const RAIL_WIDTH: f32 = 140.0;
-/// Fixed height of the rail + content row, so the window never grows with the
-/// active tab — the content pane scrolls internally instead.
-const PANE_HEIGHT: f32 = 340.0;
+use super::view::{
+    BindRow, ControlView, FootView, HeadView, KeyState, NavItem, Row, SettingRow, percent_label,
+};
+use super::{
+    AudioChannel, BindSlot, Preset, Setting, SettingsAction, SettingsHost, SettingsSearchField,
+    SettingsTitlebar, SettingsWindowRoot, SliderOf, SliderPart, SliderRail, on_settings_button,
+    on_settings_click, on_slider_drag, on_slider_press,
+};
+use crate::screens::shared::{
+    chip, cycle_box, glow, link, overline, row_button, search_field, usable, wide_button,
+};
 
-/// The rebindable non-hotbar actions in display order. The twelve hotbar slots
-/// follow these rows, labelled `Hotbar F1`..`Hotbar F12`.
-const ACTIONS: [(PlayerAction, &str); 7] = [
-    (PlayerAction::Sit, "Sit / Stand"),
-    (PlayerAction::Status, "Status Window"),
-    (PlayerAction::Inventory, "Inventory"),
-    (PlayerAction::Skills, "Skills Window"),
-    (PlayerAction::Equipment, "Equipment"),
-    (PlayerAction::Party, "Party Window"),
-    (PlayerAction::Guild, "Guild Window"),
-];
+const WINDOW_LEFT: f32 = 120.0;
+const WINDOW_TOP: f32 = 16.0;
+const WINDOW_WIDTH: f32 = 984.0;
+const NAV_WIDTH: f32 = 210.0;
+/// Fixed height of the section pane: its rows scroll inside it, so the window never
+/// grows with the open section.
+const PANE_HEIGHT: f32 = 520.0;
+/// Width of the column a row's control sits in.
+const CONTROL_WIDTH: f32 = 310.0;
+/// Width of one key cap column of the Controls section.
+const KEY_CELL: f32 = 120.0;
 
 /// Spawn the whole window as one top-level scene.
 pub fn build(commands: &mut Commands) {
@@ -61,411 +49,542 @@ pub fn build(commands: &mut Commands) {
 fn window() -> impl Scene {
     bsn! {
         SettingsWindowRoot
+        @window_titled()
         Node {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
+            width: px(WINDOW_WIDTH + 2.0 * WINDOW_SHADOW),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
-            border: px(1),
-            border_radius: BorderRadius::all(px(13)),
         }
-        ThemeBackgroundColor({TOKEN_WINDOW_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         // Float above every other UI root (login panel, in-game HUD) so the
-        // window owns picking — otherwise a full-screen screen root spawned
+        // window owns picking: otherwise a full-screen screen root spawned
         // later in the stack swallows its clicks and drags.
         GlobalZIndex(1000)
         Pickable
-        Children [ @titlebar::<SettingsTitlebar, SettingsWindowRoot>("gear", "System Settings") -- @main_row() -- @footer() ]
-    }
-}
-
-/// The tab rail (left) and the scrollable content pane (right).
-fn main_row() -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, height: px(PANE_HEIGHT) }
-        @ignore_picking()
-        Children [ @rail() -- @content_pane() ]
-    }
-}
-
-fn rail() -> impl Scene {
-    bsn! {
-        Node {
-            width: px(RAIL_WIDTH),
-            flex_shrink: 0.0,
-            flex_direction: FlexDirection::Column,
-            row_gap: px(6),
-            padding: {UiRect::all(px(14))},
-            border: {UiRect { right: Val::Px(1.0), ..default() }},
-        }
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        @ignore_picking()
         Children [
-            @tab_button(SettingsTab::Graphics, "Graphics") --
-            @tab_button(SettingsTab::Sound, "Sound") --
-            @tab_button(SettingsTab::Input, "Input")
+            SettingsTitlebar
+            @window_title_bar("Settings", bsn! {
+                @close_button()
+                SettingsAction::Close
+                on(on_settings_button)
+            })
+            Pickable
+            on(drag_window::<SettingsTitlebar, SettingsWindowRoot>)
+            --
+            Node { column_gap: px(18), margin: {UiRect::top(px(10))} }
+            @ignore_picking()
+            Children [ @rail() -- @pane() ]
+            --
+            SettingsHost::Foot
+            Node {
+                align_items: AlignItems::Center,
+                column_gap: px(12),
+                margin: {UiRect::new(px(0), px(0), px(14), px(8))},
+                position_type: PositionType::Relative,
+            }
+            @ignore_picking()
         ]
     }
 }
 
-fn tab_button(tab: SettingsTab, label: &'static str) -> impl Scene {
+/// The search box, which outlives every redraw so typing keeps its caret, over the
+/// host of the section buttons.
+fn rail() -> impl Scene {
     bsn! {
-        TabButton(tab)
         Node {
-            height: px(32),
+            width: px(NAV_WIDTH),
             flex_shrink: 0.0,
-            align_items: AlignItems::Center,
-            padding: {UiRect::horizontal(px(10))},
-            border_radius: BorderRadius::all(px(7)),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(12),
         }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        Pickable
-        on(on_tab_click)
-        Children [ @chrome_text(label.to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        @ignore_picking()
+        Children [
+            Node {}
+            @ignore_picking()
+            Children [ @search_field::<SettingsSearchField>("Search settings") ]
+            --
+            SettingsHost::Nav
+            Node { flex_direction: FlexDirection::Column, row_gap: px(4) }
+            @ignore_picking()
+        ]
     }
 }
 
-/// The fixed-height content pane: a wheel-scrollable viewport holding the three
-/// tab bodies with a draggable [`FeathersScrollbar`] pinned to the right. The
-/// `#pane` id wires the scrollbar to the viewport whose `ScrollPosition` it
-/// drives.
-fn content_pane() -> impl Scene {
+/// The open section: its heading over the scrolling rows.
+fn pane() -> impl Scene {
     bsn! {
+        @inset()
         Node {
             flex_grow: 1.0,
             flex_basis: px(0),
             min_width: px(0),
-            position_type: PositionType::Relative,
+            height: px(PANE_HEIGHT),
+            flex_direction: FlexDirection::Column,
         }
         @ignore_picking()
         Children [
-            #pane
+            SettingsHost::Head
             Node {
-                position_type: PositionType::Absolute,
-                left: px(0), top: px(0), right: px(0), bottom: px(0),
-                overflow: {Overflow::scroll_y()},
-                flex_direction: FlexDirection::Column,
-                row_gap: px(12),
-                padding: {UiRect { left: Val::Px(14.0), right: Val::Px(18.0), top: Val::Px(10.0), bottom: Val::Px(14.0) }},
+                flex_shrink: 0.0,
+                align_items: AlignItems::Baseline,
+                column_gap: px(10),
+                padding: {UiRect::new(px(18), px(18), px(14), px(10))},
+                border: {UiRect::bottom(px(1))},
             }
-            ScrollArea
-            Pickable
-            Children [ @graphics_body() -- @sound_body() -- @input_body() ]
-            --
-            @FeathersScrollbar { @target: #pane, @orientation: {ControlOrientation::Vertical} }
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(3),
-                top: px(4),
-                bottom: px(4),
-                width: px(6),
-            }
-        ]
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tab bodies. Only the active tab's body is displayed: `refresh_tabs` toggles
-// `display` (not `Visibility`) so the inactive bodies release their layout slot
-// and the active tab always sits at the top of the pane.
-// ---------------------------------------------------------------------------
-
-fn graphics_body() -> impl Scene {
-    let dlss = cfg!(feature = "dlss").then(|| {
-        EntityScene(row(
-            "DLSS",
-            "NVIDIA render-resolution upscaling (RTX only)",
-            stepper(GraphicsField::Dlss),
-        ))
-    });
-    bsn! {
-        TabBody(SettingsTab::Graphics)
-        Node { flex_direction: FlexDirection::Column, row_gap: px(10), flex_shrink: 0.0 }
-        @ignore_picking()
-        Children [
-            @chrome_text("GRAPHICS".to_string(), 11.0, lifthrasir_ui::theme::GOLD) --
-            @section("Display") --
-            @row("Display Mode", "How the game fills your screen", segmented()) --
-            @row("Resolution", "Screen size in pixels", stepper(GraphicsField::Resolution)) --
-            @section("Quality") --
-            @row("Antialiasing", "Smooths jagged edges", stepper(GraphicsField::Antialiasing)) --
-            @row("Anisotropic Filtering", "Sharpens ground textures at grazing angles", stepper(GraphicsField::Anisotropy)) --
-            @row("Upscaling", "xBRZ sprite & texture upscaling (applies on map reload)", stepper(GraphicsField::Upscaling)) --
-            {dlss} --
-            @row("Ambient Occlusion", "Contact shadows in crevices (SSAO); forces MSAA off", stepper(GraphicsField::Ssao)) --
-            @row("Bloom", "Glow around bright lights", switch(GraphicsField::Bloom)) --
-            @row("Shadows", "Sun shadow casting", switch(GraphicsField::Shadows)) --
-            @row("VSync", "Sync frames to display refresh", switch(GraphicsField::Vsync)) --
-            @row("Frame Rate Cap", "Maximum frames per second", stepper(GraphicsField::FpsCap)) --
-            @section("Interface") --
-            @row("UI Scaling", "Scales the interface for high resolutions", stepper(GraphicsField::UiScaling))
-        ]
-    }
-}
-
-fn sound_body() -> impl Scene {
-    bsn! {
-        TabBody(SettingsTab::Sound)
-        Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(10), flex_shrink: 0.0 }
-        @ignore_picking()
-        Children [
-            @chrome_text("SOUND".to_string(), 11.0, lifthrasir_ui::theme::GOLD) --
-            @section("Volume Mix") --
-            @row("Background Music", "Ambient score & themes", sound_control(AudioChannel::Bgm)) --
-            @row("Sound Effects", "Hits, skills & impacts", sound_control(AudioChannel::Sfx)) --
-            @row("Ambient", "World, weather & footsteps", sound_control(AudioChannel::Ambient))
-        ]
-    }
-}
-
-fn input_body() -> impl Scene {
-    let rows: Vec<_> = ACTIONS
-        .into_iter()
-        .map(|(action, label)| bind_row(action, label.to_string()))
-        .chain(
-            HOTBAR_ACTIONS
-                .into_iter()
-                .enumerate()
-                .map(|(i, action)| bind_row(action, format!("Hotbar F{}", i + 1))),
-        )
-        .collect();
-    bsn! {
-        TabBody(SettingsTab::Input)
-        Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(10), flex_shrink: 0.0 }
-        @ignore_picking()
-        Children [
-            @chrome_text("INPUT".to_string(), 11.0, lifthrasir_ui::theme::GOLD) --
-            @section("Key Bindings") --
-            @bind_header() --
-            {rows}
-        ]
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Shared row scaffolding.
-// ---------------------------------------------------------------------------
-
-/// A gold uppercase section caption with a trailing hairline.
-fn section(text: &'static str) -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(10),
-            margin: {UiRect::top(px(4))},
-        }
-        @ignore_picking()
-        Children [
-            @chrome_text(text.to_string(), 10.0, lifthrasir_ui::theme::GOLD) --
-            Node { flex_grow: 1.0, height: px(1) }
-            BackgroundColor(lifthrasir_ui::theme::GOLD_FAINT)
+            BorderColor::all(ro_dark::INSET_RULE)
             @ignore_picking()
-        ]
-    }
-}
-
-/// A setting row: a label column (title + sublabel) and a right-aligned control.
-fn row(label: &'static str, sublabel: &'static str, control: impl Scene) -> impl Scene {
-    let control = EntityScene(control);
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
-            column_gap: px(18),
-            min_height: px(46),
-        }
-        @ignore_picking()
-        Children [
-            Node { flex_direction: FlexDirection::Column, row_gap: px(3) }
+            --
+            Node { flex_grow: 1.0, min_height: px(0), position_type: PositionType::Relative }
             @ignore_picking()
             Children [
-                @chrome_text(label.to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
-                @chrome_text(sublabel.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)
+                #rows
+                SettingsHost::Rows
+                ScrollArea
+                Pickable
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    flex_direction: FlexDirection::Column,
+                    padding: {UiRect::new(px(18), px(22), px(4), px(14))},
+                    overflow: {Overflow::scroll_y()},
+                }
+                --
+                @FeathersScrollbar { @target: #rows, @orientation: {ControlOrientation::Vertical} }
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(4),
+                    top: px(8),
+                    bottom: px(8),
+                    width: px(6),
+                }
+            ]
+        ]
+    }
+}
+
+/// Mounts each scene under `host`, in order.
+fn mount(commands: &mut Commands, host: Entity, scenes: Vec<Box<dyn Scene>>) {
+    for scene in scenes {
+        commands.spawn_scene(scene).insert(ChildOf(host));
+    }
+}
+
+pub(super) fn spawn_nav(commands: &mut Commands, host: Entity, items: Vec<NavItem>) {
+    let scenes = items
+        .into_iter()
+        .map(|item| Box::new(nav_item(item)) as Box<dyn Scene>)
+        .collect();
+    mount(commands, host, scenes);
+}
+
+/// The dot beside what differs from the applied settings.
+fn changed_dot() -> impl Scene {
+    let halo = glow(ro_dark::FROST_GLOW.with_alpha(0.9));
+    bsn! {
+        Node { width: px(6), height: px(6), flex_shrink: 0.0, border_radius: BorderRadius::MAX }
+        BackgroundColor(ro_dark::FROST_GLOW)
+        halo
+        @ignore_picking()
+    }
+}
+
+fn nav_item(item: NavItem) -> impl Scene {
+    let (label, _, icon) = item.tab.meta();
+    let (rest, hover, ink) = if item.active {
+        let lit = (ro_dark::TAB_ACTIVE, ro_dark::TAB_STROKE);
+        (lit, lit, ro_dark::BUTTON_LABEL)
+    } else {
+        (
+            (Color::NONE, Color::NONE),
+            (Color::WHITE.with_alpha(0.04), Color::NONE),
+            ro_dark::MUTED,
+        )
+    };
+    let colors = HoverColors { rest, hover };
+    let (fill, stroke) = rest;
+    let action = SettingsAction::Section(item.tab);
+    let hits = item
+        .hits
+        .map(|hits| EntityScene(chrome_text(hits.to_string(), 11.0, ro_dark::MUTED)));
+    let dot = item.changed.then(|| EntityScene(changed_dot()));
+    bsn! {
+        action
+        Hovered
+        colors
+        Node {
+            height: px(38),
+            align_items: AlignItems::Center,
+            column_gap: px(10),
+            padding: {UiRect::horizontal(px(12))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        Pickable
+        on(on_settings_click)
+        Children [
+            @glyph_icon(icon, 15.0, ink)
+            --
+            @chrome_text(label.into(), 13.0, ink)
+            Node { flex_grow: 1.0 }
+            --
+            {hits}
+            --
+            {dot}
+        ]
+    }
+}
+
+pub(super) fn spawn_head(commands: &mut Commands, host: Entity, head: HeadView) {
+    let reset: Box<dyn Scene> = if head.can_reset {
+        Box::new(bsn! {
+            @link("Reset this section")
+            SettingsAction::ResetSection
+            on(on_settings_click)
+        })
+    } else {
+        Box::new(chrome_text(
+            "Reset this section".into(),
+            12.0,
+            ro_dark::DISABLED_LABEL,
+        ))
+    };
+    let scenes: Vec<Box<dyn Scene>> = vec![
+        Box::new(display_text(head.title.into(), 18.0, ro_dark::HERO)),
+        Box::new(bsn! {
+            @chrome_text(head.subtitle.into(), 12.0, ro_dark::MUTED)
+            Node { flex_grow: 1.0 }
+        }),
+        reset,
+    ];
+    mount(commands, host, scenes);
+}
+
+pub(super) fn spawn_rows(
+    commands: &mut Commands,
+    host: Entity,
+    rows: Vec<Row>,
+    audio: &AudioConfig,
+) {
+    let scenes = rows.into_iter().map(|row| row_scene(row, audio)).collect();
+    mount(commands, host, scenes);
+}
+
+fn row_scene(row: Row, audio: &AudioConfig) -> Box<dyn Scene> {
+    match row {
+        Row::Presets(current) => Box::new(presets(current)),
+        Row::Group(label) => Box::new(bsn! {
+            @overline(label.into(), ro_dark::ACCENT)
+            Node { margin: {UiRect::new(px(4), px(0), px(16), px(2))} }
+        }),
+        Row::Setting { row, lit } => Box::new(setting_row(row, lit, audio)),
+        Row::BindHeader => Box::new(bind_header()),
+        Row::Clash { key, other } => Box::new(clash_alert(key, other)),
+        Row::Bind { row, lit } => Box::new(bind_row(row, lit)),
+        Row::BindHint => Box::new(bsn! {
+            @chrome_text(
+                "Click a key, then press the new one \u{b7} Esc cancels \u{b7} Backspace clears".into(),
+                11.0,
+                ro_dark::MUTED,
+            )
+            Node { margin: {UiRect::top(px(10))} }
+        }),
+        Row::Empty(query) => Box::new(bsn! {
+            Node { justify_content: JustifyContent::Center, margin: {UiRect::top(px(120))} }
+            @ignore_picking()
+            Children [
+                @chrome_text(
+                    format!("No settings match \u{201c}{query}\u{201d}"),
+                    12.0,
+                    ro_dark::MUTED,
+                )
+            ]
+        }),
+    }
+}
+
+/// A segment sharing its row evenly with the others.
+fn segment_frame(label: &'static str, active: bool) -> impl Scene {
+    let (ink, _) = tab_text(active);
+    bsn! {
+        @segment(active)
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            height: px(28),
+            padding: {UiRect::all(px(0))},
+            justify_content: JustifyContent::Center,
+        }
+        Children [ @chrome_text(label.into(), 12.0, ink) ]
+    }
+}
+
+fn option_segment(label: &'static str, active: bool, action: SettingsAction) -> impl Scene {
+    bsn! {
+        @segment_frame(label, active)
+        action
+        on(on_settings_click)
+    }
+}
+
+/// The quality presets. "Custom" lights up when the settings match none and does
+/// nothing when clicked.
+fn presets(current: Option<Preset>) -> impl Scene {
+    let mut segments: Vec<Box<dyn Scene>> = Preset::ALL
+        .into_iter()
+        .map(|preset| {
+            let action = SettingsAction::Preset(preset);
+            Box::new(option_segment(
+                preset.label(),
+                current == Some(preset),
+                action,
+            )) as Box<dyn Scene>
+        })
+        .collect();
+    segments.push(Box::new(segment_frame("Custom", current.is_none())));
+    let note = if current.is_some() {
+        "All quality settings match this preset"
+    } else {
+        "You\u{2019}ve tuned these yourself \u{b7} Pick a preset to start over"
+    };
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: px(8),
+            padding: {UiRect::new(px(4), px(4), px(12), px(6))},
+        }
+        @ignore_picking()
+        Children [
+            @overline("QUALITY PRESET".into(), ro_dark::ACCENT)
+            --
+            Node { column_gap: px(4) }
+            @ignore_picking()
+            Children [ {segments} ]
+            --
+            @chrome_text(note.into(), 11.0, ro_dark::MUTED)
+        ]
+    }
+}
+
+/// The fill of a row the search found.
+fn row_fill(lit: bool) -> Color {
+    if lit {
+        ro_dark::FROST_GLOW.with_alpha(0.05)
+    } else {
+        Color::NONE
+    }
+}
+
+fn setting_row(row: SettingRow, lit: bool, audio: &AudioConfig) -> impl Scene {
+    let dot = row.changed.then(|| EntityScene(changed_dot()));
+    let tag = row.tag.map(|tag| {
+        EntityScene(chip(
+            tag.into(),
+            ro_dark::STATUS_BUSY.with_alpha(0.16),
+            ro_dark::STATUS_BUSY,
+        ))
+    });
+    let control = control(row.setting, row.control, audio);
+    bsn! {
+        Node {
+            align_items: AlignItems::Center,
+            column_gap: px(16),
+            padding: {UiRect::axes(px(4), px(12))},
+            border: {UiRect::bottom(px(1))},
+        }
+        BackgroundColor({row_fill(lit)})
+        BorderColor::all(ro_dark::INSET_RULE)
+        @ignore_picking()
+        Children [
+            Node {
+                flex_direction: FlexDirection::Column,
+                flex_grow: 1.0,
+                flex_basis: px(0),
+                min_width: px(0),
+            }
+            @ignore_picking()
+            Children [
+                Node { align_items: AlignItems::Center, column_gap: px(8) }
+                @ignore_picking()
+                Children [
+                    @chrome_text(row.label.into(), 13.0, ro_dark::STRONG)
+                    --
+                    {dot}
+                    --
+                    {tag}
+                ]
+                --
+                @chrome_text(row.desc.into(), 11.0, ro_dark::MUTED)
             ]
             --
-            Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center }
-            @ignore_picking()
-            Children [ {control} ]
-        ]
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Graphics controls.
-// ---------------------------------------------------------------------------
-
-/// Segmented control for `DisplayMode`: one button per variant, active one
-/// highlighted by `refresh_graphics`.
-fn segmented() -> impl Scene {
-    let buttons: Vec<_> = DisplayMode::ALL
-        .into_iter()
-        .enumerate()
-        .map(|(index, mode)| segment_button(index, mode.label()))
-        .collect();
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: px(4),
-            padding: {UiRect::all(px(4))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(9)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        @ignore_picking()
-        Children [ {buttons} ]
-    }
-}
-
-fn segment_button(index: usize, label: &'static str) -> impl Scene {
-    bsn! {
-        SegButton { field: GraphicsField::DisplayMode, index }
-        Node {
-            height: px(30),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            padding: {UiRect::horizontal(px(13))},
-            border_radius: BorderRadius::all(px(6)),
-        }
-        BackgroundColor({Color::NONE})
-        Pickable
-        on(on_segment_click)
-        Children [ @chrome_text(label.to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
-    }
-}
-
-/// Stepper control: ◀ value ▶ over a field's presets.
-fn stepper(field: GraphicsField) -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            min_width: px(188),
-            height: px(38),
-            border: px(1),
-            border_radius: BorderRadius::all(px(9)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        @ignore_picking()
-        Children [
-            @stepper_arrow(field, StepDir::Prev) --
-            @stepper_value(field) --
-            @stepper_arrow(field, StepDir::Next)
-        ]
-    }
-}
-
-fn stepper_arrow(field: GraphicsField, dir: StepDir) -> impl Scene {
-    let glyph = if dir == StepDir::Prev { "<" } else { ">" };
-    bsn! {
-        StepperArrow { field, dir }
-        Node {
-            width: px(38),
-            height: percent(100),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-        }
-        Pickable
-        on(on_stepper_click)
-        Children [ @chrome_text(glyph.to_string(), 14.0, lifthrasir_ui::theme::TEXT_DIM) ]
-    }
-}
-
-/// The stepper's value text; `refresh_graphics` rewrites it.
-fn stepper_value(field: GraphicsField) -> impl Scene {
-    bsn! {
-        StepperValue(field)
-        Text("")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(13.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT)
-        TextLayout { justify: Justify::Center, linebreak: LineBreak::default() }
-        Node { flex_grow: 1.0, justify_content: JustifyContent::Center }
-        @ignore_picking()
-    }
-}
-
-/// Toggle switch: a pill with a sliding knob, both restyled by `refresh_graphics`.
-fn switch(field: GraphicsField) -> impl Scene {
-    bsn! {
-        SwitchPill(field)
-        Node {
-            width: px(50),
-            height: px(28),
-            border: px(1),
-            border_radius: BorderRadius::all(px(16)),
-        }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        Pickable
-        on(on_switch_click)
-        Children [
-            SwitchKnob(field)
             Node {
-                position_type: PositionType::Absolute,
-                top: px(3),
-                left: px(3),
-                width: px(20),
-                height: px(20),
-                border_radius: BorderRadius::all(px(10)),
+                width: px(CONTROL_WIDTH),
+                flex_shrink: 0.0,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::FlexEnd,
             }
-            BackgroundColor(lifthrasir_ui::theme::TEXT_DIM)
             @ignore_picking()
+            Children [ @control ]
         ]
     }
 }
 
-// ---------------------------------------------------------------------------
-// Sound controls.
-// ---------------------------------------------------------------------------
-
-/// A channel's control cluster: mute button, slider rail, percent readout.
-fn sound_control(channel: AudioChannel) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center }
-        @ignore_picking()
-        Children [ @mute_button(channel) -- @slider(channel) -- @percent_readout(channel) ]
-    }
-}
-
-/// A small square button that flips the channel's mute. `refresh_sound` tints it.
-fn mute_button(channel: AudioChannel) -> impl Scene {
-    bsn! {
-        MuteButton(channel)
-        Node {
-            width: px(30),
-            height: px(30),
-            margin: {UiRect::right(px(12))},
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            border: px(1),
-            border_radius: BorderRadius::all(px(7)),
+fn control(setting: Setting, control: ControlView, audio: &AudioConfig) -> Box<dyn Scene> {
+    match control {
+        ControlView::Cycle(label) => {
+            let action = SettingsAction::Cycle(setting);
+            Box::new(bsn! {
+                @cycle_box(chrome_text(label, 13.0, ro_dark::BODY), CONTROL_WIDTH)
+                action
+                on(on_settings_click)
+            })
         }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        Pickable
-        on(on_mute_click)
-        Children [ @chrome_text("M".to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT) ]
+        ControlView::Segments { options, selected } => {
+            let segments: Vec<_> = options
+                .into_iter()
+                .enumerate()
+                .map(|(index, label)| {
+                    let action = SettingsAction::Choose(setting, index);
+                    option_segment(label, index == selected, action)
+                })
+                .collect();
+            Box::new(bsn! {
+                Node { width: percent(100), column_gap: px(4) }
+                @ignore_picking()
+                Children [ {segments} ]
+            })
+        }
+        ControlView::Toggle(enabled) => Box::new(toggle(setting, enabled)),
+        ControlView::Slider { channel, muted } => {
+            let (volume, _) = channel.read(audio);
+            Box::new(volume_control(channel, volume, muted))
+        }
     }
 }
 
-/// A volume slider: a rail (track + fill + knob). Click and drag on the rail map
-/// the cursor's `RelativeCursorPosition` to the volume.
-fn slider(channel: AudioChannel) -> impl Scene {
+/// A switch with its state in words. A click anywhere on it flips it.
+fn toggle(setting: Setting, enabled: bool) -> impl Scene {
+    let (fill, stroke, left, word) = if enabled {
+        (ro_dark::PRIMARY, ro_dark::PRIMARY_STROKE, 20.0, "On")
+    } else {
+        (ro_dark::BAR_TROUGH, ro_dark::MUTED_BRONZE, 2.0, "Off")
+    };
+    let action = SettingsAction::Toggle(setting);
+    bsn! {
+        action
+        Node { align_items: AlignItems::Center, column_gap: px(10) }
+        Pickable
+        on(on_settings_click)
+        Children [
+            @chrome_text(word.into(), 12.0, ro_dark::MUTED)
+            --
+            Node {
+                width: px(40),
+                height: px(22),
+                border: px(1),
+                border_radius: BorderRadius::MAX,
+                position_type: PositionType::Relative,
+            }
+            BackgroundColor(fill)
+            BorderColor::all(stroke)
+            @ignore_picking()
+            Children [
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(left),
+                    top: px(2),
+                    width: px(16),
+                    height: px(16),
+                    border_radius: BorderRadius::MAX,
+                }
+                BackgroundColor(ro_dark::BRONZE_LIGHT)
+                @ignore_picking()
+            ]
+        ]
+    }
+}
+
+/// A channel's mute button, slider and readout.
+fn volume_control(channel: AudioChannel, volume: f32, muted: bool) -> impl Scene {
+    let (rest, icon, icon_ink, readout_ink) = if muted {
+        (
+            (ro_dark::DANGER_PRESSED, ro_dark::BRONZE),
+            "ban",
+            ro_dark::CLOSE_X,
+            ro_dark::TONE_ERROR,
+        )
+    } else {
+        (
+            (ro_dark::TAB_INACTIVE, ro_dark::SLOT_STROKE),
+            "mega",
+            ro_dark::MUTED,
+            ro_dark::STRONG,
+        )
+    };
+    let (fill, stroke) = rest;
+    let colors = HoverColors {
+        rest,
+        hover: (fill, ro_dark::BUTTON_STROKE),
+    };
+    let action = SettingsAction::Mute(channel);
+    bsn! {
+        Node { width: percent(100), align_items: AlignItems::Center, column_gap: px(8) }
+        @ignore_picking()
+        Children [
+            action
+            Button
+            Hovered
+            colors
+            Node {
+                width: px(28),
+                height: px(28),
+                flex_shrink: 0.0,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: px(1),
+                border_radius: BorderRadius::all(px(5)),
+            }
+            BackgroundColor(fill)
+            BorderColor::all(stroke)
+            Pickable
+            on(on_settings_button)
+            Children [ @glyph_icon(icon, 14.0, icon_ink) ]
+            --
+            @slider(channel, volume, muted)
+            --
+            Node { width: px(48), flex_shrink: 0.0, justify_content: JustifyContent::FlexEnd }
+            @ignore_picking()
+            Children [
+                SliderPart::Readout
+                SliderOf(channel)
+                @chrome_text(percent_label(volume, muted), 12.0, readout_ink)
+            ]
+        ]
+    }
+}
+
+/// The volume slider: a press or a drag anywhere on it sets the volume from the
+/// pointer. [`sync_sliders`](super::sync_sliders) moves the fill and the knob. A muted
+/// channel's slider is dimmed and inert.
+fn slider(channel: AudioChannel, volume: f32, muted: bool) -> impl Scene {
+    let at = Val::Percent(if muted { 0.0 } else { volume * 100.0 });
+    let strength = if muted { 0.4 } else { 1.0 };
     bsn! {
         SliderRail(channel)
-        Node { width: px(200), height: px(22), align_items: AlignItems::Center }
         RelativeCursorPosition
-        Pickable
+        Node {
+            flex_grow: 1.0,
+            min_width: px(60),
+            height: px(16),
+            align_items: AlignItems::Center,
+            position_type: PositionType::Relative,
+        }
+        Pickable { should_block_lower: {!muted}, is_hoverable: {!muted} }
         on(on_slider_press)
         on(on_slider_drag)
         Children [
@@ -473,177 +592,235 @@ fn slider(channel: AudioChannel) -> impl Scene {
                 width: percent(100),
                 height: px(6),
                 border: px(1),
-                border_radius: BorderRadius::all(px(4)),
+                border_radius: BorderRadius::all(px(3)),
             }
-            BackgroundColor(lifthrasir_ui::theme::FIELD)
-            BorderColor::all(lifthrasir_ui::theme::STROKE)
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::INSET_RULE)
             @ignore_picking()
             Children [
-                SliderFill(channel)
+                SliderPart::Fill
+                SliderOf(channel)
                 Node {
                     position_type: PositionType::Absolute,
                     left: px(0),
                     top: px(0),
                     bottom: px(0),
-                    width: percent(0),
-                    border_radius: BorderRadius::all(px(4)),
+                    width: {at},
+                    border_radius: BorderRadius::all(px(3)),
                 }
-                BackgroundColor(lifthrasir_ui::theme::EMERALD)
+                BackgroundColor({ro_dark::SP.with_alpha(strength)})
                 @ignore_picking()
             ]
             --
-            SliderKnob(channel)
+            SliderPart::Knob
+            SliderOf(channel)
+            @diamond(11.0, ro_dark::FROST.with_alpha(strength), ro_dark::BRONZE_SHADOW)
             Node {
                 position_type: PositionType::Absolute,
-                top: px(3),
-                left: percent(0),
-                margin: {UiRect::left(px(-7))},
-                width: px(15),
-                height: px(15),
-                border: px(1),
-                border_radius: BorderRadius::all(px(8)),
+                left: {at},
+                top: px(2.5),
+                margin: {UiRect::left(px(-5.5))},
             }
-            BackgroundColor(lifthrasir_ui::theme::DISPLAY_GOLD)
-            BorderColor::all(lifthrasir_ui::theme::EMERALD_DEEP)
-            @ignore_picking()
         ]
     }
 }
 
-/// The percent (or "Muted") readout; `refresh_sound` rewrites it.
-fn percent_readout(channel: AudioChannel) -> impl Scene {
+fn key_heading(text: &'static str) -> impl Scene {
     bsn! {
-        SliderPercent(channel)
-        Text("")
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/manrope.ttf"),
-            font_size: {FontSize::Px(13.0)},
-        }
-        TextColor(lifthrasir_ui::theme::TEXT_DIM)
-        TextLayout { justify: Justify::Right, linebreak: LineBreak::default() }
-        Node { width: px(44), margin: {UiRect::left(px(14))} }
+        Node { width: px(KEY_CELL), justify_content: JustifyContent::Center }
         @ignore_picking()
+        Children [ @overline(text.into(), ro_dark::ACCENT) ]
     }
 }
 
-// ---------------------------------------------------------------------------
-// Input controls.
-// ---------------------------------------------------------------------------
-
-/// The "Action / Primary / Secondary" column header.
 fn bind_header() -> impl Scene {
     bsn! {
-        Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center }
-        @ignore_picking()
-        Children [
-            Node { flex_grow: 1.0 }
-            @ignore_picking()
-            Children [ @chrome_text("Action".to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) ]
-            --
-            @header_cell("Primary") --
-            @header_cell("Secondary")
-        ]
-    }
-}
-
-fn header_cell(text: &'static str) -> impl Scene {
-    bsn! {
-        Node { width: px(112), margin: {UiRect::left(px(8))} }
-        @ignore_picking()
-        Children [ @chrome_text(text.to_string(), 10.0, lifthrasir_ui::theme::TEXT_FAINT) ]
-    }
-}
-
-/// One action row: action name + Primary and Secondary keycaps.
-fn bind_row(action: PlayerAction, label: String) -> impl Scene {
-    bsn! {
         Node {
-            flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            min_height: px(38),
+            column_gap: px(16),
+            padding: {UiRect::axes(px(4), px(8))},
+            margin: {UiRect::top(px(8))},
+            border: {UiRect::bottom(px(1))},
         }
+        BorderColor::all(ro_dark::INSET_RULE)
         @ignore_picking()
         Children [
+            @overline("ACTION".into(), ro_dark::ACCENT)
             Node { flex_grow: 1.0 }
-            @ignore_picking()
-            Children [ @chrome_text(label, 13.0, lifthrasir_ui::theme::TEXT) ]
             --
-            @keycap(action, BindSlot::Primary) --
-            @keycap(action, BindSlot::Secondary)
+            @key_heading("PRIMARY")
+            --
+            @key_heading("SECONDARY")
         ]
     }
 }
 
-/// A clickable keycap cell. `refresh_input` rewrites its label; clicking it
-/// starts a rebind capture for this `(action, slot)`.
-fn keycap(action: PlayerAction, slot: BindSlot) -> impl Scene {
+/// The alert raised when a pressed key is already bound: keep the old bind or trade.
+fn clash_alert(key: String, other: String) -> impl Scene {
     bsn! {
-        Keycap { action, slot }
         Node {
-            width: px(104),
-            height: px(30),
-            margin: {UiRect::left(px(8))},
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
+            column_gap: px(10),
+            margin: {UiRect::vertical(px(8))},
+            padding: {UiRect::axes(px(12), px(8))},
             border: px(1),
-            border_radius: BorderRadius::all(px(7)),
+            border_radius: BorderRadius::all(px(6)),
         }
-        BackgroundColor(lifthrasir_ui::theme::FIELD)
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        Pickable
-        on(on_keycap_click)
-        Children [ @chrome_text(String::new(), 12.0, lifthrasir_ui::theme::TEXT_DIM) ]
+        BackgroundColor({ro_dark::STATUS_BUSY.with_alpha(0.1)})
+        BorderColor::all(ro_dark::STATUS_BUSY.with_alpha(0.5))
+        @ignore_picking()
+        Children [
+            @chrome_text(format!("{key} is already {other}."), 12.0, ro_dark::BRONZE_LIGHT)
+            Node { flex_grow: 1.0 }
+            --
+            @row_button(ButtonArt::NORMAL, "Keep Old", 72.0)
+            SettingsAction::KeepBind
+            on(on_settings_button)
+            --
+            @row_button(ButtonArt::PRIMARY, "Swap Them", 84.0)
+            SettingsAction::SwapBinds
+            on(on_settings_button)
+        ]
     }
 }
 
-// ---------------------------------------------------------------------------
-// Footer.
-// ---------------------------------------------------------------------------
-
-/// Footer: Reset to Defaults · unsaved-changes dot · Cancel · Apply. Apply keeps
-/// a raw `BackgroundColor` (not a Feathers button) because `refresh_footer` dims
-/// its alpha when the draft is clean.
-fn footer() -> impl Scene {
+fn bind_row(row: BindRow, lit: bool) -> impl Scene {
+    let dot = row.changed.then(|| EntityScene(changed_dot()));
+    let [primary, secondary] = row.keys;
     bsn! {
         Node {
-            flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::all(px(14))},
-            border: {UiRect { top: Val::Px(1.0), ..default() }},
+            column_gap: px(16),
+            padding: {UiRect::axes(px(4), px(8))},
+            border: {UiRect::bottom(px(1))},
         }
-        ThemeBackgroundColor({TOKEN_TITLEBAR_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
+        BackgroundColor({row_fill(lit)})
+        BorderColor::all(ro_dark::INSET_RULE)
         @ignore_picking()
         Children [
-            @FeathersButton { @caption: bsn! { @chrome_text("Reset to Defaults".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            Node { height: px(32) }
-            on(on_reset)
-            --
-            // Pushes the dirty dot + Cancel/Apply to the right edge.
-            Node { flex_grow: 1.0 } @ignore_picking() --
-            DirtyDot
-            Node { width: px(8), height: px(8), border_radius: BorderRadius::all(px(4)) }
-            BackgroundColor(lifthrasir_ui::theme::WARN)
-            Visibility::Hidden
+            Node { flex_grow: 1.0, align_items: AlignItems::Center, column_gap: px(8) }
             @ignore_picking()
+            Children [
+                @chrome_text(row.label, 13.0, ro_dark::STRONG)
+                --
+                {dot}
+            ]
             --
-            @FeathersButton { @caption: bsn! { @chrome_text("Cancel".to_string(), 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            Node { height: px(32) }
-            on(on_cancel)
+            @key_cap(row.action, BindSlot::Primary, primary)
             --
-            ApplyButton
+            @key_cap(row.action, BindSlot::Secondary, secondary)
+        ]
+    }
+}
+
+/// A slot's key cap, centred in its column. A click starts listening for its key.
+fn key_cap(action: PlayerAction, slot: BindSlot, (text, state): (String, KeyState)) -> impl Scene {
+    let (stroke, ink) = match state {
+        KeyState::Bound => (ro_dark::SLOT_STROKE, ro_dark::BODY),
+        KeyState::Empty => (ro_dark::SLOT_STROKE, ro_dark::FAINT),
+        KeyState::Listening => (ro_dark::FROST_GLOW, ro_dark::CHECK_MARK),
+        KeyState::Clash => (ro_dark::STATUS_BUSY, ro_dark::BRONZE_LIGHT),
+    };
+    let settled = matches!(state, KeyState::Bound | KeyState::Empty);
+    let hover_stroke = if settled {
+        ro_dark::BUTTON_STROKE
+    } else {
+        stroke
+    };
+    let colors = HoverColors {
+        rest: (ro_dark::SLOT, stroke),
+        hover: (ro_dark::SLOT_HOVER, hover_stroke),
+    };
+    let halo = glow(if state == KeyState::Listening {
+        ro_dark::FROST_GLOW.with_alpha(0.5)
+    } else {
+        Color::NONE
+    });
+    let listen = SettingsAction::Listen(action, slot);
+    bsn! {
+        Node { width: px(KEY_CELL), flex_shrink: 0.0, justify_content: JustifyContent::Center }
+        @ignore_picking()
+        Children [
+            listen
+            Hovered
+            colors
             Node {
-                height: px(32),
+                min_width: px(110),
+                height: px(28),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                padding: {UiRect::horizontal(px(14))},
-                border_radius: BorderRadius::all(px(7)),
+                padding: {UiRect::horizontal(px(10))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(5)),
             }
-            BackgroundColor(lifthrasir_ui::theme::EMERALD)
+            BackgroundColor(ro_dark::SLOT)
+            BorderColor::all(stroke)
+            halo
             Pickable
-            on(on_apply)
-            Children [ @chrome_text("Apply".to_string(), 13.0, lifthrasir_ui::theme::EMERALD_INK) ]
+            on(on_settings_click)
+            Children [ @chrome_text(text, 12.0, ink) ]
+        ]
+    }
+}
+
+pub(super) fn spawn_foot(commands: &mut Commands, host: Entity, foot: FootView) {
+    let dirty = foot.pending > 0;
+    let pending_ink = if dirty {
+        ro_dark::FROST_GLOW
+    } else {
+        ro_dark::MUTED
+    };
+    let mut scenes: Vec<Box<dyn Scene>> = vec![
+        Box::new(bsn! {
+            @wide_button(ButtonArt::NORMAL, "Reset All to Defaults", 176.0)
+            SettingsAction::ResetAll
+            on(on_settings_button)
+        }),
+        Box::new(bsn! {
+            Node { flex_grow: 1.0, justify_content: JustifyContent::FlexEnd }
+            @ignore_picking()
+            Children [ @chrome_text(foot.pending_label(), 12.0, pending_ink) ]
+        }),
+        Box::new(bsn! {
+            @wide_button(ButtonArt::NORMAL, "Cancel", 80.0)
+            @usable(dirty, Color::WHITE)
+            SettingsAction::Cancel
+            on(on_settings_button)
+        }),
+        Box::new(bsn! {
+            @wide_button(ButtonArt::PRIMARY, "Apply", 110.0)
+            @usable(dirty, Color::WHITE)
+            SettingsAction::Apply
+            on(on_settings_button)
+        }),
+    ];
+    if let Some(text) = foot.toast {
+        scenes.push(Box::new(toast(text)));
+    }
+    mount(commands, host, scenes);
+}
+
+/// A short notice over the footer.
+fn toast(text: String) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0),
+            right: px(0),
+            bottom: px(44),
+            justify_content: JustifyContent::Center,
+        }
+        @ignore_picking()
+        Children [
+            Node {
+                padding: {UiRect::axes(px(12), px(6))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(6)),
+            }
+            BackgroundColor(ro_dark::TOOLTIP_BODY)
+            BorderColor::all(ro_dark::BUTTON_STROKE)
+            @ignore_picking()
+            Children [ @chrome_text(text, 12.0, ro_dark::BODY) ]
         ]
     }
 }

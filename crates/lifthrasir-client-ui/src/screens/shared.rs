@@ -127,6 +127,124 @@ pub fn row_button(art: ButtonArt, label: impl Into<String>, width: f32) -> impl 
     }
 }
 
+/// An art button as wide as `content` plus 14px on each side, for labels only known at
+/// runtime. It is laid out by its shape like [`flush_button`].
+pub fn fit_button(art: ButtonArt, content: impl Scene) -> impl Scene {
+    bsn! {
+        @button_with(art, content)
+        Node {
+            flex_grow: 0.0,
+            flex_shrink: 0.0,
+            padding: {UiRect::horizontal(px(BUTTON_SHADOW + 14.0))},
+            margin: {UiRect::all(px(-BUTTON_SHADOW))},
+        }
+    }
+}
+
+/// How a [`menu_row`] is painted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowTone {
+    Plain,
+    Primary,
+    /// Plain at rest and oxblood under the pointer, for what ends the session.
+    Danger,
+    /// No fill at rest.
+    Ghost,
+}
+
+impl RowTone {
+    /// The `(fill, stroke)` pairs at rest and under the pointer.
+    pub fn colors(self) -> HoverColors {
+        let plain = (ro_dark::TAB_INACTIVE, ro_dark::SLOT_STROKE);
+        let (rest, hover) = match self {
+            Self::Plain => (plain, (ro_dark::TAB_HOVER, ro_dark::PRIMARY_STROKE)),
+            Self::Primary => (
+                (ro_dark::PRIMARY, ro_dark::PRIMARY_STROKE),
+                (ro_dark::PRIMARY_HOVER, ro_dark::PRIMARY_STROKE_HOVER),
+            ),
+            Self::Danger => (plain, (ro_dark::DANGER_PRESSED, ro_dark::BRONZE)),
+            Self::Ghost => (
+                (Color::NONE, ro_dark::SLOT_STROKE),
+                (Color::WHITE.with_alpha(0.04), ro_dark::BUTTON_STROKE),
+            ),
+        };
+        HoverColors { rest, hover }
+    }
+}
+
+/// A full-width row of a menu: the `ui/icons/<icon>.svg` glyph, a label and the key
+/// that also triggers it. The caller attaches the `Activate` observer.
+pub fn menu_row(
+    tone: RowTone,
+    height: f32,
+    icon: &'static str,
+    label: &'static str,
+    key: Option<&'static str>,
+) -> impl Scene {
+    let colors = tone.colors();
+    let (fill, stroke) = colors.rest;
+    let ink = if tone == RowTone::Ghost {
+        ro_dark::LABEL
+    } else {
+        ro_dark::BUTTON_LABEL
+    };
+    let key = key.map(|key| EntityScene(key_cap(key)));
+    bsn! {
+        Button
+        Hovered
+        colors
+        Node {
+            height: px(height),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            column_gap: px(12),
+            padding: {UiRect::horizontal(px(14))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        Pickable
+        Children [
+            @glyph_icon(icon, 16.0, ink)
+            --
+            @chrome_text(label.into(), 14.0, ink)
+            Node { flex_grow: 1.0 }
+            --
+            {key}
+        ]
+    }
+}
+
+/// A screen-wide layer at stacking order `z` that centres a modal and keeps clicks off
+/// everything under it. The caller adds the shade.
+pub fn modal_layer(z: i32) -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            width: percent(100),
+            height: percent(100),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+        }
+        GlobalZIndex({z})
+        Pickable
+    }
+}
+
+/// A shade that is `center` up to `clear` percent of the way out, then darkens to
+/// `edge` in the screen's corners.
+pub fn vignette(center: Color, edge: Color, clear: f32) -> BackgroundGradient {
+    BackgroundGradient::from(RadialGradient::new(
+        UiPosition::CENTER,
+        RadialGradientShape::FarthestCorner,
+        vec![
+            ColorStop::new(center, percent(clear)),
+            ColorStop::new(edge, percent(100)),
+        ],
+    ))
+}
+
 /// The key that also triggers a button, drawn beside its label.
 pub fn key_cap(key: &'static str) -> impl Scene {
     bsn! {
@@ -672,16 +790,22 @@ pub fn colored_lines(lines: Vec<Vec<(Color, String)>>) -> impl Scene {
 }
 
 fn colored_line(runs: Vec<(Color, String)>) -> impl Scene {
+    colored_text(runs, theme::FONT_BODY, 12.0)
+}
+
+/// One text split into coloured runs, in `font` at `size` px: a `Text` holding the
+/// first run plus a `TextSpan` per following one.
+pub fn colored_text(runs: Vec<(Color, String)>, font: &'static str, size: f32) -> impl Scene {
     let mut runs = runs.into_iter();
     let (first_color, first_text) = runs.next().unwrap_or((theme::TEXT_DIM, String::new()));
     let spans: Vec<_> = runs
-        .map(|(color, text)| colored_span(color, text))
+        .map(|(color, text)| colored_span(color, text, font, size))
         .collect();
     bsn! {
         Text(first_text)
         TextFont {
-            font: FontSourceTemplate::Handle(theme::FONT_BODY),
-            font_size: {FontSize::Px(12.0)},
+            font: FontSourceTemplate::Handle(font),
+            font_size: {FontSize::Px(size)},
         }
         TextColor(first_color)
         @ignore_picking()
@@ -689,12 +813,12 @@ fn colored_line(runs: Vec<(Color, String)>) -> impl Scene {
     }
 }
 
-fn colored_span(color: Color, text: String) -> impl Scene {
+fn colored_span(color: Color, text: String, font: &'static str, size: f32) -> impl Scene {
     bsn! {
         TextSpan(text)
         TextFont {
-            font: FontSourceTemplate::Handle(theme::FONT_BODY),
-            font_size: {FontSize::Px(12.0)},
+            font: FontSourceTemplate::Handle(font),
+            font_size: {FontSize::Px(size)},
         }
         TextColor(color)
     }

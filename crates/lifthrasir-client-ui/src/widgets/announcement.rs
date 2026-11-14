@@ -1,34 +1,47 @@
-//! Server announcement rendering: echoes every announcement to the chat box as a
-//! colored line and drives per-style on-screen overlays — a fading Top banner and a
-//! fading Center flash — through independent arrival-order queues.
+//! Server announcement rendering, after the `Announcements & Toasts` artboard: echoes
+//! every announcement to the chat box as a colored line and drives per-style
+//! on-screen overlays, a Top banner and a Center flash, through independent
+//! arrival-order queues.
 //!
 //! An [`AnnouncementReceived`] event fans out in [`ingest_announcements`] to the
 //! chat echo (all styles) and the matching overlay queue (Top/Center only; Local is
 //! chat-only). Two queues let a Top banner and a Center flash be on screen at once
 //! while same-style announcements serialize. Overlays parent under the
 //! [`AnnouncementLayer`] node the HUD mounts, so they despawn with the HUD on exit.
+//!
+//! The banner is a dark band between two hairlines in the announcement's colour,
+//! with whoever speaks as its kicker. The flash is a headline in the title font.
 
 use std::collections::VecDeque;
 
 use bevy::prelude::*;
+use bevy::scene::EntityScene;
 use lifthrasir_client::core::state::GameState;
+use lifthrasir_ui::rich_text::parse_color_codes;
+use lifthrasir_ui::theme::{self, ro_dark};
+use lifthrasir_ui::widgets::chrome::ignore_picking;
 use net_contract::events::{AnnouncementReceived, AnnouncementStyle};
 
+use crate::screens::shared::{colored_text, overline};
 use crate::widgets::chat_box::{ChatHistory, append_colored_line};
-use lifthrasir_ui::rich_text::spawn_colored_text;
 
-const TOP_DEFAULT: Color = Color::srgb_u8(0xff, 0xff, 0x00);
-const CENTER_DEFAULT: Color = Color::WHITE;
+const TOP_DEFAULT: Color = ro_dark::BRONZE_LIGHT;
+const CENTER_DEFAULT: Color = ro_dark::HERO;
 const LOCAL_DEFAULT: Color = Color::srgb_u8(0x2f, 0xd2, 0x7a);
 
-const CENTER_DURATION_S: f32 = 4.0;
-const TOP_DURATION_S: f32 = 4.0;
-const TOP_FADE_S: f32 = 0.6;
-const TOP_OFFSET_PX: f32 = 28.0;
-const CENTER_TOP_PCT: f32 = 38.0;
-const TOP_FONT_SIZE: f32 = 20.0;
-const CENTER_FONT_SIZE: f32 = 34.0;
+const CENTER_DURATION_S: f32 = 3.4;
+const CENTER_FADE_S: f32 = 0.4;
+const TOP_DURATION_S: f32 = 6.0;
+const TOP_FADE_S: f32 = 0.5;
+const TOP_OFFSET_PX: f32 = 18.0;
+const CENTER_TOP_PCT: f32 = 34.0;
+const TOP_FONT_SIZE: f32 = 16.0;
+const CENTER_FONT_SIZE: f32 = 36.0;
 const OVERLAY_Z: i32 = 500;
+/// How dark the banner's band is at full strength.
+const BAND_ALPHA: f32 = 0.82;
+/// The kicker of an announcement nobody is named for.
+const SERVER_KICKER: &str = "ANNOUNCEMENT";
 
 pub struct AnnouncementPlugin;
 
@@ -52,8 +65,20 @@ impl Plugin for AnnouncementPlugin {
 
 /// A resolved announcement waiting for its style's overlay slot to free up.
 struct QueuedOverlay {
+    /// Who speaks, in capitals. Empty when nobody is named.
+    kicker: String,
     text: String,
     color: Color,
+}
+
+impl QueuedOverlay {
+    fn new(source_name: &str, text: &str, color: Color) -> Self {
+        Self {
+            kicker: source_name.to_uppercase(),
+            text: text.to_string(),
+            color,
+        }
+    }
 }
 
 /// Per-style overlay backlog. A resource (not world data) since it is transient
@@ -80,6 +105,139 @@ struct TopBanner {
 #[derive(Component)]
 struct CenterFlash {
     timer: Timer,
+}
+
+/// The dark band behind the banner's text.
+#[derive(Component, Default, Clone)]
+struct BannerBand;
+
+/// A hairline along the band's edge: its colour and how strong it is.
+#[derive(Component, Default, Clone)]
+struct BannerRule(Color, f32);
+
+/// The band's fill at `alpha`: dark in the middle, clear at both ends.
+fn band(alpha: f32) -> BackgroundGradient {
+    let ink = ro_dark::WINDOW_OUTLINE.with_alpha(BAND_ALPHA * alpha);
+    BackgroundGradient::from(LinearGradient::to_right(vec![
+        ColorStop::new(ink.with_alpha(0.0), percent(0)),
+        ColorStop::new(ink, percent(14)),
+        ColorStop::new(ink, percent(86)),
+        ColorStop::new(ink.with_alpha(0.0), percent(100)),
+    ]))
+}
+
+/// A hairline in `color` at `alpha`, fading out towards both ends.
+fn rule(color: Color, alpha: f32) -> BackgroundGradient {
+    BackgroundGradient::from(LinearGradient::to_right(vec![
+        ColorStop::new(color.with_alpha(0.0), percent(0)),
+        ColorStop::new(color.with_alpha(alpha), percent(50)),
+        ColorStop::new(color.with_alpha(0.0), percent(100)),
+    ]))
+}
+
+/// `text` split at its `^RRGGBB` codes, every run invisible until the overlay fades in.
+fn hidden_runs(text: &str, color: Color) -> Vec<(Color, String)> {
+    parse_color_codes(text, color)
+        .into_iter()
+        .map(|(color, run)| (color.with_alpha(0.0), run))
+        .collect()
+}
+
+/// The Top banner: the kicker over the text, on a band between two hairlines.
+fn banner(overlay: QueuedOverlay) -> impl Scene {
+    let QueuedOverlay {
+        kicker,
+        text,
+        color,
+    } = overlay;
+    let kicker = if kicker.is_empty() {
+        SERVER_KICKER.to_string()
+    } else {
+        kicker
+    };
+    let veil = band(0.0);
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(TOP_OFFSET_PX),
+            left: px(0),
+            width: percent(100),
+            justify_content: JustifyContent::Center,
+        }
+        @ignore_picking()
+        Children [
+            BannerBand
+            Node {
+                min_width: px(520),
+                max_width: px(760),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                padding: {UiRect::new(px(26), px(26), px(9), px(10))},
+                position_type: PositionType::Relative,
+            }
+            veil
+            @ignore_picking()
+            Children [
+                @banner_rule(color, 1.0, true)
+                --
+                @banner_rule(color, 0.6, false)
+                --
+                @overline(kicker, color.with_alpha(0.0))
+                --
+                @colored_text(hidden_runs(&text, color), theme::FONT_BODY, TOP_FONT_SIZE)
+                TextShadow { offset: {Vec2::splat(1.0)}, color: {Color::BLACK.with_alpha(0.0)} }
+            ]
+        ]
+    }
+}
+
+fn banner_rule(color: Color, strength: f32, top: bool) -> impl Scene {
+    let (top, bottom) = if top {
+        (px(0), Val::Auto)
+    } else {
+        (Val::Auto, px(0))
+    };
+    let line = rule(color, 0.0);
+    bsn! {
+        BannerRule(color, strength)
+        Node {
+            position_type: PositionType::Absolute,
+            left: percent(14),
+            right: percent(14),
+            top: {top},
+            bottom: {bottom},
+            height: px(1),
+        }
+        line
+        @ignore_picking()
+    }
+}
+
+/// The Center flash: who speaks over the text as a headline.
+fn flash(overlay: QueuedOverlay) -> impl Scene {
+    let QueuedOverlay {
+        kicker,
+        text,
+        color,
+    } = overlay;
+    let kicker = (!kicker.is_empty()).then(|| EntityScene(overline(kicker, color.with_alpha(0.0))));
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            top: {Val::Percent(CENTER_TOP_PCT)},
+            left: px(0),
+            width: percent(100),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+        }
+        @ignore_picking()
+        Children [
+            {kicker}
+            --
+            @colored_text(hidden_runs(&text, color), theme::FONT_TITLE, CENTER_FONT_SIZE)
+            TextShadow { offset: {Vec2::new(0.0, 2.0)}, color: {Color::BLACK.with_alpha(0.0)} }
+        ]
+    }
 }
 
 /// Spawns the overlay layer under `parent`. Absolutely-positioned overlays offset
@@ -146,11 +304,10 @@ fn ingest_announcements(
         };
         let color = resolve_color(event.color, event.style);
         append_colored_line(&mut commands, container, &line, color, font.clone());
+        let overlay = QueuedOverlay::new(&event.source_name, &event.text, color);
         match event.style {
-            AnnouncementStyle::Top => queues.top.push_back(QueuedOverlay { text: line, color }),
-            AnnouncementStyle::Center => {
-                queues.center.push_back(QueuedOverlay { text: line, color })
-            }
+            AnnouncementStyle::Top => queues.top.push_back(overlay),
+            AnnouncementStyle::Center => queues.center.push_back(overlay),
             AnnouncementStyle::Local => {}
         }
     }
@@ -160,7 +317,6 @@ fn drive_top(
     mut queues: ResMut<AnnouncementQueues>,
     layer: Query<Entity, With<AnnouncementLayer>>,
     active: Query<(), With<TopBanner>>,
-    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     if !active.is_empty() {
@@ -172,40 +328,18 @@ fn drive_top(
     let Some(overlay) = queues.top.pop_front() else {
         return;
     };
-
-    let font = asset_server.load(lifthrasir_ui::theme::FONT_BODY);
-    let banner = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(TOP_OFFSET_PX),
-                left: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
-            TopBanner {
-                timer: Timer::from_seconds(TOP_DURATION_S, TimerMode::Once),
-            },
-            ChildOf(layer),
-        ))
-        .id();
-    spawn_colored_text(
-        &mut commands,
-        banner,
-        &overlay.text,
-        font,
-        TOP_FONT_SIZE,
-        overlay.color,
-    );
+    commands.spawn_scene(banner(overlay)).insert((
+        TopBanner {
+            timer: Timer::from_seconds(TOP_DURATION_S, TimerMode::Once),
+        },
+        ChildOf(layer),
+    ));
 }
 
 fn drive_center(
     mut queues: ResMut<AnnouncementQueues>,
     layer: Query<Entity, With<AnnouncementLayer>>,
     active: Query<(), With<CenterFlash>>,
-    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     if !active.is_empty() {
@@ -217,40 +351,24 @@ fn drive_center(
     let Some(overlay) = queues.center.pop_front() else {
         return;
     };
-
-    let font = asset_server.load(lifthrasir_ui::theme::FONT_BODY);
-    let flash = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Percent(CENTER_TOP_PCT),
-                left: Val::Px(0.0),
-                width: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
-            CenterFlash {
-                timer: Timer::from_seconds(CENTER_DURATION_S, TimerMode::Once),
-            },
-            ChildOf(layer),
-        ))
-        .id();
-    spawn_colored_text(
-        &mut commands,
-        flash,
-        &overlay.text,
-        font,
-        CENTER_FONT_SIZE,
-        overlay.color,
-    );
+    commands.spawn_scene(flash(overlay)).insert((
+        CenterFlash {
+            timer: Timer::from_seconds(CENTER_DURATION_S, TimerMode::Once),
+        },
+        ChildOf(layer),
+    ));
 }
+
+/// The text colours of an overlay, and the shadow under a text that has one.
+type Inks<'w, 's> = Query<'w, 's, (&'static mut TextColor, Option<&'static mut TextShadow>)>;
 
 fn fade_top_banner(
     time: Res<Time>,
     mut banners: Query<(Entity, &mut TopBanner)>,
     children: Query<&Children>,
-    mut colors: Query<&mut TextColor>,
+    mut inks: Inks,
+    mut bands: Query<&mut BackgroundGradient, (With<BannerBand>, Without<BannerRule>)>,
+    mut rules: Query<(&BannerRule, &mut BackgroundGradient)>,
     mut commands: Commands,
 ) {
     for (entity, mut banner) in &mut banners {
@@ -260,7 +378,14 @@ fn fade_top_banner(
             continue;
         }
         let alpha = fade_in_out_alpha(banner.timer.elapsed_secs(), TOP_DURATION_S, TOP_FADE_S);
-        fade_text_alpha(entity, alpha, &children, &mut colors);
+        fade_text_alpha(entity, alpha, &children, &mut inks);
+        // Only one banner is up at a time, so every band and hairline is its own.
+        for mut fill in &mut bands {
+            *fill = band(alpha);
+        }
+        for (line, mut fill) in &mut rules {
+            *fill = rule(line.0, alpha * line.1);
+        }
     }
 }
 
@@ -280,7 +405,7 @@ fn fade_center_flash(
     time: Res<Time>,
     mut flashes: Query<(Entity, &mut CenterFlash)>,
     children: Query<&Children>,
-    mut colors: Query<&mut TextColor>,
+    mut inks: Inks,
     mut commands: Commands,
 ) {
     for (entity, mut flash) in &mut flashes {
@@ -289,27 +414,21 @@ fn fade_center_flash(
             commands.entity(entity).despawn();
             continue;
         }
-        fade_text_alpha(
-            entity,
-            flash.timer.fraction_remaining(),
-            &children,
-            &mut colors,
-        );
+        let alpha = fade_in_out_alpha(flash.timer.elapsed_secs(), CENTER_DURATION_S, CENTER_FADE_S);
+        fade_text_alpha(entity, alpha, &children, &mut inks);
     }
 }
 
-/// Sets alpha on every `TextColor` under `root` (the flash node's `Text` root plus
-/// its per-run `TextSpan` children), so a multi-colored flash fades as one.
-fn fade_text_alpha(
-    root: Entity,
-    alpha: f32,
-    children: &Query<&Children>,
-    colors: &mut Query<&mut TextColor>,
-) {
+/// Sets alpha on every text under `root` (each `Text` root, its per-run `TextSpan`
+/// children and its shadow), so a multi-colored overlay fades as one.
+fn fade_text_alpha(root: Entity, alpha: f32, children: &Query<&Children>, inks: &mut Inks) {
     let mut stack = vec![root];
     while let Some(entity) = stack.pop() {
-        if let Ok(mut color) = colors.get_mut(entity) {
+        if let Ok((mut color, shadow)) = inks.get_mut(entity) {
             color.0.set_alpha(alpha);
+            if let Some(mut shadow) = shadow {
+                shadow.color.set_alpha(alpha);
+            }
         }
         if let Ok(kids) = children.get(entity) {
             stack.extend(kids.iter());
@@ -413,14 +532,106 @@ mod tests {
         assert_eq!(app.world().resource::<AnnouncementQueues>().top.len(), 0);
     }
 
-    fn drive_center_app() -> App {
+    /// An app that can spawn the overlays, with each update a quarter second long.
+    fn overlay_app() -> App {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            bevy::scene::ScenePlugin,
+        ));
+        app.init_asset::<Image>();
         app.init_asset::<Font>();
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_millis(250),
+        ));
         app.init_resource::<AnnouncementQueues>();
         app.world_mut().spawn(AnnouncementLayer);
+        app
+    }
+
+    fn drive_center_app() -> App {
+        let mut app = overlay_app();
         app.add_systems(Update, drive_center);
         app
+    }
+
+    /// Every text on screen, sorted: queries do not follow the hierarchy's order.
+    fn texts(app: &mut App) -> Vec<String> {
+        let world = app.world_mut();
+        let mut texts: Vec<_> = world
+            .query::<&Text>()
+            .iter(world)
+            .map(|text| text.0.clone())
+            .collect();
+        texts.sort();
+        texts
+    }
+
+    #[test]
+    fn the_banner_names_who_speaks_and_the_server_when_nobody_does() {
+        let mut app = overlay_app();
+        app.add_systems(Update, drive_top);
+        app.world_mut()
+            .resource_mut::<AnnouncementQueues>()
+            .top
+            .push_back(QueuedOverlay::new("Sigrun", "recruiting", Color::WHITE));
+        app.update();
+        assert_eq!(texts(&mut app), ["SIGRUN", "recruiting"]);
+
+        let mut app = overlay_app();
+        app.add_systems(Update, drive_top);
+        app.world_mut()
+            .resource_mut::<AnnouncementQueues>()
+            .top
+            .push_back(QueuedOverlay::new("", "maintenance", Color::WHITE));
+        app.update();
+        assert_eq!(texts(&mut app), [SERVER_KICKER, "maintenance"]);
+    }
+
+    #[test]
+    fn the_flash_has_no_kicker_when_nobody_is_named() {
+        let mut app = drive_center_app();
+        app.world_mut()
+            .resource_mut::<AnnouncementQueues>()
+            .center
+            .push_back(QueuedOverlay::new("", "Dark Lord Appears", Color::WHITE));
+        app.update();
+        assert_eq!(texts(&mut app), ["Dark Lord Appears"]);
+    }
+
+    #[test]
+    fn the_banner_fades_in_with_its_text_shadow_and_band() {
+        let mut app = overlay_app();
+        app.add_systems(Update, (drive_top, fade_top_banner).chain());
+        app.world_mut()
+            .resource_mut::<AnnouncementQueues>()
+            .top
+            .push_back(QueuedOverlay::new("", "maintenance", Color::WHITE));
+        app.update();
+        let world = app.world_mut();
+        let hidden = world
+            .query::<&TextColor>()
+            .iter(world)
+            .all(|color| color.0.alpha() == 0.0);
+        assert!(hidden, "the banner is spawned invisible");
+
+        for _ in 0..4 {
+            app.update();
+        }
+        let world = app.world_mut();
+        let shown = world
+            .query::<&TextColor>()
+            .iter(world)
+            .all(|color| color.0.alpha() == 1.0);
+        assert!(shown, "past the fade the text is opaque");
+        let shadow = world.query::<&TextShadow>().single(world).unwrap();
+        assert_eq!(shadow.color.alpha(), 1.0);
+        let fill = world
+            .query_filtered::<&BackgroundGradient, With<BannerBand>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(*fill, band(1.0));
     }
 
     #[test]
@@ -428,14 +639,12 @@ mod tests {
         let mut app = drive_center_app();
         {
             let mut queues = app.world_mut().resource_mut::<AnnouncementQueues>();
-            queues.center.push_back(QueuedOverlay {
-                text: "first".to_string(),
-                color: Color::WHITE,
-            });
-            queues.center.push_back(QueuedOverlay {
-                text: "second".to_string(),
-                color: Color::WHITE,
-            });
+            queues
+                .center
+                .push_back(QueuedOverlay::new("", "first", Color::WHITE));
+            queues
+                .center
+                .push_back(QueuedOverlay::new("", "second", Color::WHITE));
         }
 
         app.update();
@@ -458,11 +667,7 @@ mod tests {
     }
 
     fn drive_top_app() -> App {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
-        app.init_asset::<Font>();
-        app.init_resource::<AnnouncementQueues>();
-        app.world_mut().spawn(AnnouncementLayer);
+        let mut app = overlay_app();
         app.add_systems(Update, drive_top);
         app
     }
@@ -472,14 +677,12 @@ mod tests {
         let mut app = drive_top_app();
         {
             let mut queues = app.world_mut().resource_mut::<AnnouncementQueues>();
-            queues.top.push_back(QueuedOverlay {
-                text: "first".to_string(),
-                color: Color::WHITE,
-            });
-            queues.top.push_back(QueuedOverlay {
-                text: "second".to_string(),
-                color: Color::WHITE,
-            });
+            queues
+                .top
+                .push_back(QueuedOverlay::new("", "first", Color::WHITE));
+            queues
+                .top
+                .push_back(QueuedOverlay::new("", "second", Color::WHITE));
         }
 
         app.update();
@@ -507,14 +710,12 @@ mod tests {
         app.init_resource::<AnnouncementQueues>();
         {
             let mut queues = app.world_mut().resource_mut::<AnnouncementQueues>();
-            queues.top.push_back(QueuedOverlay {
-                text: "t".to_string(),
-                color: Color::WHITE,
-            });
-            queues.center.push_back(QueuedOverlay {
-                text: "c".to_string(),
-                color: Color::WHITE,
-            });
+            queues
+                .top
+                .push_back(QueuedOverlay::new("", "t", Color::WHITE));
+            queues
+                .center
+                .push_back(QueuedOverlay::new("", "c", Color::WHITE));
         }
         app.add_systems(Update, clear_queues);
         app.update();

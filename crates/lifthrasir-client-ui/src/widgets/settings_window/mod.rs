@@ -1,45 +1,44 @@
-//! Settings window: the draggable shell and the draft/Apply/Cancel/Reset model.
+//! Settings window, after the `Settings` artboard: the sections on a left rail with a
+//! search over them, the open section's rows, and the draft / Apply / Cancel / Reset
+//! footer.
 //!
-//! The chrome (titlebar, tab rail, fixed-height scrollable content pane, and
-//! footer) is authored declaratively with `bsn!` in [`scene`]; Feathers supplies
-//! the buttons and the scrollbar. The window edits a `SettingsDraft` held in
-//! `SettingsUi`; nothing touches the live world until Apply, which commits the
-//! draft, queues a Bevy settings save, and emits `ApplySettings`. The tree is
-//! static — the `refresh_*`
-//! systems project the draft onto the controls via their marker components.
-//! Spawned hidden at `Startup` so it survives state changes and is reachable
-//! from the title screen and in-game.
+//! The window edits a [`SettingsDraft`] held in [`SettingsUi`]; nothing touches the
+//! live world until Apply, which commits the draft, queues a Bevy settings save, and
+//! emits `ApplySettings`. [`view`] projects the draft into plain views of the window's
+//! regions and [`rebuild`] redraws a region when its view changes. Sliders are the
+//! exception: their fill, knob and readout are written in place, and the rows are not
+//! redrawn while one is held, so a drag is never cut short.
+//!
+//! Spawned hidden at `Startup` so it survives state changes and is reachable from the
+//! title screen and in-game.
+//!
+//! NOTE: the artboard also lists Social and Accessibility sections, more Interface
+//! rows, master and interface volume and two sound behaviours. The client has no such
+//! settings, so they are left out until it does.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::settings::SaveSettings;
+use bevy::text::EditableText;
 use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::Activate;
 use lifthrasir_client::domain::input::PlayerAction;
 use lifthrasir_client::domain::settings::{
-    ActionBinds, ApplySettings, AudioConfig, DisplayMode, GraphicsSettings, KeyBind, Keybinds,
-    Modifier, resolution_label, resolution_next, resolution_prev,
+    ApplySettings, AudioConfig, GraphicsSettings, KeyBind, Keybinds, Modifier,
 };
 
-use crate::screens::shared::keycap_label;
+use crate::screens::shared::light_search_focus;
 
 pub mod scene;
+mod view;
 
-/// Which slot of an action's bindings a rebind capture targets.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum BindSlot {
-    #[default]
-    Primary,
-    Secondary,
-}
+#[cfg(test)]
+mod tests;
 
-/// The settings tabs, mirroring the mockup's left rail.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum SettingsTab {
-    #[default]
-    Graphics,
-    Sound,
-    Input,
-}
+pub use view::{AudioChannel, BindSlot, Clash, Preset, Setting, SettingsTab};
+
+/// Seconds a footer toast stays up.
+const TOAST_SECS: f32 = 2.4;
 
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct SettingsDraft {
@@ -56,6 +55,13 @@ pub struct SettingsUi {
     pub committed: SettingsDraft,
     pub tab: SettingsTab,
     pub listening: Option<(PlayerAction, BindSlot)>,
+    /// The search as typed.
+    query: String,
+    /// A pressed key that another slot already holds, waiting for the player's call.
+    clash: Option<Clash>,
+    toast: Option<(String, Timer)>,
+    /// Whether a slider is held. The rows are not redrawn until it is let go.
+    dragging: bool,
 }
 
 impl FromWorld for SettingsUi {
@@ -70,6 +76,10 @@ impl FromWorld for SettingsUi {
             draft,
             tab: default(),
             listening: None,
+            query: String::new(),
+            clash: None,
+            toast: None,
+            dragging: false,
         }
     }
 }
@@ -84,11 +94,96 @@ impl SettingsUi {
     pub fn cancel(&mut self) {
         self.draft = self.committed.clone();
         self.listening = None;
+        self.clash = None;
     }
 
     /// Resets the draft to the built-in defaults.
     pub fn reset(&mut self) {
         self.draft = SettingsDraft::default();
+        self.listening = None;
+        self.clash = None;
+    }
+
+    fn flash(&mut self, text: impl Into<String>) {
+        self.toast = Some((
+            text.into(),
+            Timer::from_seconds(TOAST_SECS, TimerMode::Once),
+        ));
+    }
+
+    /// Binds a pressed key to the slot that was listening, unless another slot holds
+    /// it: then the clash is raised for the player to settle.
+    fn capture(&mut self, action: PlayerAction, slot: BindSlot, bind: KeyBind) {
+        self.listening = None;
+        match view::holder(&self.draft.keybinds, &bind, (action, slot)) {
+            Some(other) => {
+                self.clash = Some(Clash {
+                    action,
+                    slot,
+                    bind,
+                    other,
+                });
+            }
+            None => *view::bind_mut(&mut self.draft.keybinds, action, slot) = bind,
+        }
+    }
+
+    /// Settles a clash by trading the two binds.
+    fn swap_binds(&mut self) {
+        let Some(clash) = self.clash.take() else {
+            return;
+        };
+        let keybinds = &mut self.draft.keybinds;
+        let moved = std::mem::replace(
+            view::bind_mut(keybinds, clash.action, clash.slot),
+            clash.bind.clone(),
+        );
+        *view::bind_mut(keybinds, clash.other.0, clash.other.1) = moved.clone();
+        self.flash(view::swap_notice(&clash, &moved));
+    }
+
+    /// Everything an action does to the draft. Applying and closing reach outside it
+    /// and are left to [`SettingsDesk`].
+    fn edit(&mut self, action: SettingsAction) {
+        match action {
+            SettingsAction::Section(tab) => {
+                self.tab = tab;
+                self.listening = None;
+                self.clash = None;
+            }
+            SettingsAction::Choose(setting, index) => {
+                setting.choose(&mut self.draft.graphics, index);
+            }
+            SettingsAction::Cycle(setting) => setting.cycle(&mut self.draft.graphics),
+            SettingsAction::Toggle(setting) => setting.toggle(&mut self.draft.graphics),
+            SettingsAction::Mute(channel) => {
+                let (_, muted) = channel.read(&self.draft.audio);
+                channel.set_muted(&mut self.draft.audio, !muted);
+            }
+            SettingsAction::Preset(preset) => preset.apply(&mut self.draft.graphics),
+            SettingsAction::Listen(action, slot) => {
+                self.listening = Some((action, slot));
+                self.clash = None;
+            }
+            SettingsAction::KeepBind => self.clash = None,
+            SettingsAction::SwapBinds => self.swap_binds(),
+            SettingsAction::ResetSection => {
+                view::reset_section(&mut self.draft, self.tab);
+                self.listening = None;
+                self.clash = None;
+                let (title, _, _) = self.tab.meta();
+                self.flash(format!("{title} reset to defaults \u{b7} Apply to keep it"));
+            }
+            SettingsAction::ResetAll => {
+                self.reset();
+                self.flash("Everything reset to defaults \u{b7} Apply to keep it");
+            }
+            SettingsAction::Cancel => {
+                self.cancel();
+                self.flash("Changes discarded");
+            }
+            SettingsAction::Apply | SettingsAction::Close => {}
+        }
     }
 }
 
@@ -122,461 +217,131 @@ fn commit_draft(
 #[derive(Component, Default, Clone)]
 pub struct SettingsWindowRoot;
 
-/// The draggable titlebar; the drag observer only moves the window when the
-/// drag's target is the titlebar itself, so dragging from the close button is
-/// inert.
+/// The draggable title bar.
 #[derive(Component, Default, Clone)]
 struct SettingsTitlebar;
 
-/// Marks a tab-rail button so its observer and highlight key off a tab.
-#[derive(Component, Clone, Copy, Default)]
-struct TabButton(SettingsTab);
-
-/// Marks a tab body so the active-tab system can show/hide it.
-#[derive(Component, Clone, Copy, Default)]
-struct TabBody(SettingsTab);
-
-/// Marks the unsaved-changes dot so its visibility tracks `dirty()`.
+/// The search text over the sections.
 #[derive(Component, Default, Clone)]
-struct DirtyDot;
+struct SettingsSearchField;
 
-/// Marks the Apply button so it dims when there is nothing to apply.
-#[derive(Component, Default, Clone)]
-struct ApplyButton;
-
-pub struct SettingsWindowPlugin;
-
-impl Plugin for SettingsWindowPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<SettingsUi>();
-        app.add_systems(Startup, spawn_settings_root);
-        app.add_systems(
-            Update,
-            (
-                capture_rebind.run_if(listening_active),
-                refresh_tabs.run_if(resource_changed::<SettingsUi>),
-                refresh_footer.run_if(resource_changed::<SettingsUi>),
-                refresh_graphics.run_if(resource_changed::<SettingsUi>),
-                refresh_sound.run_if(resource_changed::<SettingsUi>),
-                refresh_input.run_if(resource_changed::<SettingsUi>),
-            ),
-        );
-    }
+/// A region of the window that [`rebuild`] redraws when its view changes.
+#[derive(Component, Default, Clone, Copy, PartialEq, Eq, Debug)]
+enum SettingsHost {
+    #[default]
+    Nav,
+    Head,
+    Rows,
+    Foot,
 }
 
-/// Spawns the (hidden) window as a top-level BSN scene so it survives state
-/// changes and renders over both the title screen and the in-game HUD.
-fn spawn_settings_root(mut commands: Commands) {
-    scene::build(&mut commands);
-}
-
-/// Tab click: set the active tab in the draft state.
-fn on_tab_click(click: On<PointerClick>, tabs: Query<&TabButton>, mut ui: ResMut<SettingsUi>) {
-    let Ok(tab) = tabs.get(click.entity) else {
-        return;
-    };
-    ui.tab = tab.0;
-}
-
-/// Apply: commit the draft, queue persistence, and request a live re-apply.
-/// No-op when the draft is clean.
-fn on_apply(
-    _: On<PointerClick>,
-    mut ui: ResMut<SettingsUi>,
-    mut graphics: ResMut<GraphicsSettings>,
-    mut audio: ResMut<AudioConfig>,
-    mut keybinds: ResMut<Keybinds>,
-    mut commands: Commands,
-    mut writer: MessageWriter<ApplySettings>,
-) {
-    if !commit_draft(&mut ui, &mut graphics, &mut audio, &mut keybinds) {
-        return;
-    }
-
-    commands.queue(SaveSettings::IfChanged);
-    writer.write(ApplySettings);
-}
-
-/// Cancel: discard pending edits and any in-progress rebind capture.
-fn on_cancel(_: On<Activate>, mut ui: ResMut<SettingsUi>) {
-    ui.cancel();
-}
-
-/// Reset to Defaults: load the built-in defaults into the draft.
-fn on_reset(_: On<Activate>, mut ui: ResMut<SettingsUi>) {
-    ui.reset();
-}
-
-/// Shows the active tab's body and highlights its rail button.
-fn refresh_tabs(
-    ui: Res<SettingsUi>,
-    mut bodies: Query<(&mut Node, &TabBody)>,
-    mut buttons: Query<(&mut BackgroundColor, &TabButton)>,
-) {
-    for (mut node, body) in &mut bodies {
-        let display = if body.0 == ui.tab {
-            Display::Flex
-        } else {
-            Display::None
-        };
-        if node.display != display {
-            node.display = display;
-        }
-    }
-    for (mut bg, button) in &mut buttons {
-        let color = if button.0 == ui.tab {
-            lifthrasir_ui::theme::EMERALD
-        } else {
-            lifthrasir_ui::theme::FIELD
-        };
-        if bg.0 != color {
-            bg.0 = color;
-        }
-    }
-}
-
-/// Shows the unsaved-changes dot and dims Apply when the draft is clean.
-fn refresh_footer(
-    ui: Res<SettingsUi>,
-    mut dot: Query<&mut Visibility, With<DirtyDot>>,
-    mut apply: Query<&mut BackgroundColor, With<ApplyButton>>,
-) {
-    let dirty = ui.dirty();
-    if let Ok(mut visibility) = dot.single_mut() {
-        *visibility = if dirty {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
-    }
-    if let Ok(mut bg) = apply.single_mut() {
-        let alpha = if dirty { 1.0 } else { 0.4 };
-        if bg.0.alpha() != alpha {
-            bg.0.set_alpha(alpha);
-        }
-    }
-}
-
-// ── Graphics tab ──────────────────────────────────────────────────────────
-
-/// Which `draft.graphics` field a control edits. Drives both interaction
-/// (steppers/switch/segmented mutate the matching field) and the displayed
-/// value refresh.
+/// What a control of the window does.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
-enum GraphicsField {
+pub enum SettingsAction {
     #[default]
-    DisplayMode,
-    Resolution,
-    Antialiasing,
-    Anisotropy,
-    Upscaling,
-    Dlss,
-    Ssao,
-    Vsync,
-    Bloom,
-    Shadows,
-    FpsCap,
-    UiScaling,
+    Close,
+    Section(SettingsTab),
+    /// Picks the option at this place in the setting's list.
+    Choose(Setting, usize),
+    /// Steps the setting to its next option.
+    Cycle(Setting),
+    Toggle(Setting),
+    Mute(AudioChannel),
+    Preset(Preset),
+    /// Waits for the key to bind to this slot.
+    Listen(PlayerAction, BindSlot),
+    /// Settles a clash by leaving both binds as they were.
+    KeepBind,
+    /// Settles a clash by trading the two binds.
+    SwapBinds,
+    ResetSection,
+    ResetAll,
+    Cancel,
+    Apply,
 }
 
-/// Direction a stepper arrow moves the value.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-enum StepDir {
-    #[default]
-    Prev,
-    Next,
-}
-
-/// A segmented-control button: edits `field` to the variant at `index` in
-/// `DisplayMode::ALL`.
-#[derive(Component, Clone, Copy, Default)]
-struct SegButton {
-    field: GraphicsField,
-    index: usize,
-}
-
-/// A stepper arrow: steps `field` one preset in `dir`.
-#[derive(Component, Clone, Copy, Default)]
-struct StepperArrow {
-    field: GraphicsField,
-    dir: StepDir,
-}
-
-/// The value text inside a stepper; `refresh_graphics` rewrites it.
-#[derive(Component, Clone, Copy, Default)]
-struct StepperValue(GraphicsField);
-
-/// The clickable switch pill; flips `field`'s bool.
-#[derive(Component, Clone, Copy, Default)]
-struct SwitchPill(GraphicsField);
-
-/// The sliding knob inside a switch; `refresh_graphics` repositions it.
-#[derive(Component, Clone, Copy, Default)]
-struct SwitchKnob(GraphicsField);
-
-/// Reads a field's current stepper/switch display value off the draft.
-fn field_label(graphics: &GraphicsSettings, field: GraphicsField) -> String {
-    match field {
-        GraphicsField::Resolution => resolution_label(graphics.resolution),
-        GraphicsField::Antialiasing => graphics.antialiasing.label().to_string(),
-        GraphicsField::Anisotropy => graphics.anisotropy.label().to_string(),
-        GraphicsField::Upscaling => graphics.upscaling.label().to_string(),
-        GraphicsField::Dlss => graphics.dlss.label().to_string(),
-        GraphicsField::Ssao => graphics.ssao.label().to_string(),
-        GraphicsField::FpsCap => graphics.fps_cap.label().to_string(),
-        GraphicsField::UiScaling => graphics.ui_scaling.label().to_string(),
-        GraphicsField::DisplayMode
-        | GraphicsField::Vsync
-        | GraphicsField::Bloom
-        | GraphicsField::Shadows => String::new(),
-    }
-}
-
-/// Reads a bool (switch) graphics field off the draft, or `None` for non-switch
-/// fields. Drives both the switch click toggle and the refresh display.
-fn switch_value(graphics: &GraphicsSettings, field: GraphicsField) -> Option<bool> {
-    match field {
-        GraphicsField::Vsync => Some(graphics.vsync),
-        GraphicsField::Bloom => Some(graphics.bloom),
-        GraphicsField::Shadows => Some(graphics.shadows),
-        _ => None,
-    }
-}
-
-/// Flips a bool (switch) graphics field on the draft.
-fn toggle_switch(graphics: &mut GraphicsSettings, field: GraphicsField) {
-    match field {
-        GraphicsField::Vsync => graphics.vsync = !graphics.vsync,
-        GraphicsField::Bloom => graphics.bloom = !graphics.bloom,
-        GraphicsField::Shadows => graphics.shadows = !graphics.shadows,
-        _ => {}
-    }
-}
-
-/// Steps a field's value one preset in `dir` on the draft.
-fn step_field(graphics: &mut GraphicsSettings, field: GraphicsField, dir: StepDir) {
-    match (field, dir) {
-        (GraphicsField::Resolution, StepDir::Next) => {
-            graphics.resolution = resolution_next(graphics.resolution)
-        }
-        (GraphicsField::Resolution, StepDir::Prev) => {
-            graphics.resolution = resolution_prev(graphics.resolution)
-        }
-        (GraphicsField::Antialiasing, StepDir::Next) => {
-            graphics.antialiasing = graphics.antialiasing.next()
-        }
-        (GraphicsField::Antialiasing, StepDir::Prev) => {
-            graphics.antialiasing = graphics.antialiasing.prev()
-        }
-        (GraphicsField::Anisotropy, StepDir::Next) => {
-            graphics.anisotropy = graphics.anisotropy.next()
-        }
-        (GraphicsField::Anisotropy, StepDir::Prev) => {
-            graphics.anisotropy = graphics.anisotropy.prev()
-        }
-        (GraphicsField::Upscaling, StepDir::Next) => graphics.upscaling = graphics.upscaling.next(),
-        (GraphicsField::Upscaling, StepDir::Prev) => graphics.upscaling = graphics.upscaling.prev(),
-        (GraphicsField::Dlss, StepDir::Next) => graphics.dlss = graphics.dlss.next(),
-        (GraphicsField::Dlss, StepDir::Prev) => graphics.dlss = graphics.dlss.prev(),
-        (GraphicsField::Ssao, StepDir::Next) => graphics.ssao = graphics.ssao.next(),
-        (GraphicsField::Ssao, StepDir::Prev) => graphics.ssao = graphics.ssao.prev(),
-        (GraphicsField::FpsCap, StepDir::Next) => graphics.fps_cap = graphics.fps_cap.next(),
-        (GraphicsField::FpsCap, StepDir::Prev) => graphics.fps_cap = graphics.fps_cap.prev(),
-        (GraphicsField::UiScaling, StepDir::Next) => {
-            graphics.ui_scaling = graphics.ui_scaling.next()
-        }
-        (GraphicsField::UiScaling, StepDir::Prev) => {
-            graphics.ui_scaling = graphics.ui_scaling.prev()
-        }
-        _ => {}
-    }
-}
-
-/// Clicking a segment sets the segmented field to the clicked variant.
-fn on_segment_click(
-    click: On<PointerClick>,
-    buttons: Query<&SegButton>,
-    mut ui: ResMut<SettingsUi>,
-) {
-    let Ok(button) = buttons.get(click.entity) else {
-        return;
-    };
-    if button.field == GraphicsField::DisplayMode {
-        ui.draft.graphics.display_mode = DisplayMode::ALL[button.index];
-    }
-}
-
-/// Clicking a stepper arrow steps its field one preset.
-fn on_stepper_click(
-    click: On<PointerClick>,
-    arrows: Query<&StepperArrow>,
-    mut ui: ResMut<SettingsUi>,
-) {
-    let Ok(arrow) = arrows.get(click.entity) else {
-        return;
-    };
-    step_field(&mut ui.draft.graphics, arrow.field, arrow.dir);
-}
-
-/// Clicking the switch flips its bool field.
-fn on_switch_click(click: On<PointerClick>, pills: Query<&SwitchPill>, mut ui: ResMut<SettingsUi>) {
-    let Ok(pill) = pills.get(click.entity) else {
-        return;
-    };
-    toggle_switch(&mut ui.draft.graphics, pill.0);
-}
-
-/// Reflects the current `draft.graphics` onto every graphics control: segmented
-/// highlight, stepper value text, switch colour + knob position. Runs whenever
-/// `SettingsUi` changes, so Cancel/Reset (which rewrite the draft) update the UI.
-fn refresh_graphics(
-    ui: Res<SettingsUi>,
-    mut segments: Query<(&SegButton, &mut BackgroundColor, &Children)>,
-    mut texts: Query<&mut TextColor>,
-    mut values: Query<(&StepperValue, &mut Text)>,
-    mut switches: Query<(&SwitchPill, &mut BackgroundColor), Without<SegButton>>,
-    mut knobs: Query<(&SwitchKnob, &mut Node)>,
-) {
-    let graphics = &ui.draft.graphics;
-
-    for (button, mut bg, children) in &mut segments {
-        let active = button.field == GraphicsField::DisplayMode
-            && DisplayMode::ALL[button.index] == graphics.display_mode;
-        bg.0 = if active {
-            lifthrasir_ui::theme::EMERALD
-        } else {
-            Color::NONE
-        };
-        for child in children.iter() {
-            if let Ok(mut color) = texts.get_mut(child) {
-                color.0 = if active {
-                    lifthrasir_ui::theme::EMERALD_INK
-                } else {
-                    lifthrasir_ui::theme::TEXT_DIM
-                };
-            }
-        }
-    }
-
-    for (value, mut text) in &mut values {
-        let label = field_label(graphics, value.0);
-        if text.0 != label {
-            text.0 = label;
-        }
-    }
-
-    for (pill, mut bg) in &mut switches {
-        if let Some(on) = switch_value(graphics, pill.0) {
-            bg.0 = if on {
-                lifthrasir_ui::theme::EMERALD
-            } else {
-                lifthrasir_ui::theme::FIELD
-            };
-        }
-    }
-
-    for (knob, mut node) in &mut knobs {
-        if let Some(on) = switch_value(graphics, knob.0) {
-            node.left = if on { Val::Px(27.0) } else { Val::Px(3.0) };
-        }
-    }
-}
-
-// ── Sound tab ─────────────────────────────────────────────────────────────
-
-/// The three audio channels, each a `draft.audio` volume + mute pair.
-#[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default)]
-enum AudioChannel {
-    #[default]
-    Bgm,
-    Sfx,
-    Ambient,
-}
-
-impl AudioChannel {
-    /// Reads the channel's `(volume, muted)` off the draft audio config.
-    fn read(self, audio: &lifthrasir_client::domain::settings::AudioConfig) -> (f32, bool) {
-        match self {
-            AudioChannel::Bgm => (audio.bgm_volume, audio.bgm_muted),
-            AudioChannel::Sfx => (audio.sfx_volume, audio.sfx_muted),
-            AudioChannel::Ambient => (audio.ambient_volume, audio.ambient_muted),
-        }
-    }
-
-    /// Sets the channel's volume on the draft audio config.
-    fn set_volume(self, audio: &mut lifthrasir_client::domain::settings::AudioConfig, volume: f32) {
-        match self {
-            AudioChannel::Bgm => audio.bgm_volume = volume,
-            AudioChannel::Sfx => audio.sfx_volume = volume,
-            AudioChannel::Ambient => audio.ambient_volume = volume,
-        }
-    }
-
-    /// Flips the channel's mute on the draft audio config.
-    fn toggle_muted(self, audio: &mut lifthrasir_client::domain::settings::AudioConfig) {
-        match self {
-            AudioChannel::Bgm => audio.bgm_muted = !audio.bgm_muted,
-            AudioChannel::Sfx => audio.sfx_muted = !audio.sfx_muted,
-            AudioChannel::Ambient => audio.ambient_muted = !audio.ambient_muted,
-        }
-    }
-}
-
-/// Maps a slider rail cursor fraction (0.0..=1.0, possibly slightly out of range
-/// near the edges) to a stored volume, clamped to the valid 0.0..=1.0 range.
-fn fraction_to_volume(fraction: f32) -> f32 {
-    fraction.clamp(0.0, 1.0)
-}
-
-/// The slider's readout: `"Muted"` when muted, else the volume as a whole
-/// percent (0.55 → `"55%"`).
-fn percent_label(volume: f32, muted: bool) -> String {
-    if muted {
-        return "Muted".to_string();
-    }
-    format!("{}%", (volume.clamp(0.0, 1.0) * 100.0).round() as i32)
-}
-
-/// Fill/knob position as a percentage; collapses to 0 when muted.
-fn slider_percent(volume: f32, muted: bool) -> f32 {
-    if muted {
-        return 0.0;
-    }
-    volume.clamp(0.0, 1.0) * 100.0
-}
-
-/// The clickable mute button; toggles its channel's `*_muted`.
-#[derive(Component, Clone, Copy, Default)]
-struct MuteButton(AudioChannel);
-
-/// The draggable slider rail; carries `RelativeCursorPosition` so pointer events
-/// map straight to a 0..1 fraction without manual geometry.
+/// The slider's rail: a press or a drag on it sets the channel's volume.
 #[derive(Component, Clone, Copy, Default)]
 struct SliderRail(AudioChannel);
 
-/// The fill bar inside a rail; `refresh_sound` sets its width.
+/// A part of a slider that [`sync_sliders`] writes in place.
 #[derive(Component, Clone, Copy, Default)]
-struct SliderFill(AudioChannel);
-
-/// The knob inside a rail; `refresh_sound` sets its left offset.
-#[derive(Component, Clone, Copy, Default)]
-struct SliderKnob(AudioChannel);
-
-/// The percent (or "Muted") readout; `refresh_sound` rewrites its text.
-#[derive(Component, Clone, Copy, Default)]
-struct SliderPercent(AudioChannel);
-
-/// Clicking a mute button flips its channel's mute on the draft.
-fn on_mute_click(click: On<PointerClick>, buttons: Query<&MuteButton>, mut ui: ResMut<SettingsUi>) {
-    let Ok(button) = buttons.get(click.entity) else {
-        return;
-    };
-    button.0.toggle_muted(&mut ui.draft.audio);
+enum SliderPart {
+    #[default]
+    Fill,
+    Knob,
+    Readout,
 }
 
-/// Reads a rail's cursor fraction and writes it as the channel's volume.
-/// Pressing a muted channel's rail unmutes it (matching the mockup's set-on-grab).
-fn set_slider_from_cursor(
+/// Which channel a [`SliderPart`] shows.
+#[derive(Component, Clone, Copy, Default)]
+struct SliderOf(AudioChannel);
+
+/// Everything a settings action touches.
+#[derive(SystemParam)]
+struct SettingsDesk<'w, 's> {
+    commands: Commands<'w, 's>,
+    ui: ResMut<'w, SettingsUi>,
+    graphics: ResMut<'w, GraphicsSettings>,
+    audio: ResMut<'w, AudioConfig>,
+    keybinds: ResMut<'w, Keybinds>,
+    apply: MessageWriter<'w, ApplySettings>,
+    roots: Query<'w, 's, &'static mut Visibility, With<SettingsWindowRoot>>,
+}
+
+impl SettingsDesk<'_, '_> {
+    fn run(&mut self, action: SettingsAction) {
+        match action {
+            SettingsAction::Close => {
+                if let Ok(mut visibility) = self.roots.single_mut() {
+                    *visibility = Visibility::Hidden;
+                }
+            }
+            SettingsAction::Apply => self.apply(),
+            edit => self.ui.edit(edit),
+        }
+    }
+
+    /// Commits the draft, queues persistence and requests a live re-apply. Does
+    /// nothing when the draft is clean.
+    fn apply(&mut self) {
+        let committed = commit_draft(
+            &mut self.ui,
+            &mut self.graphics,
+            &mut self.audio,
+            &mut self.keybinds,
+        );
+        if !committed {
+            return;
+        }
+        self.commands.queue(SaveSettings::IfChanged);
+        self.apply.write(ApplySettings);
+        self.ui.flash("Settings applied");
+    }
+}
+
+fn on_settings_button(
+    activate: On<Activate>,
+    actions: Query<&SettingsAction>,
+    mut desk: SettingsDesk,
+) {
+    if let Ok(action) = actions.get(activate.entity) {
+        desk.run(*action);
+    }
+}
+
+fn on_settings_click(
+    click: On<PointerClick>,
+    actions: Query<&SettingsAction>,
+    mut desk: SettingsDesk,
+) {
+    if let Ok(action) = actions.get(click.entity) {
+        desk.run(*action);
+    }
+}
+
+/// Sets the channel's volume from where the pointer is along the rail.
+fn set_volume_from_cursor(
     rail: Entity,
     rails: &Query<(&SliderRail, &RelativeCursorPosition)>,
     ui: &mut SettingsUi,
@@ -584,136 +349,84 @@ fn set_slider_from_cursor(
     let Ok((rail, cursor)) = rails.get(rail) else {
         return;
     };
-    let Some(normalized) = cursor.normalized else {
+    // `normalized` is centred on the node: -0.5 at its left edge, 0.5 at its right.
+    let Some(at) = cursor.normalized else {
         return;
     };
-    rail.0
-        .set_volume(&mut ui.draft.audio, fraction_to_volume(normalized.x));
+    rail.0.set_volume(&mut ui.draft.audio, at.x + 0.5);
+    ui.dragging = true;
 }
 
-/// Pressing the rail jumps the volume to the cursor position (click-to-set).
 fn on_slider_press(
     press: On<PointerPress>,
     rails: Query<(&SliderRail, &RelativeCursorPosition)>,
     mut ui: ResMut<SettingsUi>,
 ) {
-    set_slider_from_cursor(press.entity, &rails, &mut ui);
+    set_volume_from_cursor(press.entity, &rails, &mut ui);
 }
 
-/// Dragging on the rail tracks the cursor (drag-to-set).
 fn on_slider_drag(
     drag: On<PointerDrag>,
     rails: Query<(&SliderRail, &RelativeCursorPosition)>,
     mut ui: ResMut<SettingsUi>,
 ) {
-    set_slider_from_cursor(drag.entity, &rails, &mut ui);
+    set_volume_from_cursor(drag.entity, &rails, &mut ui);
 }
 
-/// Reflects `draft.audio` onto every sound control: mute-button tint, slider
-/// fill width, knob position, and percent text. Runs whenever `SettingsUi`
-/// changes, so Cancel/Reset re-sync the controls.
-///
-/// Query disjointness: `mutes` and `fills`/`knobs` mutate different component
-/// types or are split by mutually-exclusive markers. `BackgroundColor` is touched
-/// by `mutes` (`With<MuteButton>`) and `fills` (`With<SliderFill>`), which can
-/// never co-occur on one entity, so the two `&mut BackgroundColor` queries are
-/// disjoint. `Node` is mutated only by `fills` (`With<SliderFill>`) and `knobs`
-/// (`With<SliderKnob>`), again disjoint markers.
-fn refresh_sound(
+/// Lets the rows redraw again once the slider is let go.
+fn end_drag(mouse: Option<Res<ButtonInput<MouseButton>>>, mut ui: ResMut<SettingsUi>) {
+    let held = mouse.is_some_and(|mouse| mouse.pressed(MouseButton::Left));
+    if ui.dragging && !held {
+        ui.dragging = false;
+    }
+}
+
+/// Writes each slider's fill, knob and readout from the draft.
+fn sync_sliders(
     ui: Res<SettingsUi>,
-    mut mutes: Query<(&MuteButton, &mut BackgroundColor, &mut BorderColor), With<MuteButton>>,
-    mut fills: Query<(&SliderFill, &mut Node, &mut BackgroundColor), Without<MuteButton>>,
-    mut knobs: Query<(&SliderKnob, &mut Node), Without<SliderFill>>,
-    mut percents: Query<(&SliderPercent, &mut Text)>,
+    mut parts: Query<(&SliderPart, &SliderOf, &mut Node, Option<&mut Text>)>,
 ) {
-    let audio = &ui.draft.audio;
-
-    for (button, mut bg, mut border) in &mut mutes {
-        let (_, muted) = button.0.read(audio);
-        bg.0 = if muted {
-            lifthrasir_ui::theme::BAD
-        } else {
-            lifthrasir_ui::theme::FIELD
-        };
-        *border = if muted {
-            BorderColor::all(lifthrasir_ui::theme::BAD)
-        } else {
-            BorderColor::all(lifthrasir_ui::theme::STROKE)
-        };
+    if !ui.is_changed() {
+        return;
     }
-
-    for (fill, mut node, mut bg) in &mut fills {
-        let (volume, muted) = fill.0.read(audio);
-        node.width = Val::Percent(slider_percent(volume, muted));
-        bg.0 = if muted {
-            lifthrasir_ui::theme::STROKE_STRONG
-        } else {
-            lifthrasir_ui::theme::EMERALD
-        };
-    }
-
-    for (knob, mut node) in &mut knobs {
-        let (volume, muted) = knob.0.read(audio);
-        node.left = Val::Percent(slider_percent(volume, muted));
-    }
-
-    for (percent, mut text) in &mut percents {
-        let (volume, muted) = percent.0.read(audio);
-        let label = percent_label(volume, muted);
-        if text.0 != label {
-            text.0 = label;
+    for (part, of, mut node, text) in &mut parts {
+        let (volume, muted) = of.0.read(&ui.draft.audio);
+        let at = Val::Percent(if muted { 0.0 } else { volume * 100.0 });
+        match part {
+            SliderPart::Fill if node.width != at => node.width = at,
+            SliderPart::Knob if node.left != at => node.left = at,
+            SliderPart::Readout => {
+                let label = view::percent_label(volume, muted);
+                if let Some(mut text) = text
+                    && text.0 != label
+                {
+                    text.0 = label;
+                }
+            }
+            _ => {}
         }
     }
 }
 
-// ── Input tab ─────────────────────────────────────────────────────────────
-
-/// Borrows the stored binds for an action off the draft keybinds.
-fn action_binds(
-    keybinds: &lifthrasir_client::domain::settings::Keybinds,
-    action: PlayerAction,
-) -> &ActionBinds {
-    match action {
-        PlayerAction::Sit => &keybinds.sit,
-        PlayerAction::Status => &keybinds.status,
-        PlayerAction::Inventory => &keybinds.inventory,
-        PlayerAction::Skills => &keybinds.skills,
-        PlayerAction::Equipment => &keybinds.equipment,
-        PlayerAction::Party => &keybinds.party,
-        PlayerAction::Guild => &keybinds.guild,
-        slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
+fn sync_search(
+    fields: Query<&EditableText, With<SettingsSearchField>>,
+    mut ui: ResMut<SettingsUi>,
+) {
+    let Ok(field) = fields.single() else {
+        return;
+    };
+    let typed = field.value().to_string();
+    if typed != ui.query {
+        ui.query = typed;
     }
 }
 
-/// Mutably borrows the stored binds for an action off the draft keybinds.
-fn action_binds_mut(
-    keybinds: &mut lifthrasir_client::domain::settings::Keybinds,
-    action: PlayerAction,
-) -> &mut ActionBinds {
-    match action {
-        PlayerAction::Sit => &mut keybinds.sit,
-        PlayerAction::Status => &mut keybinds.status,
-        PlayerAction::Inventory => &mut keybinds.inventory,
-        PlayerAction::Skills => &mut keybinds.skills,
-        PlayerAction::Equipment => &mut keybinds.equipment,
-        PlayerAction::Party => &mut keybinds.party,
-        PlayerAction::Guild => &mut keybinds.guild,
-        slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
-    }
-}
-
-/// The slot of an `ActionBinds` a `BindSlot` selects.
-fn slot_mut(binds: &mut ActionBinds, slot: BindSlot) -> &mut KeyBind {
-    match slot {
-        BindSlot::Primary => &mut binds.primary,
-        BindSlot::Secondary => &mut binds.secondary,
-    }
-}
-
-fn slot_ref(binds: &ActionBinds, slot: BindSlot) -> &KeyBind {
-    match slot {
-        BindSlot::Primary => &binds.primary,
-        BindSlot::Secondary => &binds.secondary,
+fn tick_toast(time: Res<Time>, mut ui: ResMut<SettingsUi>) {
+    let Some((_, timer)) = ui.bypass_change_detection().toast.as_mut() else {
+        return;
+    };
+    if timer.tick(time.delta()).is_finished() {
+        ui.toast = None;
     }
 }
 
@@ -751,7 +464,7 @@ fn is_modifier_key(key: KeyCode) -> bool {
 }
 
 /// Builds a `KeyBind` from a captured key + held modifier. The key is stored as
-/// its `KeyCode` reflect name (`format!("{:?}", key)`, e.g. "KeyA"/"Insert") —
+/// its `KeyCode` reflect name (`format!("{:?}", key)`, e.g. "KeyA"/"Insert"),
 /// the exact format `key_code_from_name` parses back when the bind is applied.
 fn keybind_from_capture(modifier: Modifier, key: KeyCode) -> KeyBind {
     KeyBind::modified(modifier, format!("{key:?}"))
@@ -762,44 +475,24 @@ fn listening_active(ui: Res<SettingsUi>) -> bool {
     ui.listening.is_some()
 }
 
-/// A clickable keycap cell; clicking it starts listening for `(action, slot)`.
-#[derive(Component, Clone, Copy)]
-struct Keycap {
-    action: PlayerAction,
-    slot: BindSlot,
-}
-
-impl Default for Keycap {
-    fn default() -> Self {
-        Self {
-            action: PlayerAction::Sit,
-            slot: BindSlot::Primary,
-        }
-    }
-}
-
-/// Clicking a keycap arms a rebind capture for its slot.
-fn on_keycap_click(click: On<PointerClick>, caps: Query<&Keycap>, mut ui: ResMut<SettingsUi>) {
-    let Ok(cap) = caps.get(click.entity) else {
-        return;
-    };
-    ui.listening = Some((cap.action, cap.slot));
-}
-
-/// While listening, captures the next just-pressed key. `Escape` cancels;
-/// modifier-only presses are ignored (wait for the real key); any other key is
-/// folded with the held modifier into a `KeyBind` written to the draft slot.
+/// While listening, captures the next just-pressed key. `Escape` cancels, Backspace
+/// and Delete clear the slot, modifier-only presses are ignored (wait for the real
+/// key), and any other key is folded with the held modifier into a `KeyBind`.
 ///
 /// Consumes the pressed key with `clear_just_pressed` so it neither leaks into
-/// gameplay/other UI nor (for `Escape`) reaches `toggle_settings` and closes the
-/// window — `listening` acts like a focus state for input.
+/// gameplay/other UI nor (for `Escape`) reaches the escape menu and closes the
+/// window: `listening` acts like a focus state for input.
 fn capture_rebind(mut keys: ResMut<ButtonInput<KeyCode>>, mut ui: ResMut<SettingsUi>) {
     let Some((action, slot)) = ui.listening else {
         return;
     };
 
-    if keys.just_pressed(KeyCode::Escape) {
-        keys.clear_just_pressed(KeyCode::Escape);
+    if keys.clear_just_pressed(KeyCode::Escape) {
+        ui.listening = None;
+        return;
+    }
+    if keys.clear_just_pressed(KeyCode::Backspace) | keys.clear_just_pressed(KeyCode::Delete) {
+        *view::bind_mut(&mut ui.draft.keybinds, action, slot) = KeyBind::UNBOUND;
         ui.listening = None;
         return;
     }
@@ -814,444 +507,86 @@ fn capture_rebind(mut keys: ResMut<ButtonInput<KeyCode>>, mut ui: ResMut<Setting
 
     let modifier = held_modifier(&keys);
     keys.clear_just_pressed(key);
-    *slot_mut(action_binds_mut(&mut ui.draft.keybinds, action), slot) =
-        keybind_from_capture(modifier, key);
-    ui.listening = None;
+    ui.capture(action, slot, keybind_from_capture(modifier, key));
 }
 
-/// Re-renders each keycap from the draft keybinds, showing "Press a key…" on the
-/// cell currently being listened to. Runs whenever `SettingsUi` changes, so a
-/// completed capture, Cancel, and Reset all re-sync the cells.
-fn refresh_input(
+/// The view a region was last drawn from.
+#[derive(Clone, PartialEq)]
+enum Drawn {
+    Nav(Vec<view::NavItem>),
+    Head(view::HeadView),
+    Rows(Vec<view::Row>),
+    Foot(view::FootView),
+}
+
+impl Drawn {
+    fn of(host: SettingsHost, ui: &SettingsUi) -> Self {
+        match host {
+            SettingsHost::Nav => Self::Nav(view::nav(ui)),
+            SettingsHost::Head => Self::Head(view::head(ui)),
+            SettingsHost::Rows => Self::Rows(view::rows(ui)),
+            SettingsHost::Foot => Self::Foot(view::foot(ui)),
+        }
+    }
+}
+
+/// Redraws each region whose view changed. The rows wait while a slider is held.
+fn rebuild(
+    mut commands: Commands,
     ui: Res<SettingsUi>,
-    caps: Query<(&Keycap, &Children)>,
-    mut texts: Query<(&mut Text, &mut TextColor)>,
+    hosts: Query<(Entity, &SettingsHost, Option<&Children>)>,
+    mounted: Query<(), Added<SettingsHost>>,
+    mut drawn: Local<[Option<Drawn>; 4]>,
 ) {
-    for (cap, children) in &caps {
-        let listening = ui.listening == Some((cap.action, cap.slot));
-        let label = if listening {
-            "Press a key…".to_string()
-        } else {
-            keycap_label(slot_ref(
-                action_binds(&ui.draft.keybinds, cap.action),
-                cap.slot,
-            ))
-        };
-        let color = if listening {
-            lifthrasir_ui::theme::EMERALD
-        } else {
-            lifthrasir_ui::theme::TEXT_DIM
-        };
-        for child in children.iter() {
-            if let Ok((mut text, mut text_color)) = texts.get_mut(child) {
-                if text.0 != label {
-                    text.0 = label.clone();
-                }
-                if text_color.0 != color {
-                    text_color.0 = color;
-                }
-            }
+    if !ui.is_changed() && mounted.is_empty() {
+        return;
+    }
+    for (entity, host, children) in &hosts {
+        if *host == SettingsHost::Rows && ui.dragging {
+            continue;
         }
+        let view = Drawn::of(*host, &ui);
+        let slot = &mut drawn[*host as usize];
+        if slot.as_ref() == Some(&view) && children.is_some() {
+            continue;
+        }
+        for child in children.into_iter().flatten() {
+            commands.entity(*child).despawn();
+        }
+        match view.clone() {
+            Drawn::Nav(items) => scene::spawn_nav(&mut commands, entity, items),
+            Drawn::Head(head) => scene::spawn_head(&mut commands, entity, head),
+            Drawn::Rows(rows) => scene::spawn_rows(&mut commands, entity, rows, &ui.draft.audio),
+            Drawn::Foot(foot) => scene::spawn_foot(&mut commands, entity, foot),
+        }
+        *slot = Some(view);
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::asset::AssetPlugin;
-    use lifthrasir_client::domain::settings::{AntiAliasing, FpsCap};
+pub struct SettingsWindowPlugin;
 
-    /// Spawns the entire window tree (titlebar + all three tab bodies) so a
-    /// malformed bundle — e.g. a duplicate `Pickable` — panics here at
-    /// command-buffer apply instead of only at runtime. Guards the class of
-    /// bug the draft-logic tests can't see because they never build the UI.
-    #[test]
-    fn spawn_settings_root_builds_the_full_tree_without_duplicate_components() {
-        let mut app = App::new();
-        app.add_plugins((
-            MinimalPlugins,
-            AssetPlugin::default(),
-            bevy::scene::ScenePlugin,
-        ));
-        app.init_asset::<Image>();
-        app.init_asset::<Font>();
+impl Plugin for SettingsWindowPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SettingsUi>();
         app.add_systems(Startup, spawn_settings_root);
-
-        app.update();
-
-        let roots = app
-            .world_mut()
-            .query_filtered::<(), With<SettingsWindowRoot>>()
-            .iter(app.world())
-            .count();
-        assert_eq!(roots, 1);
-    }
-
-    fn settings_ui() -> SettingsUi {
-        let mut world = World::new();
-        world.insert_resource(GraphicsSettings::default());
-        world.insert_resource(AudioConfig::default());
-        world.insert_resource(Keybinds::default());
-        SettingsUi::from_world(&mut world)
-    }
-
-    fn dirtied_ui() -> SettingsUi {
-        let mut ui = settings_ui();
-        ui.draft.graphics.fps_cap = FpsCap::F120;
-        ui
-    }
-
-    #[derive(Resource, Default)]
-    struct CommitResult(bool);
-
-    #[derive(Resource, Default)]
-    struct ChangedGroups {
-        graphics: bool,
-        audio: bool,
-        keybinds: bool,
-    }
-
-    fn commit_once(
-        mut ui: ResMut<SettingsUi>,
-        mut graphics: ResMut<GraphicsSettings>,
-        mut audio: ResMut<AudioConfig>,
-        mut keybinds: ResMut<Keybinds>,
-        mut result: ResMut<CommitResult>,
-    ) {
-        result.0 = commit_draft(&mut ui, &mut graphics, &mut audio, &mut keybinds);
-    }
-
-    fn record_changed_groups(
-        graphics: Res<GraphicsSettings>,
-        audio: Res<AudioConfig>,
-        keybinds: Res<Keybinds>,
-        mut changed: ResMut<ChangedGroups>,
-    ) {
-        changed.graphics = graphics.is_changed();
-        changed.audio = audio.is_changed();
-        changed.keybinds = keybinds.is_changed();
-    }
-
-    fn commit_test_app(ui: SettingsUi) -> App {
-        let mut app = App::new();
-        app.insert_resource(GraphicsSettings::default());
-        app.insert_resource(AudioConfig::default());
-        app.insert_resource(Keybinds::default());
-        app.insert_resource(ui);
-        app.init_resource::<CommitResult>();
-        app.init_resource::<ChangedGroups>();
-        app.add_systems(Update, (commit_once, record_changed_groups).chain());
-        app
-    }
-
-    #[test]
-    fn settings_ui_snapshots_loaded_resources() {
-        let graphics = GraphicsSettings {
-            fps_cap: FpsCap::F120,
-            ..default()
-        };
-        let audio = AudioConfig {
-            bgm_volume: 0.25,
-            ..default()
-        };
-        let keybinds = Keybinds {
-            sit: ActionBinds::default(),
-            ..default()
-        };
-
-        let mut world = World::new();
-        world.insert_resource(graphics);
-        world.insert_resource(audio);
-        world.insert_resource(keybinds.clone());
-
-        let ui = <SettingsUi as FromWorld>::from_world(&mut world);
-
-        assert_eq!(ui.draft.graphics, graphics);
-        assert_eq!(ui.draft.audio, audio);
-        assert_eq!(ui.draft.keybinds, keybinds);
-        assert_eq!(ui.committed, ui.draft);
-    }
-
-    #[test]
-    fn editing_the_draft_makes_it_dirty() {
-        let clean = settings_ui();
-        assert!(!clean.dirty());
-
-        let dirty = dirtied_ui();
-        assert!(dirty.dirty());
-    }
-
-    #[test]
-    fn cancel_reverts_the_draft_and_clears_listening() {
-        let mut ui = dirtied_ui();
-        ui.listening = Some((PlayerAction::Sit, BindSlot::Primary));
-
-        ui.cancel();
-
-        assert_eq!(ui.draft, ui.committed);
-        assert!(!ui.dirty());
-        assert!(ui.listening.is_none());
-    }
-
-    #[test]
-    fn reset_sets_the_draft_to_defaults() {
-        let mut ui = settings_ui();
-        ui.draft.graphics.antialiasing = AntiAliasing::MsaaX4;
-        ui.committed.graphics.antialiasing = AntiAliasing::MsaaX4;
-        assert!(!ui.dirty());
-
-        ui.reset();
-
-        assert_eq!(ui.draft, SettingsDraft::default());
-        assert!(ui.dirty());
-    }
-
-    #[test]
-    fn dirty_draft_commits_into_native_resources() {
-        let mut app = commit_test_app(settings_ui());
-        app.update();
-        app.world_mut()
-            .resource_mut::<SettingsUi>()
-            .draft
-            .graphics
-            .fps_cap = FpsCap::F120;
-        app.world_mut().clear_trackers();
-
-        app.update();
-
-        assert!(app.world().resource::<CommitResult>().0);
-        assert_eq!(
-            app.world().resource::<GraphicsSettings>().fps_cap,
-            FpsCap::F120
+        app.add_systems(
+            Update,
+            (
+                capture_rebind.run_if(listening_active),
+                sync_search,
+                end_drag,
+                tick_toast,
+                rebuild,
+                sync_sliders,
+                light_search_focus::<SettingsSearchField>,
+            )
+                .chain(),
         );
-        assert!(!app.world().resource::<SettingsUi>().dirty());
-        let changed = app.world().resource::<ChangedGroups>();
-        assert!(changed.graphics);
-        assert!(!changed.audio);
-        assert!(!changed.keybinds);
     }
+}
 
-    #[test]
-    fn apply_is_a_noop_when_clean() {
-        let mut app = commit_test_app(settings_ui());
-        app.update();
-        app.world_mut().clear_trackers();
-
-        app.update();
-
-        assert!(!app.world().resource::<CommitResult>().0);
-        assert_eq!(
-            app.world().resource::<GraphicsSettings>().fps_cap,
-            FpsCap::F60
-        );
-        assert!(!app.world().resource::<SettingsUi>().dirty());
-        let changed = app.world().resource::<ChangedGroups>();
-        assert!(!changed.graphics);
-        assert!(!changed.audio);
-        assert!(!changed.keybinds);
-    }
-
-    fn click_event(target: Entity, window: Entity) -> PointerClick {
-        use bevy::camera::NormalizedRenderTarget;
-        use bevy::picking::backend::HitData;
-        use bevy::picking::pointer::{Location, PointerId};
-        use bevy::window::WindowRef;
-
-        PointerClick {
-            entity: target,
-            pointer: Pointer::new(
-                PointerId::Mouse,
-                Location {
-                    target: NormalizedRenderTarget::Window(
-                        WindowRef::Primary.normalize(Some(window)).unwrap(),
-                    ),
-                    position: Vec2::ZERO,
-                },
-            ),
-            button: PointerButton::Primary,
-            hit: HitData::new(target, 0.0, None, None),
-            duration: std::time::Duration::ZERO,
-            count: 1,
-        }
-    }
-
-    fn apply_observer_test_app(ui: SettingsUi) -> (App, Entity, Entity) {
-        let mut app = App::new();
-        app.insert_resource(GraphicsSettings::default());
-        app.insert_resource(AudioConfig::default());
-        app.insert_resource(Keybinds::default());
-        app.insert_resource(ui);
-        app.add_message::<ApplySettings>();
-        let button = app.world_mut().spawn_empty().observe(on_apply).id();
-        let window = app.world_mut().spawn_empty().id();
-        (app, button, window)
-    }
-
-    #[test]
-    fn dirty_apply_observer_commits_and_emits_once() {
-        let (mut app, button, window) = apply_observer_test_app(dirtied_ui());
-
-        app.world_mut().trigger(click_event(button, window));
-        app.world_mut().flush();
-
-        assert_eq!(
-            app.world().resource::<GraphicsSettings>().fps_cap,
-            FpsCap::F120
-        );
-        assert!(!app.world().resource::<SettingsUi>().dirty());
-        assert_eq!(app.world().resource::<Messages<ApplySettings>>().len(), 1);
-    }
-
-    #[test]
-    fn clean_apply_observer_does_nothing() {
-        let (mut app, button, window) = apply_observer_test_app(settings_ui());
-
-        app.world_mut().trigger(click_event(button, window));
-        app.world_mut().flush();
-
-        assert_eq!(
-            app.world().resource::<GraphicsSettings>().fps_cap,
-            FpsCap::F60
-        );
-        assert!(!app.world().resource::<SettingsUi>().dirty());
-        assert!(app.world().resource::<Messages<ApplySettings>>().is_empty());
-    }
-
-    #[test]
-    fn cursor_fraction_maps_to_clamped_volume() {
-        assert_eq!(fraction_to_volume(0.0), 0.0);
-        assert_eq!(fraction_to_volume(0.55), 0.55);
-        assert_eq!(fraction_to_volume(1.0), 1.0);
-        assert_eq!(fraction_to_volume(-0.2), 0.0);
-        assert_eq!(fraction_to_volume(1.4), 1.0);
-    }
-
-    #[test]
-    fn percent_label_rounds_and_reports_muted() {
-        assert_eq!(percent_label(0.55, false), "55%");
-        assert_eq!(percent_label(0.0, false), "0%");
-        assert_eq!(percent_label(1.0, false), "100%");
-        assert_eq!(percent_label(0.854, false), "85%");
-        assert_eq!(percent_label(0.7, true), "Muted");
-    }
-
-    #[test]
-    fn slider_percent_collapses_to_zero_when_muted() {
-        assert_eq!(slider_percent(0.55, false), 55.0);
-        assert_eq!(slider_percent(0.55, true), 0.0);
-        assert_eq!(slider_percent(1.0, false), 100.0);
-    }
-
-    #[test]
-    fn audio_channel_reads_and_edits_the_matching_fields() {
-        let mut ui = settings_ui();
-
-        AudioChannel::Sfx.set_volume(&mut ui.draft.audio, 0.25);
-        assert_eq!(AudioChannel::Sfx.read(&ui.draft.audio), (0.25, false));
-
-        AudioChannel::Sfx.toggle_muted(&mut ui.draft.audio);
-        assert_eq!(AudioChannel::Sfx.read(&ui.draft.audio), (0.25, true));
-        assert!(ui.dirty());
-    }
-
-    /// A plain captured key, once stored and built into an `InputMap` (which
-    /// parses the stored name back via the Task-4 `key_code_from_name`), maps to
-    /// the same `KeyCode` a directly-built map produces. Guards the round-trip.
-    #[test]
-    fn plain_capture_round_trips_through_the_input_map() {
-        let binds = Keybinds {
-            sit: ActionBinds {
-                primary: keybind_from_capture(Modifier::None, KeyCode::Insert),
-                secondary: KeyBind::UNBOUND,
-            },
-            status: ActionBinds::default(),
-            inventory: ActionBinds::default(),
-            skills: ActionBinds::default(),
-            equipment: ActionBinds::default(),
-            cart: ActionBinds::default(),
-            party: ActionBinds::default(),
-            guild: ActionBinds::default(),
-            emote: ActionBinds::default(),
-            hotbar: Default::default(),
-        };
-        let expected = {
-            let mut map = leafwing_input_manager::prelude::InputMap::default();
-            map.insert(PlayerAction::Sit, KeyCode::Insert);
-            map
-        };
-        assert_eq!(binds.to_input_map(), expected);
-    }
-
-    /// A modified chord capture round-trips to the same `ButtonlikeChord` a
-    /// directly-built map produces.
-    #[test]
-    fn modified_capture_round_trips_through_the_input_map() {
-        let binds = Keybinds {
-            sit: ActionBinds::default(),
-            status: ActionBinds {
-                primary: keybind_from_capture(Modifier::Alt, KeyCode::KeyA),
-                secondary: KeyBind::UNBOUND,
-            },
-            inventory: ActionBinds::default(),
-            skills: ActionBinds::default(),
-            equipment: ActionBinds::default(),
-            cart: ActionBinds::default(),
-            party: ActionBinds::default(),
-            guild: ActionBinds::default(),
-            emote: ActionBinds::default(),
-            hotbar: Default::default(),
-        };
-        let expected = {
-            use leafwing_input_manager::prelude::*;
-            let mut map = InputMap::default();
-            map.insert(
-                PlayerAction::Status,
-                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyA),
-            );
-            map
-        };
-        assert_eq!(binds.to_input_map(), expected);
-    }
-
-    #[test]
-    fn keybind_from_capture_stores_the_reflect_name() {
-        assert_eq!(
-            keybind_from_capture(Modifier::None, KeyCode::KeyA).key,
-            "KeyA"
-        );
-        assert_eq!(
-            keybind_from_capture(Modifier::None, KeyCode::Insert).key,
-            "Insert"
-        );
-        let chord = keybind_from_capture(Modifier::Alt, KeyCode::KeyE);
-        assert_eq!(chord.key, "KeyE");
-        assert_eq!(chord.modifier, Modifier::Alt);
-    }
-
-    #[test]
-    fn keycap_label_renders_keys_chords_and_empty() {
-        assert_eq!(keycap_label(&KeyBind::new("Insert")), "Insert");
-        assert_eq!(keycap_label(&KeyBind::new("KeyA")), "A");
-        assert_eq!(keycap_label(&KeyBind::new("Digit1")), "1");
-        assert_eq!(
-            keycap_label(&KeyBind::modified(Modifier::Alt, "KeyA")),
-            "Alt + A"
-        );
-        assert_eq!(
-            keycap_label(&KeyBind::modified(Modifier::Control, "KeyE")),
-            "Ctrl + E"
-        );
-        assert_eq!(keycap_label(&KeyBind::UNBOUND), "—");
-    }
-
-    #[test]
-    fn default_keybinds_render_the_expected_labels() {
-        let binds = Keybinds::default();
-        assert_eq!(keycap_label(&binds.sit.primary), "Insert");
-        assert_eq!(keycap_label(&binds.sit.secondary), "Help");
-        assert_eq!(keycap_label(&binds.status.primary), "Alt + A");
-        assert_eq!(keycap_label(&binds.status.secondary), "—");
-        assert_eq!(keycap_label(&binds.inventory.primary), "Alt + E");
-        assert_eq!(keycap_label(&binds.equipment.primary), "Alt + Q");
-    }
+/// Spawns the (hidden) window as a top-level BSN scene so it survives state
+/// changes and renders over both the title screen and the in-game HUD.
+fn spawn_settings_root(mut commands: Commands) {
+    scene::build(&mut commands);
 }

@@ -24,9 +24,9 @@ const HEADGEAR: [EquipmentSlot; 3] = [
     EquipmentSlot::HeadTop,
 ];
 
-/// The node the portrait is drawn on.
+/// The node the portrait is drawn on. Any in-game widget may mount one.
 #[derive(Component, Default, Clone)]
-pub(super) struct Portrait;
+pub(crate) struct Portrait;
 
 /// A sprite frame to blend: its RGBA pixels, and where it lands on the canvas in
 /// canvas pixels (y down).

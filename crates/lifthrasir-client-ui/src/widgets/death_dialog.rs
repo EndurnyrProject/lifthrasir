@@ -1,26 +1,33 @@
-//! Death dialog: a centered BSN/Feathers modal shown while the local player is dead.
+//! Death dialog: the modal shown while the local player is dead, after the
+//! `Death Dialog` artboard.
 //!
 //! Spawned when the [`LocalPlayer`] gains [`DeadEntity`], despawned when it loses it.
-//! The combat domain's HP-based recovery removes `DeadEntity` on respawn (there is no
-//! `SelfRespawned` event to key off — the aesir server restores HP instead), so the
+//! The combat domain's HP-based recovery removes `DeadEntity` on respawn (the aesir
+//! server restores HP instead of sending a respawn event), so the
 //! `RemovedComponents<DeadEntity>` teardown covers both respawn paths.
 //!
-//! Two Feathers buttons write [`RespawnRequested`]: "Return to save point" (`type_ 0`)
-//! and "Character Select" (`type_ 1`); the `net-aesir` adapter translates that into the
-//! outbound `Respawn` command. The buttons only send the request — the dialog is torn
-//! down by the `DeadEntity` removal recovery drives, not by the click.
+//! The two rows write [`RespawnRequested`]: "Return to save point" (`type_ 0`) and
+//! "Character Select" (`type_ 1`). They only send the request: the dialog is torn down
+//! by the `DeadEntity` removal that recovery drives, not by the click.
+//!
+//! NOTE: the artboard also shows the killer, the EXP lost, a party member's revive
+//! offer and the Token of Siegfried row. The server sends none of the first three and
+//! has no request to revive with the token, so they are left out until it does.
 
 use bevy::prelude::*;
-use bevy::text::{FontSize, FontSourceTemplate};
+use bevy::time::Stopwatch;
 use bevy::ui_widgets::Activate;
-use bevy_feathers::controls::FeathersButton;
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText};
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::combat::components::DeadEntity;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_ui::theme::ro_dark;
+use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    WINDOW_SHADOW, display_text, window_title_bar, window_titled,
+};
 use net_contract::commands::RespawnRequested;
 
-use lifthrasir_ui::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
+use crate::screens::shared::{RowTone, menu_row, modal_layer, overline, vignette};
 
 /// Renders over the in-game HUD, but one tier *below* the system dialog
 /// (`i32::MAX - 2`): on the char-select path the server disconnects and the
@@ -32,19 +39,47 @@ const _: () = assert!(
     DIALOG_Z < crate::widgets::system_dialog::DIALOG_Z,
     "death dialog must stack under the system dialog so the disconnect modal stays clickable",
 );
-const DIALOG_WIDTH: f32 = 320.0;
+const DIALOG_WIDTH: f32 = 470.0;
+const ROW_HEIGHT: f32 = 36.0;
 
 pub struct DeathDialogPlugin;
 
 impl Plugin for DeathDialogPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (show_death_dialog, hide_death_dialog));
+        app.add_systems(
+            Update,
+            (show_death_dialog, hide_death_dialog, count_time_fallen),
+        );
     }
 }
 
-/// Marker on the modal backdrop root, so show/hide can find and despawn it.
+/// The modal's layer, timing how long the hero has been down.
 #[derive(Component, Default, Clone)]
-pub struct DeathDialogRoot;
+pub struct DeathDialogRoot {
+    fallen: Stopwatch,
+}
+
+/// The text in the title bar that says how long ago the hero fell.
+#[derive(Component, Default, Clone)]
+struct FallenClock;
+
+/// What a row of the dialog asks the server for.
+#[derive(Component, Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum DeathAction {
+    #[default]
+    SavePoint,
+    CharacterSelect,
+}
+
+impl DeathAction {
+    /// The `type_` of the [`RespawnRequested`] it sends.
+    fn respawn_type(self) -> u32 {
+        match self {
+            Self::SavePoint => 0,
+            Self::CharacterSelect => 1,
+        }
+    }
+}
 
 /// Spawn the modal the frame the local player enters the dead state, unless one is
 /// already open (idempotent against a re-death before teardown).
@@ -82,78 +117,111 @@ fn hide_death_dialog(
     }
 }
 
-fn on_return_to_save(_: On<Activate>, mut respawn: MessageWriter<RespawnRequested>) {
-    respawn.write(RespawnRequested { type_: 0 });
-}
-
-fn on_character_select(_: On<Activate>, mut respawn: MessageWriter<RespawnRequested>) {
-    respawn.write(RespawnRequested { type_: 1 });
-}
-
-/// The whole modal as one scene: a dimmed, click-eating backdrop centering a glass card.
-fn death_dialog() -> impl Scene {
-    bsn! {
-        DeathDialogRoot
-        Node {
-            position_type: PositionType::Absolute,
-            width: percent(100),
-            height: percent(100),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-        }
-        BackgroundColor({Color::srgba(0.012, 0.027, 0.024, 0.55)})
-        GlobalZIndex({DIALOG_Z})
-        Pickable
-        Children [ @card() ]
+/// How long ago the hero fell: seconds for the first minute, then minutes.
+fn fallen_label(secs: u64) -> String {
+    match secs {
+        60.. => format!("{} min ago", secs / 60),
+        _ => format!("{secs} s ago"),
     }
 }
 
-fn card() -> impl Scene {
-    bsn! {
-        Node {
-            width: px(DIALOG_WIDTH),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Stretch,
-            row_gap: px(14),
-            padding: {UiRect::axes(px(28), px(26))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(14)),
+/// Keeps the title bar's "N s ago" current.
+fn count_time_fallen(
+    time: Res<Time>,
+    mut roots: Query<&mut DeathDialogRoot>,
+    mut clocks: Query<&mut Text, With<FallenClock>>,
+) {
+    let Ok(mut root) = roots.single_mut() else {
+        return;
+    };
+    let label = fallen_label(root.fallen.tick(time.delta()).elapsed().as_secs());
+    for mut text in &mut clocks {
+        if text.0 != label {
+            text.0.clone_from(&label);
         }
-        ThemeBackgroundColor({TOKEN_WINDOW_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
+    }
+}
+
+fn on_death_button(
+    activate: On<Activate>,
+    buttons: Query<&DeathAction>,
+    mut respawn: MessageWriter<RespawnRequested>,
+) {
+    if let Ok(action) = buttons.get(activate.entity) {
+        respawn.write(RespawnRequested {
+            type_: action.respawn_type(),
+        });
+    }
+}
+
+/// The whole modal: a blood-red shade closing in on the screen, the headline and the
+/// window.
+fn death_dialog() -> impl Scene {
+    let blood = Color::srgb_u8(0x3c, 0x0a, 0x08);
+    let shade = vignette(blood.with_alpha(0.0), blood.with_alpha(0.75), 30.0);
+    bsn! {
+        @modal_layer(DIALOG_Z)
+        DeathDialogRoot
+        shade
         Children [
-            @title("You have died") --
-            @FeathersButton { @caption: bsn! { @button_label("Return to save point") } }
-            Node { height: px(40) }
-            on(on_return_to_save)
+            @headline()
             --
-            @FeathersButton { @caption: bsn! { @button_label("Character Select") } }
-            Node { height: px(40) }
-            on(on_character_select)
+            @window()
         ]
     }
 }
 
-/// Standalone modal heading: Feathers has no font token and this text sits outside a
-/// Feathers ancestor, so the font and color are set explicitly.
-fn title(text: &'static str) -> impl Scene {
+fn headline() -> impl Scene {
     bsn! {
-        Text(text)
-        TextFont {
-            font: FontSourceTemplate::Handle("ro://fonts/cinzel.ttf"),
-            font_size: {FontSize::Px(19.0)},
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(70),
+            left: px(0),
+            width: percent(100),
+            justify_content: JustifyContent::Center,
         }
-        TextColor({lifthrasir_ui::theme::DISPLAY_GOLD})
-        Node { align_self: {AlignSelf::Center}, margin: {UiRect::bottom(px(4))} }
-        Pickable { should_block_lower: false, is_hoverable: false }
+        @ignore_picking()
+        Children [
+            @display_text("You Have Fallen".into(), 40.0, ro_dark::FALLEN)
+            TextShadow { offset: {Vec2::new(0.0, 2.0)}, color: Color::BLACK }
+        ]
     }
 }
 
-/// Button caption: `ThemedText` inherits font + color from the Feathers button ancestor.
-fn button_label(text: &'static str) -> impl Scene {
+fn window() -> impl Scene {
+    let since = bsn! {
+        FallenClock
+        @chrome_text(fallen_label(0), 11.0, ro_dark::MUTED)
+    };
     bsn! {
-        Text(text)
-        ThemedText
+        @window_titled()
+        Node {
+            width: px(DIALOG_WIDTH + 2.0 * WINDOW_SHADOW),
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Stretch,
+        }
+        Children [
+            @window_title_bar("You have died", since)
+            --
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: px(6),
+                margin: {UiRect::top(px(8))},
+            }
+            @ignore_picking()
+            Children [
+                @overline("COMING BACK".into(), ro_dark::ACCENT)
+                Node { margin: {UiRect::bottom(px(4))} }
+                --
+                @menu_row(RowTone::Primary, ROW_HEIGHT, "pin", "Return to save point", None)
+                DeathAction::SavePoint
+                on(on_death_button)
+                --
+                @menu_row(RowTone::Ghost, ROW_HEIGHT, "members", "Character Select", None)
+                DeathAction::CharacterSelect
+                on(on_death_button)
+            ]
+        ]
     }
 }
 
@@ -161,6 +229,7 @@ fn button_label(text: &'static str) -> impl Scene {
 mod tests {
     use super::*;
     use bevy::scene::ScenePlugin;
+    use std::time::Duration;
 
     fn test_app() -> App {
         let mut app = App::new();
@@ -168,7 +237,10 @@ mod tests {
         app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.add_message::<RespawnRequested>();
-        app.add_systems(Update, (show_death_dialog, hide_death_dialog));
+        app.add_systems(
+            Update,
+            (show_death_dialog, hide_death_dialog, count_time_fallen),
+        );
         app
     }
 
@@ -186,6 +258,12 @@ mod tests {
         app.update();
 
         assert_eq!(dialog_count(&mut app), 1);
+        let world = app.world_mut();
+        let actions: Vec<_> = world.query::<&DeathAction>().iter(world).copied().collect();
+        assert_eq!(
+            actions,
+            [DeathAction::SavePoint, DeathAction::CharacterSelect]
+        );
     }
 
     #[test]
@@ -222,36 +300,50 @@ mod tests {
     }
 
     #[test]
-    fn return_to_save_button_requests_type_0() {
-        let mut app = App::new();
-        app.add_message::<RespawnRequested>();
-        let button = app
-            .world_mut()
-            .spawn_empty()
-            .observe(on_return_to_save)
-            .id();
-        app.world_mut().trigger(Activate { entity: button });
+    fn the_title_bar_counts_the_time_since_the_fall() {
+        let mut app = test_app();
+        app.world_mut().spawn((LocalPlayer, DeadEntity));
+        app.update();
+        let world = app.world_mut();
+        world
+            .query::<&mut DeathDialogRoot>()
+            .single_mut(world)
+            .unwrap()
+            .fallen
+            .tick(Duration::from_secs(42));
+        app.update();
 
-        let messages = app.world().resource::<Messages<RespawnRequested>>();
-        let sent: Vec<_> = messages.iter_current_update_messages().collect();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].type_, 0);
+        let world = app.world_mut();
+        let clock = world
+            .query_filtered::<&Text, With<FallenClock>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(clock.0, "42 s ago");
     }
 
     #[test]
-    fn character_select_button_requests_type_1() {
-        let mut app = App::new();
-        app.add_message::<RespawnRequested>();
-        let button = app
-            .world_mut()
-            .spawn_empty()
-            .observe(on_character_select)
-            .id();
-        app.world_mut().trigger(Activate { entity: button });
+    fn the_time_fallen_turns_to_minutes_after_one() {
+        assert_eq!(fallen_label(0), "0 s ago");
+        assert_eq!(fallen_label(59), "59 s ago");
+        assert_eq!(fallen_label(60), "1 min ago");
+        assert_eq!(fallen_label(185), "3 min ago");
+    }
 
-        let messages = app.world().resource::<Messages<RespawnRequested>>();
-        let sent: Vec<_> = messages.iter_current_update_messages().collect();
-        assert_eq!(sent.len(), 1);
-        assert_eq!(sent[0].type_, 1);
+    #[test]
+    fn each_row_requests_its_respawn_type() {
+        for (action, expected) in [
+            (DeathAction::SavePoint, 0),
+            (DeathAction::CharacterSelect, 1),
+        ] {
+            let mut app = App::new();
+            app.add_message::<RespawnRequested>();
+            let button = app.world_mut().spawn(action).observe(on_death_button).id();
+            app.world_mut().trigger(Activate { entity: button });
+
+            let messages = app.world().resource::<Messages<RespawnRequested>>();
+            let sent: Vec<_> = messages.iter_current_update_messages().collect();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0].type_, expected);
+        }
     }
 }

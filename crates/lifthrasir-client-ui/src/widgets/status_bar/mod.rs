@@ -133,9 +133,11 @@ pub fn spawn_status_bar(commands: &mut Commands, hud: Entity) {
     commands.spawn_scene(scene::root()).insert(ChildOf(hud));
 }
 
+pub(crate) use portrait::Portrait;
+
 /// The local hero's status as the bar reads it.
 #[derive(SystemParam)]
-struct Hero<'w, 's> {
+pub(crate) struct Hero<'w, 's> {
     player: Query<
         'w,
         's,
@@ -150,6 +152,12 @@ struct Hero<'w, 's> {
 }
 
 impl Hero<'_, '_> {
+    /// The hero's name, job and base level, for the widgets that name them.
+    pub(crate) fn identity(&self) -> Option<(String, String, u32)> {
+        let view = self.view()?;
+        Some((view.name, view.job, view.base_level))
+    }
+
     fn view(&self) -> Option<StatusView> {
         let (status, data, name) = self.player.single().ok()?;
         let job_id = u32::from(data.job_id);
