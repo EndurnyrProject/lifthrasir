@@ -7,8 +7,8 @@ use net_contract::events::StorageResult;
 use crate::widgets::chat_box::{ChatHistory, append_colored_line};
 use crate::widgets::storage_window::{StorageUi, rejection_message};
 
-/// Opening failures have no window in which to display panel feedback.
-/// Read before the transfer handler clears `awaiting_result` to avoid duplicate feedback.
+/// Opening failures have no window in which to display a toast.
+/// Read before the transfer handler settles the transfer in flight, to avoid duplicate feedback.
 pub(super) fn ingest_unprompted_errors(
     mut results: MessageReader<StorageResult>,
     storage: Res<Storage>,
@@ -18,7 +18,7 @@ pub(super) fn ingest_unprompted_errors(
     mut commands: Commands,
 ) {
     for result in results.read() {
-        if storage.is_open() && ui.awaiting_result {
+        if storage.is_open() && ui.in_flight().is_some() {
             continue;
         }
         let Err(rejection) = result.outcome else {
@@ -41,7 +41,8 @@ pub(super) fn ingest_unprompted_errors(
 
 #[cfg(test)]
 mod tests {
-    use super::super::apply_storage_results;
+    use super::super::tests::{flying, wire_app};
+    use super::super::{StorageSelection, drive_transfers};
     use super::*;
     use net_contract::dto::StorageKind;
     use net_contract::events::StorageRejection;
@@ -80,17 +81,11 @@ mod tests {
             ),
         ];
         for (rejection, expected) in cases {
-            let mut app = App::new();
+            let mut app = wire_app();
             app.add_plugins((MinimalPlugins, AssetPlugin::default()));
             app.init_asset::<Font>();
-            app.init_resource::<Storage>();
-            app.init_resource::<StorageUi>();
-            app.add_message::<StorageResult>();
             app.world_mut().spawn(ChatHistory);
-            app.add_systems(
-                Update,
-                (ingest_unprompted_errors, apply_storage_results).chain(),
-            );
+            app.add_systems(Update, ingest_unprompted_errors.before(drive_transfers));
             app.world_mut().write_message(StorageResult {
                 outcome: Err(rejection),
             });
@@ -106,7 +101,8 @@ mod tests {
             app.world_mut()
                 .resource_mut::<Storage>()
                 .open(StorageKind::Guild, 600, vec![]);
-            app.world_mut().resource_mut::<StorageUi>().awaiting_result = true;
+            app.world_mut().resource_mut::<StorageUi>().run =
+                Some(flying(StorageSelection::Bag(2), 1));
             app.world_mut().write_message(StorageResult {
                 outcome: Err(rejection),
             });
@@ -114,13 +110,12 @@ mod tests {
             assert_eq!(
                 lines.iter(app.world()).count(),
                 1,
-                "pending transfers use panel feedback, not duplicate chat"
+                "a transfer in flight is answered by the toast, not duplicate chat"
             );
-            assert_eq!(
-                app.world().resource::<StorageUi>().panel_error.as_deref(),
-                Some(expected)
-            );
-            assert!(!app.world().resource::<StorageUi>().awaiting_result);
+            let ui = app.world().resource::<StorageUi>();
+            let toast = ui.toast.as_ref().expect("the rejection is toasted");
+            assert_eq!((toast.text.as_str(), toast.bad), (expected, true));
+            assert!(!ui.busy());
         }
     }
 }

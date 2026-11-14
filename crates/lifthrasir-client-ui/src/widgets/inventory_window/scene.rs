@@ -9,14 +9,15 @@ use bevy::ui::OverrideClip;
 use bevy::ui_widgets::{ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
 use lifthrasir_ui::theme::ro_dark;
-use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
+use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{
     BUTTON_SHADOW, ButtonArt, HoverColors, WINDOW_SHADOW, button_with, close_button, diamond,
     display_text, divider, divider_diamond, inset, tab, tab_text, window_title_bar, window_titled,
 };
 
 use crate::screens::shared::{
-    DANGER_TINT, Ring, flush_button, search_field, slot_frame, thousands, usable, weight_meter,
+    DANGER_TINT, Ring, cycle_box, flush_button, search_field, slot_frame, thousands, usable,
+    weight_meter,
 };
 use crate::widgets::inventory_window::{
     COLUMNS, InventoryBody, InventoryCell, InventoryFooter, InventoryGrid, InventoryLabel,
@@ -159,33 +160,13 @@ fn search_row() -> impl Scene {
 
 /// The sort control. It cycles through the sort orders on click.
 fn sort_button() -> impl Scene {
-    let colors = HoverColors {
-        rest: (ro_dark::INSET, ro_dark::SLOT_STROKE),
-        hover: (ro_dark::INSET, ro_dark::BUTTON_STROKE),
+    let label = bsn! {
+        InventoryLabel::Sort
+        @chrome_text(String::new(), 13.0, ro_dark::BODY)
     };
     bsn! {
-        Hovered
-        colors
-        Node {
-            width: px(112),
-            height: px(28),
-            flex_shrink: 0.0,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::SpaceBetween,
-            padding: {UiRect::horizontal(px(10))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(5)),
-        }
-        BackgroundColor(ro_dark::INSET)
-        BorderColor::all(ro_dark::SLOT_STROKE)
-        Pickable
+        @cycle_box(label, 112.0)
         on(cycle_sort)
-        Children [
-            InventoryLabel::Sort
-            @chrome_text(String::new(), 13.0, ro_dark::BODY)
-            --
-            @glyph_icon("chev", 10.0, ro_dark::PRIMARY_STROKE)
-        ]
     }
 }
 

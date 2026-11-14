@@ -288,6 +288,38 @@ pub fn light_search_focus<F: Component>(
     }
 }
 
+/// A `width` px box showing the current choice of a short list over a chevron. The
+/// caller adds the click observer that steps to the next choice, and `label` is its
+/// own text, marked if it is rewritten in place.
+pub fn cycle_box(label: impl Scene, width: f32) -> impl Scene {
+    let colors = HoverColors {
+        rest: (ro_dark::INSET, ro_dark::SLOT_STROKE),
+        hover: (ro_dark::INSET, ro_dark::BUTTON_STROKE),
+    };
+    bsn! {
+        Hovered
+        colors
+        Node {
+            width: px(width),
+            height: px(28),
+            flex_shrink: 0.0,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::SpaceBetween,
+            padding: {UiRect::horizontal(px(10))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+        }
+        BackgroundColor(ro_dark::INSET)
+        BorderColor::all(ro_dark::SLOT_STROKE)
+        Pickable
+        Children [
+            @label
+            --
+            @glyph_icon("chev", 10.0, ro_dark::PRIMARY_STROKE)
+        ]
+    }
+}
+
 /// A stack never holds more than 30,000, so five digits cover every quantity.
 pub const QTY_DIGITS: usize = 5;
 
@@ -467,16 +499,11 @@ pub fn meter(
     label: &'static str,
     (amount, limit): (u32, u32),
     (status, tone): (String, Color),
-    bar: Color,
+    color: Color,
     tiers: bool,
 ) -> impl Scene {
     let fill = (amount as f32 / limit.max(1) as f32).min(1.0) * 100.0;
     let amount = format!("{} / {}", thousands(amount.into()), thousands(limit.into()));
-    let marks: Vec<_> = [50.0, 90.0]
-        .into_iter()
-        .filter(|_| tiers)
-        .map(tier_mark)
-        .collect();
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
@@ -497,27 +524,40 @@ pub fn meter(
                 @chrome_text(status, 11.0, tone)
             ]
             --
+            @bar(fill, color, tiers)
+        ]
+    }
+}
+
+/// A trough filled to `fill` percent in `color`. `tiers` marks RO's 50% and 90%
+/// weight tiers. The caller sizes it along its row.
+pub fn bar(fill: f32, color: Color, tiers: bool) -> impl Scene {
+    let marks: Vec<_> = [50.0, 90.0]
+        .into_iter()
+        .filter(|_| tiers)
+        .map(tier_mark)
+        .collect();
+    bsn! {
+        Node {
+            height: px(10),
+            padding: px(1),
+            border: px(1),
+            border_radius: BorderRadius::all(px(5)),
+            position_type: PositionType::Relative,
+        }
+        BackgroundColor(ro_dark::BAR_TROUGH)
+        BorderColor::all(ro_dark::BAR_FRAME)
+        @ignore_picking()
+        Children [
             Node {
-                height: px(10),
-                padding: px(1),
-                border: px(1),
-                border_radius: BorderRadius::all(px(5)),
-                position_type: PositionType::Relative,
+                width: {Val::Percent(fill)},
+                height: percent(100),
+                border_radius: BorderRadius::all(px(3)),
             }
-            BackgroundColor(ro_dark::BAR_TROUGH)
-            BorderColor::all(ro_dark::BAR_FRAME)
+            BackgroundColor(color)
             @ignore_picking()
-            Children [
-                Node {
-                    width: {Val::Percent(fill)},
-                    height: percent(100),
-                    border_radius: BorderRadius::all(px(3)),
-                }
-                BackgroundColor(bar)
-                @ignore_picking()
-                --
-                {marks}
-            ]
+            --
+            {marks}
         ]
     }
 }

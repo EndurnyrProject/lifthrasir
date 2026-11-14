@@ -1,286 +1,56 @@
-use bevy::input_focus::AutoFocus;
-use bevy::scene::EntityScene;
-use bevy::text::{EditableText, EditableTextFilter, FontSize, FontSourceTemplate};
-use bevy::ui_widgets::{ControlOrientation, ScrollArea, TextInput};
-use bevy_feathers::controls::{FeathersButton, FeathersScrollbar};
-use bevy_feathers::theme::{ThemeBackgroundColor, ThemeBorderColor};
-use lifthrasir_assets::catalogs::item::registry::ItemDb;
-use lifthrasir_assets::paths::item_icon_path;
-use lifthrasir_client::domain::inventory::{Inventory, ItemCategory};
-use lifthrasir_client::domain::storage::Storage;
+//! The Storage window scenes: the frame [`build`] spawns once, and the category
+//! segments and body [`rebuild`](super::rebuild) projects from their view-models.
+//! Sizes follow the `Storage` artboard of the Lifthrasir Widgets design.
 
-use lifthrasir_ui::theme::feathers_theme::{TOKEN_WINDOW_BG, TOKEN_WINDOW_BORDER};
+use bevy::picking::hover::Hovered;
+use bevy::prelude::*;
+use bevy::ui::RelativeCursorPosition;
+use bevy::ui_widgets::{ControlOrientation, ScrollArea};
+use bevy_feathers::controls::FeathersScrollbar;
+use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
+use lifthrasir_ui::widgets::primitives::{
+    BUTTON_SHADOW, ButtonArt, HoverColors, INPUT_SHADOW, WINDOW_SHADOW, button_with, close_button,
+    diamond, inset, segment, tab_text, window_title_bar, window_titled,
+};
 
-use crate::widgets::storage_window::*;
+use super::view::{BodyView, PaneView, SelectionView, action_label, slider_percent};
+use super::{
+    AmountFill, AmountKnob, AmountLabel, AmountRail, Preset, Side, StorageAction,
+    StorageAmountField, StorageCategory, StorageCell, StorageHost, StoragePane, StorageSearchField,
+    StorageSelection, StorageSort, StorageToast, StorageWindowRoot, StorageWindowTitlebar,
+    on_cell_click, on_cell_drag_end, on_cell_drag_start, on_pane_drop, on_slider_drag,
+    on_slider_press, on_storage_button, on_storage_click, on_storage_close,
+};
+use crate::screens::shared::{
+    QTY_DIGITS, Ring, bar, cycle_box, number_field, overline, row_button, search_field, slot_frame,
+    small_button, thousands, usable, weight_meter,
+};
+use crate::widgets::inventory_window::scene::{CellView, slot_marks};
 
-const WINDOW_LEFT: f32 = 210.0;
-const WINDOW_TOP: f32 = 90.0;
-const WINDOW_WIDTH: f32 = 724.0;
+const WINDOW_LEFT: f32 = 100.0;
+const WINDOW_TOP: f32 = 40.0;
+const WINDOW_WIDTH: f32 = 1004.0;
+const PANE_WIDTH: f32 = 418.0;
+/// The column of move arrows: what the two panes and their gaps leave of the row.
+const MOVE_WIDTH: f32 = 88.0;
+/// Fixed height of each pane's grid, five rows, so the window never grows with its
+/// content.
+const PANE_HEIGHT: f32 = 304.0;
+const COLUMNS: usize = 7;
+/// Slots a pane draws at least: five whole rows.
+const MIN_SLOTS: usize = 35;
+const SLOT: f32 = 50.0;
+const ICON: f32 = 36.0;
+/// Seven slots and six gaps fill the 392px a pane leaves inside its padding.
+const SLOT_GAP: f32 = 7.0;
+const ROW_GAP: f32 = 7.0;
+const SELECTION_SLOT: f32 = 44.0;
+const SELECTION_ICON: f32 = 32.0;
+/// How far down the frame the toast floats: over the upper rows of the panes.
+const TOAST_TOP: f32 = 250.0;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StorageCellView {
-    pub selection: StorageSelection,
-    pub icon: String,
-    pub name: String,
-    pub category: &'static str,
-    pub amount: u32,
-    pub refine: u32,
-    pub selected: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StoragePaneView {
-    pub title: &'static str,
-    pub subtitle: String,
-    pub cells: Vec<StorageCellView>,
-    pub empty_message: &'static str,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum PaneSide {
-    Bag,
-    Vault,
-}
-
-fn category_label(category: ItemCategory) -> &'static str {
-    match category {
-        ItemCategory::Use => "Use",
-        ItemCategory::Etc => "Etc",
-        ItemCategory::Equip => "Equip",
-    }
-}
-
-pub(crate) fn pane_views(
-    inventory: &Inventory,
-    storage: &Storage,
-    ui: &StorageUi,
-    item_db: &ItemDb,
-) -> (StoragePaneView, StoragePaneView) {
-    let empty_message = if ui.query().is_empty() {
-        "Nothing here yet."
-    } else {
-        "Nothing matches your search."
-    };
-    let bag = bag_projection(inventory, item_db, ui.category, ui.query())
-        .into_iter()
-        .map(|item| StorageCellView {
-            selection: StorageSelection::Bag(item.index),
-            icon: item_icon_path(
-                item_db
-                    .icon_resource(item.item_id, item.identified)
-                    .expect("Storage window item must have an icon resource"),
-            ),
-            name: item_db
-                .name(item.item_id, item.identified)
-                .expect("Storage window item must have a name")
-                .to_string(),
-            category: category_label(item.category()),
-            amount: u32::from(item.amount),
-            refine: u32::from(item.refine),
-            selected: ui.selection == Some(StorageSelection::Bag(item.index)),
-        })
-        .collect();
-    let vault = vault_projection(storage, item_db, ui.category, ui.query())
-        .into_iter()
-        .map(|item| StorageCellView {
-            selection: StorageSelection::Vault(item.index),
-            icon: item_icon_path(
-                item_db
-                    .icon_resource(item.nameid, item.identified)
-                    .expect("Storage window item must have an icon resource"),
-            ),
-            name: item_db
-                .name(item.nameid, item.identified)
-                .expect("Storage window item must have a name")
-                .to_string(),
-            category: category_label(item_category(item.type_)),
-            amount: item.amount,
-            refine: item.refine,
-            selected: ui.selection == Some(StorageSelection::Vault(item.index)),
-        })
-        .collect();
-
-    (
-        StoragePaneView {
-            title: "Your Bag",
-            subtitle: format!("{} items", inventory.stackables().count()),
-            cells: bag,
-            empty_message,
-        },
-        StoragePaneView {
-            title: vault_title(storage.kind()),
-            subtitle: format!("{} / {}", storage.len(), storage.capacity()),
-            cells: vault,
-            empty_message,
-        },
-    )
-}
-
-pub(crate) fn pane(view: StoragePaneView, side: PaneSide) -> impl Scene {
-    let cells: Vec<_> = view.cells.into_iter().map(cell).collect();
-    let empty = cells
-        .is_empty()
-        .then(|| EntityScene(empty_state(view.empty_message, side)));
-    let accent = match side {
-        PaneSide::Bag => lifthrasir_ui::theme::EMERALD,
-        PaneSide::Vault => lifthrasir_ui::theme::GOLD,
-    };
-    bsn! {
-        Node {
-            width: percent(100),
-            flex_direction: FlexDirection::Column,
-            min_width: px(0),
-            border: px(1),
-            border_radius: BorderRadius::all(px(10)),
-        }
-        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.2)})
-        BorderColor::all(accent)
-        @ignore_picking()
-        Children [
-            @pane_header(view.title, view.subtitle, side) --
-            Node { height: px(268), position_type: PositionType::Relative }
-            @ignore_picking()
-            Children [
-                #grid
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0), top: px(0), right: px(0), bottom: px(0),
-                    overflow: {Overflow::scroll_y()},
-                    flex_direction: FlexDirection::Column,
-                    align_items: AlignItems::Stretch,
-                    row_gap: px(6),
-                    padding: {UiRect { left: Val::Px(10.0), right: Val::Px(14.0), top: Val::Px(10.0), bottom: Val::Px(10.0) }},
-                }
-                ScrollArea
-                Pickable
-                Children [ {cells} -- {empty} ]
-                --
-                @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
-                Node { position_type: PositionType::Absolute, right: px(3), top: px(4), bottom: px(4), width: px(6) }
-            ]
-        ]
-    }
-}
-
-fn pane_header(title: &'static str, subtitle: String, side: PaneSide) -> impl Scene {
-    let icon = match side {
-        PaneSide::Bag => "bag",
-        PaneSide::Vault => "vault",
-    };
-    bsn! {
-        Node {
-            height: px(54),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(9),
-            padding: {UiRect::horizontal(px(11))},
-            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-        }
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        @ignore_picking()
-        Children [
-            @glyph_icon(icon, 17.0, lifthrasir_ui::theme::GOLD) --
-            @chrome_text(title.to_string(), 13.0, lifthrasir_ui::theme::TEXT) --
-            Node { flex_grow: 1.0 } @ignore_picking()--
-            @chrome_text(subtitle, 10.0, lifthrasir_ui::theme::TEXT_DIM)
-        ]
-    }
-}
-
-fn cell(view: StorageCellView) -> impl Scene {
-    let border = if view.selected {
-        lifthrasir_ui::theme::EMERALD
-    } else {
-        lifthrasir_ui::theme::STROKE
-    };
-    let amount = (view.amount > 1).then(|| EntityScene(badge(view.amount.to_string(), false)));
-    let refine = (view.refine > 0).then(|| EntityScene(badge(format!("+{}", view.refine), true)));
-    let quick_icon = match view.selection {
-        StorageSelection::Bag(_) => "chevr",
-        StorageSelection::Vault(_) => "chevl",
-    };
-    bsn! {
-        StorageCell({view.selection})
-        Node {
-            width: percent(100), height: px(52),
-            flex_shrink: 0.0,
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::horizontal(px(8))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(7)),
-            overflow: {Overflow::clip()},
-        }
-        BackgroundColor({lifthrasir_ui::theme::FIELD})
-        BorderColor::all(border)
-        Pickable
-        on(on_cell_select)
-        Children [
-            ImageNode { image: {view.icon} }
-            Node { width: px(38), height: px(38), flex_shrink: 0.0 }
-            @ignore_picking()
-            --
-            Node {
-                flex_grow: 1.0,
-                min_width: px(0),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(2),
-                overflow: {Overflow::clip()},
-            }
-            @ignore_picking()
-            Children [
-                @chrome_text(view.name, 10.5, lifthrasir_ui::theme::TEXT_DIM) --
-                @chrome_text(view.category.to_string(), 8.5, lifthrasir_ui::theme::TEXT_FAINT)
-            ]
-            --
-            {refine} -- {amount} --
-            @FeathersButton { @caption: bsn! { @glyph_icon(quick_icon, 10.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            StorageQuickTransfer({view.selection})
-            Node { width: px(24), height: px(24), flex_shrink: 0.0 }
-            on(stop_quick_transfer_propagation)
-            on(on_quick_transfer_activate)
-        ]
-    }
-}
-
-fn badge(text: String, refine: bool) -> impl Scene {
-    let color = if refine {
-        lifthrasir_ui::theme::GOLD
-    } else {
-        lifthrasir_ui::theme::TEXT
-    };
-    bsn! {
-        Text(text)
-        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(9.0)} }
-        TextColor(color)
-        Node { min_width: px(18), flex_shrink: 0.0 }
-        @ignore_picking()
-    }
-}
-
-fn empty_state(message: &'static str, side: PaneSide) -> impl Scene {
-    let icon = match side {
-        PaneSide::Bag => "bag",
-        PaneSide::Vault => "vault",
-    };
-    bsn! {
-        Node {
-            width: percent(100), height: px(240),
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            row_gap: px(11),
-        }
-        @ignore_picking()
-        Children [
-            @glyph_icon(icon, 28.0, lifthrasir_ui::theme::TEXT_FAINT) --
-            @chrome_text(message.to_string(), 11.0, lifthrasir_ui::theme::TEXT_FAINT)
-        ]
-    }
-}
-
+/// Spawn the whole window, hidden, as one scene under `parent`.
 pub fn build(commands: &mut Commands, parent: Entity) {
     commands.spawn_scene(window()).insert(ChildOf(parent));
 }
@@ -288,770 +58,643 @@ pub fn build(commands: &mut Commands, parent: Entity) {
 pub(crate) fn window() -> impl Scene {
     bsn! {
         StorageWindowRoot
+        @window_titled()
         Node {
             position_type: PositionType::Absolute,
             left: px(WINDOW_LEFT),
             top: px(WINDOW_TOP),
-            width: px(WINDOW_WIDTH),
+            width: px(WINDOW_WIDTH + 2.0 * WINDOW_SHADOW),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Stretch,
-            border: px(1),
-            border_radius: BorderRadius::all(px(13)),
         }
-        ThemeBackgroundColor({TOKEN_WINDOW_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
         Visibility::Hidden
         Pickable
         Children [
-            @storage_titlebar() --
-            @filter_strip() --
-            @panes_shell() --
-            StorageErrorHost
-            Node { min_height: px(20), padding: {UiRect::horizontal(px(14))} }
-            @ignore_picking()
+            StorageWindowTitlebar
+            @window_title_bar("Storage", bsn! {
+                @close_button()
+                on(on_storage_close)
+            })
+            Pickable
+            on(drag_window::<StorageWindowTitlebar, StorageWindowRoot>)
             --
-            @footer() --
-            StorageOverlayHost
+            @toolbar()
+            --
+            StorageHost::Body
             Node {
-                position_type: PositionType::Absolute,
-                left: px(0), right: px(0), top: px(0), bottom: px(0),
-            }
-            @ignore_picking()
-        ]
-    }
-}
-
-fn storage_titlebar() -> impl Scene {
-    bsn! {
-        StorageWindowTitlebar
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::axes(px(14), px(11))},
-            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-        }
-        ThemeBackgroundColor({lifthrasir_ui::theme::feathers_theme::TOKEN_TITLEBAR_BG})
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        Pickable
-        on(drag_window::<StorageWindowTitlebar, StorageWindowRoot>)
-        Children [
-            @glyph_icon("vault", 16.0, lifthrasir_ui::theme::GOLD) --
-            StorageWindowTitle
-            Text("Storage Vault")
-            TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_TITLE), font_size: {FontSize::Px(15.0)} }
-            TextColor({lifthrasir_ui::theme::TEXT})
-            Node { flex_grow: 1.0 }
-            @ignore_picking()
-            --
-            StorageCloseControl
-            @FeathersButton { @caption: bsn! { @glyph_icon("close", 13.0, lifthrasir_ui::theme::TEXT_DIM) } }
-            Node { width: px(22), height: px(22) }
-            on(on_storage_close)
-        ]
-    }
-}
-
-fn filter_strip() -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(5),
-            padding: {UiRect::axes(px(12), px(8))},
-            border: {UiRect { bottom: Val::Px(1.0), ..default() }},
-        }
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        @ignore_picking()
-        Children [
-            @category_button("All", StorageCategory::All, true) --
-            @category_button("Use", StorageCategory::Use, false) --
-            @category_button("Etc", StorageCategory::Etc, false) --
-            @category_button("Equip", StorageCategory::Equip, false) --
-            Node { flex_grow: 1.0 } @ignore_picking()--
-            @search_field()
-        ]
-    }
-}
-
-fn category_button(label: &'static str, category: StorageCategory, active: bool) -> impl Scene {
-    let bg = if active {
-        lifthrasir_ui::theme::EMERALD_INK
-    } else {
-        lifthrasir_ui::theme::FIELD
-    };
-    bsn! {
-        @FeathersButton { @caption: bsn! { @chrome_text(label.to_string(), 11.0, lifthrasir_ui::theme::TEXT) } }
-        StorageCategoryButton(category)
-        Node { height: px(30), padding: {UiRect::horizontal(px(12))} }
-        BackgroundColor(bg)
-        on(on_category_activate)
-    }
-}
-
-fn search_field() -> impl Scene {
-    bsn! {
-        Node {
-            width: px(188), height: px(30),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-            padding: {UiRect::horizontal(px(10))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
-            position_type: PositionType::Relative,
-        }
-        BackgroundColor({lifthrasir_ui::theme::FIELD})
-        BorderColor::all(lifthrasir_ui::theme::STROKE)
-        Children [
-            @glyph_icon("search", 13.0, lifthrasir_ui::theme::TEXT_FAINT) --
-            #search
-            StorageSearchField
-            EditableText
-            TextInput
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(12.0)},
-            }
-            TextColor({lifthrasir_ui::theme::TEXT})
-            Node { flex_grow: 1.0, min_width: px(0), height: px(18) }
-            --
-            StorageSearchPlaceholder
-            Text("Search items…")
-            TextFont {
-                font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY),
-                font_size: {FontSize::Px(12.0)},
-            }
-            TextColor({lifthrasir_ui::theme::TEXT_FAINT})
-            Node { position_type: PositionType::Absolute, left: px(32), top: px(7) }
-            @ignore_picking()
-        ]
-    }
-}
-
-fn panes_shell() -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Stretch,
-            column_gap: px(10),
-            padding: {UiRect::all(px(14))},
-        }
-        @ignore_picking()
-        Children [
-            StorageBagHost Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) } @ignore_picking()--
-            @transfer_column() --
-            StorageVaultHost Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) } @ignore_picking()
-        ]
-    }
-}
-
-fn transfer_column() -> impl Scene {
-    bsn! {
-        Node {
-            width: px(48),
-            flex_shrink: 0.0,
-            flex_direction: FlexDirection::Column,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            row_gap: px(8),
-        }
-        @ignore_picking()
-        Children [
-            @transfer_button(StorageTransferDirection::Deposit, "chevr") --
-            @chrome_text("Move".to_string(), 9.0, lifthrasir_ui::theme::TEXT_FAINT) --
-            @transfer_button(StorageTransferDirection::Withdraw, "chevl")
-        ]
-    }
-}
-
-fn transfer_button(direction: StorageTransferDirection, icon: &'static str) -> impl Scene {
-    bsn! {
-        @FeathersButton { @caption: bsn! { @glyph_icon(icon, 18.0, lifthrasir_ui::theme::TEXT_FAINT) } }
-        StorageTransferButton { direction, enabled: false }
-        Node { width: px(42), height: px(42), border_radius: BorderRadius::all(px(10)) }
-        BackgroundColor({lifthrasir_ui::theme::FIELD})
-        on(on_transfer_activate)
-    }
-}
-
-fn footer() -> impl Scene {
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::FlexEnd,
-            padding: {UiRect::axes(px(14), px(11))},
-            border: {UiRect { top: Val::Px(1.0), ..default() }},
-        }
-        ThemeBorderColor({TOKEN_WINDOW_BORDER})
-        @ignore_picking()
-        Children [
-            StorageCloseControl
-            @FeathersButton { @caption: bsn! { @chrome_text("Close".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
-            Node { width: px(96), height: px(36) }
-            BackgroundColor({lifthrasir_ui::theme::EMERALD})
-            on(on_storage_close)
-        ]
-    }
-}
-
-pub(crate) fn error_message(message: String) -> impl Scene {
-    bsn! {
-        Text(message)
-        TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(11.0)} }
-        TextColor({lifthrasir_ui::theme::BAD})
-        @ignore_picking()
-    }
-}
-
-pub(crate) fn amount_overlay(amount: String, error: Option<String>) -> impl Scene {
-    let error = error.map(|message| EntityScene(error_message(message)));
-    bsn! {
-        Node {
-            width: percent(100), height: percent(100),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-        }
-        BackgroundColor({Color::srgba(0.0, 0.0, 0.0, 0.55)})
-        Pickable
-        Children [
-            Node {
-                width: px(280),
                 flex_direction: FlexDirection::Column,
-                row_gap: px(12),
-                padding: {UiRect::all(px(20))},
-                border: px(1),
-                border_radius: BorderRadius::all(px(12)),
+                margin: {UiRect::new(px(0), px(0), px(12), px(8))},
             }
-            BackgroundColor({lifthrasir_ui::theme::GLASS_2})
-            BorderColor::all(lifthrasir_ui::theme::STROKE_STRONG)
+            @ignore_picking()
+            --
+            @toast()
+        ]
+    }
+}
+
+/// The search box, which outlives every rebuild so typing keeps its caret, beside
+/// the host of the category segments.
+fn toolbar() -> impl Scene {
+    bsn! {
+        Node {
+            align_items: AlignItems::Center,
+            column_gap: px(8),
+            margin: {UiRect::top(px(10))},
+        }
+        @ignore_picking()
+        Children [
+            @search_field::<StorageSearchField>("Search bag and vault")
+            Node { width: px(220.0 + 2.0 * INPUT_SHADOW), flex_grow: 0.0, flex_shrink: 0.0 }
+            --
+            StorageHost::Filters
+            Node {}
+            @ignore_picking()
+        ]
+    }
+}
+
+/// The pill [`show_toast`](super::show_toast) writes the last outcome into.
+fn toast() -> impl Scene {
+    bsn! {
+        StorageToast
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0),
+            right: px(0),
+            top: px(TOAST_TOP),
+            justify_content: JustifyContent::Center,
+        }
+        Visibility::Hidden
+        @ignore_picking()
+        Children [
+            @chrome_text(String::new(), 12.0, ro_dark::BODY)
+            Node {
+                padding: {UiRect::axes(px(12), px(6))},
+                border: px(1),
+                border_radius: BorderRadius::all(px(6)),
+            }
+            BackgroundColor(ro_dark::TOOLTIP_BODY)
+            BorderColor::all(ro_dark::BUTTON_STROKE)
+        ]
+    }
+}
+
+/// The category segments, with `active` lit.
+pub(crate) fn filters(active: StorageCategory) -> impl Scene {
+    let segments: Vec<_> = StorageCategory::ALL
+        .into_iter()
+        .map(|category| category_segment(category, category == active))
+        .collect();
+    bsn! {
+        Node { column_gap: px(4) }
+        @ignore_picking()
+        Children [ {segments} ]
+    }
+}
+
+fn category_segment(category: StorageCategory, active: bool) -> impl Scene {
+    let (ink, _) = tab_text(active);
+    let action = StorageAction::Category(category);
+    bsn! {
+        @segment(active)
+        action
+        on(on_storage_click)
+        Children [ @chrome_text(category.label().into(), 12.0, ink) ]
+    }
+}
+
+/// The rebuilt body: the panes around the move arrows, the selection bar, then the
+/// weight, the zeny and the last action with its Undo.
+pub(crate) fn body(view: BodyView) -> impl Scene {
+    let side = view
+        .selection
+        .as_ref()
+        .map(|selection| selection.source.side());
+    let busy = view.busy;
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, row_gap: px(12) }
+        @ignore_picking()
+        Children [
+            Node { column_gap: px(16), align_items: AlignItems::Stretch }
+            @ignore_picking()
             Children [
-                @chrome_text("Transfer amount".to_string(), 14.0, lifthrasir_ui::theme::TEXT) --
-                StorageAmountField
-                EditableText::new(amount)
-                TextInput
-                EditableTextFilter::new(|c| c.is_ascii_digit())
-                AutoFocus
-                TextFont { font: FontSourceTemplate::Handle(lifthrasir_ui::theme::FONT_BODY), font_size: {FontSize::Px(13.0)} }
-                TextColor({lifthrasir_ui::theme::TEXT})
-                Node { height: px(34), padding: {UiRect::axes(px(10), px(7))}, border: px(1), border_radius: BorderRadius::all(px(7)) }
-                BackgroundColor({lifthrasir_ui::theme::FIELD})
-                BorderColor::all(lifthrasir_ui::theme::STROKE)
-                --
-                {error} --
-                Node { flex_direction: FlexDirection::Row, column_gap: px(8) }
+                Node { width: px(PANE_WIDTH), flex_shrink: 0.0, flex_direction: FlexDirection::Column }
                 @ignore_picking()
                 Children [
-                    StorageAmountCancel
-                    @FeathersButton { @caption: bsn! { @chrome_text("Cancel".to_string(), 12.0, lifthrasir_ui::theme::TEXT_DIM) } }
-                    Node { flex_grow: 1.0, height: px(34) }
-                    on(on_amount_cancel)
+                    @pane(view.bag)
                     --
-                    StorageAmountConfirm
-                    @FeathersButton { @caption: bsn! { @chrome_text("Transfer".to_string(), 12.0, lifthrasir_ui::theme::TEXT) } }
-                    Node { flex_grow: 1.0, height: px(34) }
-                    BackgroundColor({lifthrasir_ui::theme::EMERALD})
-                    on(on_amount_confirm)
+                    @bag_footer(view.loot, view.top_up, busy)
                 ]
+                --
+                @move_column(side, busy)
+                --
+                Node { width: px(PANE_WIDTH), flex_shrink: 0.0, flex_direction: FlexDirection::Column }
+                @ignore_picking()
+                Children [
+                    @pane(view.vault)
+                    --
+                    @vault_footer(view.capacity, view.sort)
+                ]
+            ]
+            --
+            @selection_bar(view.selection, view.qty, view.asking, busy)
+            --
+            @footer(view.weight, view.zeny, view.last, busy)
+        ]
+    }
+}
+
+/// One pane: its caption over a fixed-height scrolling grid of [`COLUMNS`]-wide rows.
+/// Rows are explicit, so no slot can wrap at a fractional UI scale. The grid's
+/// outline lights up while a slot of the other pane is dragged.
+fn pane(view: PaneView) -> impl Scene {
+    let PaneView {
+        side,
+        title,
+        count,
+        hint: (hint, hint_color),
+        cells,
+        scroll,
+    } = view;
+    let total = (cells.len() + 1).next_multiple_of(COLUMNS).max(MIN_SLOTS);
+    let mut slots = cells
+        .into_iter()
+        .map(Some)
+        .chain(std::iter::repeat_with(|| None))
+        .take(total)
+        .map(slot)
+        .peekable();
+    let mut rows = Vec::new();
+    while slots.peek().is_some() {
+        rows.push(slot_row(slots.by_ref().take(COLUMNS).collect()));
+    }
+    bsn! {
+        Node { flex_direction: FlexDirection::Column, margin: {UiRect::bottom(px(10))} }
+        @ignore_picking()
+        Children [
+            Node {
+                height: px(22),
+                margin: {UiRect::bottom(px(6))},
+                align_items: AlignItems::Center,
+                column_gap: px(8),
+            }
+            @ignore_picking()
+            Children [
+                @overline(title.into(), ro_dark::ACCENT)
+                --
+                @chrome_text(count, 12.0, ro_dark::STRONG)
+                Node { flex_grow: 1.0 }
+                --
+                @chrome_text(hint, 11.0, hint_color)
+            ]
+            --
+            @inset()
+            Node { height: px(PANE_HEIGHT), position_type: PositionType::Relative }
+            @ignore_picking()
+            Children [
+                #grid
+                StoragePane(side)
+                ScrollArea
+                ScrollPosition(scroll)
+                Outline { width: px(2), offset: px(0), color: Color::NONE }
+                Pickable
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0), top: px(0), right: px(0), bottom: px(0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(ROW_GAP),
+                    padding: {UiRect::new(px(12), px(14), px(12), px(12))},
+                    overflow: {Overflow::scroll_y()},
+                }
+                on(on_pane_drop)
+                Children [ {rows} ]
+                --
+                @FeathersScrollbar { @target: #grid, @orientation: {ControlOrientation::Vertical} }
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(4),
+                    top: px(8),
+                    bottom: px(8),
+                    width: px(6),
+                }
             ]
         ]
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bevy::scene::ScenePlugin;
-    use bevy::text::EditableText;
-    use lifthrasir_assets::catalogs::item::registry::ItemDb;
-    use lifthrasir_client::domain::inventory::{Inventory, Item};
-    use lifthrasir_client::domain::storage::Storage;
-    use lifthrasir_data::{ItemData, ItemInfo};
-    use net_contract::dto::StorageItem;
-
-    fn test_app() -> App {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
-        app.init_asset::<Image>();
-        app.init_asset::<Font>();
-        app
+fn slot_row(slots: Vec<Box<dyn Scene>>) -> impl Scene {
+    bsn! {
+        Node { column_gap: px(SLOT_GAP), flex_shrink: 0.0 }
+        @ignore_picking()
+        Children [ {slots} ]
     }
+}
 
-    fn item_db() -> ItemDb {
-        let mut data = ItemData::default();
-        data.items.insert(
-            501,
-            ItemInfo {
-                identified_name: "Red Potion".to_string(),
-                identified_resource: "RED_POTION".to_string(),
-                ..Default::default()
-            },
-        );
-        ItemDb::from_item_data(data)
+/// A filled slot selects on click, moves its whole stack on a double-click, inspects
+/// on a right-click and can be dragged to the other pane. An empty one is inert.
+fn slot(cell: Option<(StorageSelection, CellView)>) -> Box<dyn Scene> {
+    let Some((source, view)) = cell else {
+        return Box::new(bsn! { @slot_frame(SLOT, Ring::None) @ignore_picking() });
+    };
+    let ring = view.ring;
+    let (stroke, _, _) = ring.style();
+    let hover = match ring {
+        Ring::None => (ro_dark::SLOT_HOVER, ro_dark::BUTTON_STROKE),
+        Ring::Rare | Ring::Selected => (ro_dark::SLOT_HOVER, stroke),
+    };
+    let colors = HoverColors {
+        rest: (ro_dark::SLOT, stroke),
+        hover,
+    };
+    let cell = StorageCell(source);
+    let marks = slot_marks(&view, ICON, true);
+    Box::new(bsn! {
+        cell
+        Hovered
+        colors
+        @slot_frame(SLOT, ring)
+        Pickable
+        on(on_cell_click)
+        on(on_cell_drag_start)
+        on(on_cell_drag_end)
+        Children [ {marks} ]
+    })
+}
+
+/// The bulk deposits under the Bag pane, each naming how many stacks it would move.
+fn bag_footer(loot: usize, top_up: usize, busy: bool) -> impl Scene {
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(8) }
+        @ignore_picking()
+        Children [
+            @bulk_button("Deposit loot", loot, 118.0, busy, StorageAction::DepositLoot)
+            --
+            @bulk_button("Top up stacks", top_up, 124.0, busy, StorageAction::TopUp)
+            --
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            @chrome_text("Favorites stay in the bag".into(), 11.0, ro_dark::MUTED)
+        ]
     }
+}
 
-    fn vault_item(index: u32) -> StorageItem {
-        StorageItem {
-            index,
-            nameid: 501,
-            amount: 12,
-            type_: 0,
-            location: 0,
-            attribute: 0,
-            refine: 0,
-            expire_time: 0,
-            look: 0,
-            weight: 10,
-            identified: true,
-            cards: vec![],
-            options: vec![],
+fn bulk_button(
+    label: &'static str,
+    stacks: usize,
+    width: f32,
+    busy: bool,
+    action: StorageAction,
+) -> impl Scene {
+    let label = match stacks {
+        0 => label.to_string(),
+        stacks => format!("{label} ({stacks})"),
+    };
+    bsn! {
+        @row_button(ButtonArt::NORMAL, label, width)
+        @usable(stacks > 0 && !busy, Color::WHITE)
+        action
+        on(on_storage_button)
+    }
+}
+
+/// How full the vault is, and the order its pane is in. The sort box steps to the
+/// next order on click.
+fn vault_footer((used, limit): (u32, u32), sort: StorageSort) -> impl Scene {
+    let fill = (used as f32 / limit.max(1) as f32).min(1.0) * 100.0;
+    let label = chrome_text(sort.label().into(), 13.0, ro_dark::BODY);
+    let action = StorageAction::CycleSort;
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(8) }
+        @ignore_picking()
+        Children [
+            @chrome_text("Capacity".into(), 12.0, ro_dark::MUTED)
+            --
+            @bar(fill, ro_dark::SP, false)
+            Node { flex_grow: 1.0, min_width: px(0) }
+            --
+            @chrome_text("Sort".into(), 12.0, ro_dark::MUTED)
+            --
+            @cycle_box(label, 104.0)
+            action
+            on(on_storage_click)
+        ]
+    }
+}
+
+/// The arrows between the panes. The one pointing away from the selected item's pane
+/// is lit and moves it, exactly like the commit button.
+fn move_column(selected: Option<Side>, busy: bool) -> impl Scene {
+    let deposit = !busy && selected == Some(Side::Bag);
+    let withdraw = !busy && selected == Some(Side::Vault);
+    bsn! {
+        Node {
+            width: px(MOVE_WIDTH),
+            flex_shrink: 0.0,
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            row_gap: px(14),
+            padding: {UiRect::bottom(px(20))},
         }
+        @ignore_picking()
+        Children [
+            @move_arrow("chevr", "Deposit", deposit)
+            --
+            @diamond(6.0, ro_dark::DIVIDER, ro_dark::DIVIDER)
+            --
+            @move_arrow("chevl", "Withdraw", withdraw)
+        ]
     }
+}
 
-    #[test]
-    fn shell_is_hidden_stable_and_omits_keeper_and_zeny() {
-        let mut app = test_app();
-        app.world_mut().spawn_scene(window()).expect("shell spawns");
-        app.update();
-
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageWindowRoot>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            *app.world_mut()
-                .query_filtered::<&Visibility, With<StorageWindowRoot>>()
-                .single(app.world())
-                .unwrap(),
-            Visibility::Hidden
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageBagHost>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageVaultHost>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageOverlayHost>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageCloseControl>()
-                .iter(app.world())
-                .count(),
-            2
-        );
-        assert_eq!(
-            app.world_mut()
-                .query_filtered::<Entity, (With<StorageSearchField>, With<EditableText>)>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        let texts: Vec<_> = app
-            .world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|text| text.0.clone())
-            .collect();
-        assert!(texts.iter().any(|text| text == "Storage Vault"));
-        assert!(!texts.iter().any(|text| text.contains("Idunn")
-            || text.contains("Zeny")
-            || text.contains("Keeper")));
-    }
-
-    #[test]
-    fn panes_fill_their_host_columns_instead_of_shrinking_to_their_headers() {
-        let mut app = test_app();
-        for side in [PaneSide::Bag, PaneSide::Vault] {
-            let entity = app
-                .world_mut()
-                .spawn_scene(pane(
-                    StoragePaneView {
-                        title: "Storage",
-                        subtitle: "0 / 600".to_string(),
-                        cells: vec![],
-                        empty_message: "Nothing here yet.",
-                    },
-                    side,
-                ))
-                .unwrap()
-                .id();
-
-            assert_eq!(app.world().get::<Node>(entity).unwrap().width, percent(100));
+fn move_arrow(icon: &'static str, label: &'static str, lit: bool) -> impl Scene {
+    let art = if lit {
+        ButtonArt::PRIMARY
+    } else {
+        ButtonArt::NORMAL
+    };
+    let action = StorageAction::Commit;
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Column,
+            align_items: AlignItems::Center,
+            row_gap: px(6),
         }
+        @ignore_picking()
+        Children [
+            @button_with(art, glyph_icon(icon, 18.0, ro_dark::BUTTON_LABEL))
+            Node {
+                width: px(64.0 + 2.0 * BUTTON_SHADOW),
+                height: px(48.0 + 2.0 * BUTTON_SHADOW),
+                flex_grow: 0.0,
+                flex_shrink: 0.0,
+                margin: {UiRect::all(px(-BUTTON_SHADOW))},
+            }
+            @usable(lit, Color::WHITE)
+            action
+            on(on_storage_button)
+            --
+            @chrome_text(label.into(), 11.0, ro_dark::MUTED)
+        ]
     }
+}
 
-    #[test]
-    fn switching_to_guild_storage_reuses_shell_and_clears_personal_drafts() {
-        let mut app = test_app();
-        app.init_resource::<Storage>();
-        app.init_resource::<StorageUi>();
-        app.init_resource::<InputFocus>();
-        app.add_systems(Update, (sync_window_visibility, sync_window_title).chain());
-        let root = app.world_mut().spawn_scene(window()).unwrap().id();
-        app.world_mut()
-            .resource_mut::<Storage>()
-            .open(StorageKind::Personal, 600, vec![]);
-        app.update();
-        *app.world_mut().resource_mut::<StorageUi>() = StorageUi {
-            previous_open: true,
-            selection: Some(StorageSelection::Vault(7)),
-            pending_transfer: Some(PendingTransfer {
-                source: StorageSelection::Vault(7),
-                amount: "5".into(),
-            }),
-            awaiting_result: true,
-            panel_error: Some("old error".into()),
-            ..Default::default()
-        };
-        app.world_mut()
-            .resource_mut::<StorageUi>()
-            .set_query("potion");
-        let search = app
-            .world_mut()
-            .query_filtered::<Entity, With<StorageSearchField>>()
-            .single(app.world())
-            .unwrap();
-        app.world_mut()
-            .get_mut::<EditableText>(search)
-            .unwrap()
-            .editor_mut()
-            .set_text("potion");
-        app.insert_resource(InputFocus::from_entity(search));
-        app.world_mut()
-            .resource_mut::<Storage>()
-            .open(StorageKind::Guild, 100, vec![]);
-        app.update();
-
-        let ui = app.world().resource::<StorageUi>();
-        assert!(ui.pending_transfer.is_none());
-        assert!(ui.selection.is_none());
-        assert!(!ui.awaiting_result);
-        assert!(ui.query().is_empty());
-        assert!(ui.panel_error.is_none());
-        let (_, vault) = pane_views(
-            &Inventory::default(),
-            app.world().resource::<Storage>(),
-            ui,
-            &item_db(),
-        );
-        assert_eq!(vault.title, "Guild Storage");
-        assert_eq!(vault.subtitle, "0 / 100");
-        assert_eq!(app.world().resource::<InputFocus>().get(), None);
-        assert_eq!(app.world().get::<EditableText>(search).unwrap().value(), "");
-        assert_eq!(
-            app.world().get::<Visibility>(root),
-            Some(&Visibility::Inherited)
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageWindowRoot>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert!(
-            app.world_mut()
-                .query::<&Text>()
-                .iter(app.world())
-                .any(|text| text.0 == "Guild Storage")
-        );
+/// The bar under the panes: the selected item with its amount and the commit button,
+/// or a hint. It is ringed while it asks how many of a dropped stack to move.
+fn selection_bar(
+    selection: Option<SelectionView>,
+    qty: u32,
+    asking: bool,
+    busy: bool,
+) -> impl Scene {
+    let content = match selection {
+        Some(view) => selected_item(view, qty, asking, busy),
+        None => vec![Box::new(chrome_text(
+            "Select an item \u{b7} Drag it across, or double-click to move the whole stack".into(),
+            12.0,
+            ro_dark::MUTED,
+        )) as Box<dyn Scene>],
+    };
+    let ring = if asking {
+        ro_dark::FROST_GLOW
+    } else {
+        Color::NONE
+    };
+    bsn! {
+        @inset()
+        Node {
+            height: px(64),
+            padding: {UiRect::new(px(10), px(12), px(0), px(0))},
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            column_gap: px(14),
+        }
+        Outline { width: px(1), offset: px(0), color: {ring} }
+        @ignore_picking()
+        Children [ {content} ]
     }
+}
 
-    #[test]
-    fn pane_views_render_filtered_names_and_live_capacity() {
-        let db = item_db();
-        let mut inventory = Inventory::default();
-        inventory.upsert(Item {
-            index: 3,
-            item_id: 501,
-            item_type: 0,
-            amount: 4,
-            identified: true,
-            ..Default::default()
-        });
-        inventory.upsert(Item {
-            index: 4,
-            item_id: 501,
-            item_type: 0,
-            wear_state: 1,
-            identified: true,
-            ..Default::default()
-        });
-        let mut storage = Storage::default();
-        storage.open(StorageKind::Personal, 600, vec![vault_item(70_000)]);
-        let mut ui = StorageUi {
-            category: StorageCategory::Use,
-            ..Default::default()
-        };
-        ui.set_query("potion");
-
-        let (bag, vault) = pane_views(&inventory, &storage, &ui, &db);
-
-        assert_eq!(bag.cells.len(), 1);
-        assert_eq!(bag.cells[0].name, "Red Potion");
-        assert_eq!(vault.cells.len(), 1);
-        assert_eq!(vault.subtitle, "1 / 600");
-        ui.set_query("missing");
-        let (bag, vault) = pane_views(&inventory, &storage, &ui, &db);
-        assert_eq!(bag.empty_message, "Nothing matches your search.");
-        assert_eq!(vault.empty_message, "Nothing matches your search.");
-    }
-
-    #[test]
-    fn pane_rebuild_preserves_the_search_entity() {
-        let mut app = test_app();
-        app.init_resource::<Inventory>();
-        app.init_resource::<Storage>();
-        app.init_resource::<StorageUi>();
-        app.insert_resource(item_db());
-        app.add_systems(Update, super::super::rebuild_panes);
-        app.world_mut().spawn_scene(window()).expect("shell spawns");
-        app.world_mut().resource_mut::<Inventory>().upsert(Item {
-            index: 3,
-            item_id: 501,
-            item_type: 0,
-            amount: 4,
-            identified: true,
-            ..Default::default()
-        });
-        app.world_mut().resource_mut::<Storage>().open(
-            StorageKind::Personal,
-            600,
-            vec![vault_item(70_000)],
-        );
-
-        app.update();
-        let search = app
-            .world_mut()
-            .query_filtered::<Entity, With<StorageSearchField>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageCell>()
-                .iter(app.world())
-                .count(),
-            2
-        );
-
-        app.world_mut()
-            .resource_mut::<StorageUi>()
-            .set_query("missing");
-        app.update();
-
-        let search_after = app
-            .world_mut()
-            .query_filtered::<Entity, With<StorageSearchField>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(search_after, search);
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageCell>()
-                .iter(app.world())
-                .count(),
-            0
-        );
-    }
-
-    #[test]
-    fn pane_scene_renders_selection_name_and_empty_state() {
-        let mut app = test_app();
-        let selected = StorageCellView {
-            selection: StorageSelection::Bag(7),
-            icon: "ro://ui/icons/bag.svg".to_string(),
-            name: "Red Potion".to_string(),
-            category: "Use",
-            amount: 3,
-            refine: 7,
-            selected: true,
-        };
-        app.world_mut()
-            .spawn_scene(pane(
-                StoragePaneView {
-                    title: "Your Bag",
-                    subtitle: "1 items".to_string(),
-                    cells: vec![selected],
-                    empty_message: "Nothing here yet.",
-                },
-                PaneSide::Bag,
-            ))
-            .unwrap();
-        app.update();
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageCell>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        let row = app
-            .world_mut()
-            .query_filtered::<&Node, With<StorageCell>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(row.width, percent(100));
-        assert_eq!(row.height, px(52));
-        assert_eq!(row.flex_direction, FlexDirection::Row);
-        assert_eq!(row.flex_shrink, 0.0);
-        let list = app
-            .world_mut()
-            .query_filtered::<&Node, With<ScrollArea>>()
-            .single(app.world())
-            .unwrap();
-        assert_eq!(list.flex_direction, FlexDirection::Column);
-        assert_eq!(list.align_items, AlignItems::Stretch);
-        let texts: Vec<_> = app
-            .world_mut()
-            .query::<&Text>()
-            .iter(app.world())
-            .map(|text| text.0.clone())
-            .collect();
-        assert!(texts.iter().any(|text| text == "Red Potion"));
-        assert!(texts.iter().any(|text| text == "Use"));
-        assert!(texts.iter().any(|text| text == "3"));
-        assert!(texts.iter().any(|text| text == "+7"));
-        assert!(!texts.iter().any(|text| text == "Nothing here yet."));
-
-        app.world_mut()
-            .spawn_scene(pane(
-                StoragePaneView {
-                    title: "Storage Vault",
-                    subtitle: "0 / 600".to_string(),
-                    cells: vec![],
-                    empty_message: "Nothing here yet.",
-                },
-                PaneSide::Vault,
-            ))
-            .unwrap();
-        app.update();
-        assert!(
-            app.world_mut()
-                .query::<&Text>()
-                .iter(app.world())
-                .any(|text| text.0 == "Nothing here yet.")
-        );
-    }
-
-    #[test]
-    fn empty_states_show_side_specific_glyphs() {
-        let mut app = test_app();
-        app.world_mut()
-            .spawn_scene(empty_state("Nothing here yet.", PaneSide::Bag))
-            .unwrap();
-        app.world_mut()
-            .spawn_scene(empty_state("Nothing here yet.", PaneSide::Vault))
-            .unwrap();
-        app.update();
-
-        let image_ids: Vec<_> = app
-            .world_mut()
-            .query::<&ImageNode>()
-            .iter(app.world())
-            .map(|image| image.image.id())
-            .collect();
-        let asset_server = app.world().resource::<AssetServer>();
-        let paths: Vec<_> = image_ids
-            .into_iter()
-            .map(|image| {
-                asset_server
-                    .get_path(image)
-                    .expect("empty-state glyph has an asset path")
-                    .to_string()
+/// The selected item's slot, name and meta line, then the amount controls of a stack
+/// or a note for a single item, then the commit button.
+fn selected_item(view: SelectionView, qty: u32, asking: bool, busy: bool) -> Vec<Box<dyn Scene>> {
+    let ring = view.cell.ring;
+    let name_color = if ring == Ring::Rare {
+        ro_dark::RARE_RING
+    } else {
+        ro_dark::STRONG
+    };
+    let name = if asking {
+        format!("How many? \u{b7} {}", view.name)
+    } else {
+        view.name
+    };
+    let marks = slot_marks(&view.cell, SELECTION_ICON, false);
+    let (line, tone) = view.meta.line(qty);
+    let meta = view.meta;
+    let label = action_label(view.source, qty);
+    let action = StorageAction::Commit;
+    let amount: Box<dyn Scene> = if view.stack > 1 {
+        Box::new(amount_controls(qty, view.stack))
+    } else {
+        Box::new(bsn! {
+            @chrome_text(view.note.into(), 12.0, ro_dark::MUTED)
+            Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(0) }
+        })
+    };
+    vec![
+        Box::new(bsn! {
+            @slot_frame(SELECTION_SLOT, ring)
+            @ignore_picking()
+            Children [ {marks} ]
+        }),
+        Box::new(bsn! {
+            Node {
+                width: px(230),
+                flex_shrink: 0.0,
+                flex_direction: FlexDirection::Column,
+                overflow: {Overflow::clip()},
+            }
+            @ignore_picking()
+            Children [
+                @chrome_text(name, 13.0, name_color)
+                TextLayout { linebreak: LineBreak::NoWrap }
+                --
+                meta
+                @chrome_text(line, 11.0, tone)
+                TextLayout { linebreak: LineBreak::NoWrap }
+            ]
+        }),
+        amount,
+        Box::new(bsn! {
+            @button_with(ButtonArt::PRIMARY, bsn! {
+                AmountLabel
+                @chrome_text(label, 13.0, ro_dark::BUTTON_LABEL)
             })
-            .collect();
-        assert!(paths.iter().any(|path| path.ends_with("bag.svg")));
-        assert!(paths.iter().any(|path| path.ends_with("vault.svg")));
+            Node {
+                width: px(150.0 + 2.0 * BUTTON_SHADOW),
+                flex_grow: 0.0,
+                flex_shrink: 0.0,
+                margin: {UiRect::all(px(-BUTTON_SHADOW))},
+            }
+            @usable(!busy, Color::WHITE)
+            action
+            on(on_storage_button)
+        }),
+    ]
+}
+
+/// The steppers around the typed amount, the slider and the amount chips.
+fn amount_controls(qty: u32, stack: u32) -> impl Scene {
+    let chips: Vec<_> = Preset::ALL.into_iter().map(amount_chip).collect();
+    bsn! {
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            align_items: AlignItems::Center,
+            column_gap: px(8),
+        }
+        @ignore_picking()
+        Children [
+            @step_button("minus", false)
+            --
+            @number_field(qty.to_string(), QTY_DIGITS)
+            StorageAmountField
+            TextLayout { justify: Justify::Center }
+            Node { width: px(64) }
+            --
+            @step_button("plus", true)
+            --
+            @amount_slider(qty, stack)
+            --
+            {chips}
+        ]
     }
+}
 
-    #[test]
-    fn error_is_red_and_pending_transfer_renders_overlay_controls() {
-        let mut app = test_app();
-        app.world_mut()
-            .spawn_scene(error_message("Storage is full.".to_string()))
-            .unwrap();
-        app.world_mut()
-            .spawn_scene(amount_overlay("1".to_string(), None))
-            .unwrap();
-        app.update();
-
-        assert!(
-            app.world_mut()
-                .query::<(&Text, &TextColor)>()
-                .iter(app.world())
-                .any(|(text, color)| text.0 == "Storage is full."
-                    && color.0 == lifthrasir_ui::theme::BAD)
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageAmountField>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageAmountConfirm>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            app.world_mut()
-                .query::<&StorageAmountCancel>()
-                .iter(app.world())
-                .count(),
-            1
-        );
-        assert_eq!(
-            app.world_mut()
-                .query_filtered::<Entity, (
-                    With<StorageAmountField>,
-                    With<bevy::text::EditableTextFilter>,
-                )>()
-                .iter(app.world())
-                .count(),
-            1
-        );
+fn step_button(icon: &'static str, more: bool) -> impl Scene {
+    let action = StorageAction::Step(more);
+    bsn! {
+        @small_button(icon, 24.0)
+        action
+        on(on_storage_button)
     }
+}
 
-    #[test]
-    fn amount_overlay_renders_validation_feedback_in_red() {
-        let mut app = test_app();
-        app.world_mut()
-            .spawn_scene(amount_overlay(
-                "6".to_string(),
-                Some("Enter an amount within the available stack.".to_string()),
-            ))
-            .unwrap();
-        app.update();
+fn amount_chip(preset: Preset) -> impl Scene {
+    let action = StorageAction::Amount(preset);
+    bsn! {
+        @segment(false)
+        action
+        on(on_storage_click)
+        Children [ @chrome_text(preset.label().into(), 11.0, ro_dark::LABEL) ]
+    }
+}
 
-        assert!(
-            app.world_mut()
-                .query::<(&Text, &TextColor)>()
-                .iter(app.world())
-                .any(
-                    |(text, color)| text.0 == "Enter an amount within the available stack."
-                        && color.0 == lifthrasir_ui::theme::BAD
-                )
-        );
+/// The amount slider: a press or a drag anywhere on it sets the amount from the
+/// pointer. [`sync_amount`](super::sync_amount) moves the fill and the knob.
+fn amount_slider(qty: u32, stack: u32) -> impl Scene {
+    let at = Val::Percent(slider_percent(qty, stack));
+    bsn! {
+        AmountRail
+        RelativeCursorPosition
+        Node {
+            flex_grow: 1.0,
+            min_width: px(60),
+            height: px(16),
+            align_items: AlignItems::Center,
+            position_type: PositionType::Relative,
+        }
+        Pickable
+        on(on_slider_press)
+        on(on_slider_drag)
+        Children [
+            Node {
+                width: percent(100),
+                height: px(6),
+                border: px(1),
+                border_radius: BorderRadius::all(px(3)),
+            }
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::INSET_RULE)
+            @ignore_picking()
+            Children [
+                AmountFill
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0),
+                    top: px(0),
+                    bottom: px(0),
+                    width: {at},
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor(ro_dark::SP)
+                @ignore_picking()
+            ]
+            --
+            AmountKnob
+            @diamond(11.0, ro_dark::FROST, ro_dark::BRONZE_SHADOW)
+            Node {
+                position_type: PositionType::Absolute,
+                left: {at},
+                top: px(2.5),
+                margin: {UiRect::left(px(-5.5))},
+            }
+        ]
+    }
+}
+
+/// The carried weight, the zeny and, once something moved, the last action with its
+/// Undo.
+fn footer(
+    (weight, max_weight): (u32, u32),
+    zeny: u32,
+    last: Option<String>,
+    busy: bool,
+) -> impl Scene {
+    let zeny = format!("{} z", thousands(zeny.into()));
+    let action = StorageAction::Undo;
+    let undo: Vec<Box<dyn Scene>> = match last {
+        None => Vec::new(),
+        Some(text) => vec![
+            Box::new(bsn! {
+                Node { max_width: px(300), overflow: {Overflow::clip()} }
+                @ignore_picking()
+                Children [
+                    @chrome_text(text, 12.0, ro_dark::LABEL)
+                    TextLayout { linebreak: LineBreak::NoWrap }
+                ]
+            }),
+            Box::new(bsn! {
+                @row_button(ButtonArt::NORMAL, "Undo", 64.0)
+                @usable(!busy, Color::WHITE)
+                action
+                on(on_storage_button)
+            }),
+        ],
+    };
+    bsn! {
+        Node { align_items: AlignItems::Center, column_gap: px(20) }
+        @ignore_picking()
+        Children [
+            Node { width: px(300), flex_shrink: 0.0 }
+            @ignore_picking()
+            Children [ @weight_meter(weight, max_weight) ]
+            --
+            Node { align_items: AlignItems::Baseline, column_gap: px(8), flex_shrink: 0.0 }
+            @ignore_picking()
+            Children [
+                @chrome_text("Zeny".into(), 12.0, ro_dark::ACCENT)
+                --
+                @chrome_text(zeny, 13.0, ro_dark::BRONZE_LIGHT)
+            ]
+            --
+            Node { flex_grow: 1.0 }
+            @ignore_picking()
+            --
+            {undo}
+        ]
     }
 }
