@@ -1,7 +1,7 @@
 //! Name plates at the feet of units. NPCs, party members, bosses and the local hero
 //! always carry one; every other unit shows its plate while hovered, while it is the
-//! locked attack target, or while Alt is held. The hovered or targeted unit's plate
-//! gets a dark backing.
+//! locked attack target, while Alt is held, or always once the Show All Names setting
+//! is on. The hovered or targeted unit's plate gets a dark backing.
 //!
 //! A plate is rebuilt whenever its [`PlateView`] changes; the health and spirit
 //! bars under it are filled in place.
@@ -20,6 +20,7 @@ use lifthrasir_client::domain::entities::markers::{Aggressive, Boss, LocalPlayer
 use lifthrasir_client::domain::guild::emblems::{EmblemKey, GuildEmblemImages};
 use lifthrasir_client::domain::guild::{GuildState, GuildSystems};
 use lifthrasir_client::domain::party::PartyState;
+use lifthrasir_client::domain::settings::GraphicsSettings;
 use net_contract::dto::PartyMemberInfo;
 
 use crate::worldspace::{LockedUnit, WorldAnchor, WorldOverlaySystems, fill_width};
@@ -99,6 +100,7 @@ struct Roster<'w> {
     guild: Res<'w, GuildState>,
     locked: LockedUnit<'w>,
     keys: Res<'w, ButtonInput<KeyCode>>,
+    settings: Res<'w, GraphicsSettings>,
 }
 
 impl Roster<'_> {
@@ -158,7 +160,8 @@ impl Roster<'_> {
         let focus = Focus {
             hovered: unit.hovered,
             targeted: self.locked.entity() == Some(unit.entity),
-            show_all: self.keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]),
+            show_all: self.settings.show_names
+                || self.keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]),
         };
         // The name reply carries a unit's party, ours or another; our own roster
         // covers members that were never asked about.

@@ -118,6 +118,7 @@ fn app() -> App {
         .init_resource::<PartyState>()
         .init_resource::<LockedTarget>()
         .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<GraphicsSettings>()
         .init_resource::<GuildEmblemImages>()
         .add_message::<GuildIngress>()
         .add_message::<ZoneDisconnected>()
@@ -250,6 +251,21 @@ fn holding_alt_plates_every_unit() {
     assert_eq!(poring.kind, PlateKind::Mob { aggressive: true });
     assert!(!poring.backed);
     assert_eq!(view_of(&mut app, stranger).unwrap().kind, PlateKind::Player);
+}
+
+#[test]
+fn the_show_all_names_setting_plates_every_unit() {
+    let mut app = app();
+    let poring = named(&mut app, "Poring", Mob);
+    app.update();
+    assert_eq!(view_of(&mut app, poring), None);
+
+    app.world_mut()
+        .resource_mut::<GraphicsSettings>()
+        .show_names = true;
+    app.update();
+
+    assert!(!view_of(&mut app, poring).unwrap().backed);
 }
 
 #[test]

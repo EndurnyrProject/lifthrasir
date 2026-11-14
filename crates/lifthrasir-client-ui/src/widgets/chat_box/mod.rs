@@ -44,6 +44,9 @@ use crate::widgets::inventory_window::{InventoryCell, item_name};
 use input::ChatDesk;
 use view::{PopupView, RunAction, Speech, Unread};
 
+/// The panel's right edge from the left of the screen. The hotbar stays clear of it.
+pub(crate) const CHAT_RIGHT: f32 = scene::PANEL_LEFT + scene::PANEL_WIDTH;
+
 /// Oldest lines past this are dropped so the log and its layout stay bounded.
 const MAX_CHAT_LINES: usize = 100;
 const CHAT_MAX_CHARS: usize = 255;

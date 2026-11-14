@@ -116,11 +116,12 @@ pub enum Setting {
     Shadows,
     Volume(AudioChannel),
     UiScaling,
+    ShowNames,
 }
 
 impl Setting {
     /// Every setting in the order its section lists it.
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 16] = [
         Self::DisplayMode,
         Self::Resolution,
         Self::Vsync,
@@ -136,6 +137,7 @@ impl Setting {
         Self::Volume(AudioChannel::Sfx),
         Self::Volume(AudioChannel::Ambient),
         Self::UiScaling,
+        Self::ShowNames,
     ];
 
     /// The settings this build offers: DLSS only where it is compiled in.
@@ -213,6 +215,12 @@ impl Setting {
                 "UI Scale",
                 "Makes every window and font bigger or smaller",
             ),
+            Self::ShowNames => (
+                Interface,
+                "IN THE WORLD",
+                "Show All Names",
+                "Names every hero and monster without pointing at them",
+            ),
         }
     }
 
@@ -231,7 +239,9 @@ impl Setting {
             Self::Dlss => labels(&DlssMode::ALL, DlssMode::label),
             Self::Ssao => labels(&Ssao::ALL, Ssao::label),
             Self::UiScaling => labels(&UiScaling::ALL, UiScaling::label),
-            Self::Vsync | Self::Bloom | Self::Shadows | Self::Volume(_) => Vec::new(),
+            Self::Vsync | Self::Bloom | Self::Shadows | Self::ShowNames | Self::Volume(_) => {
+                Vec::new()
+            }
         }
     }
 
@@ -250,7 +260,7 @@ impl Setting {
             Self::Dlss => place(&DlssMode::ALL, graphics.dlss),
             Self::Ssao => place(&Ssao::ALL, graphics.ssao),
             Self::UiScaling => place(&UiScaling::ALL, graphics.ui_scaling),
-            Self::Vsync | Self::Bloom | Self::Shadows | Self::Volume(_) => 0,
+            Self::Vsync | Self::Bloom | Self::Shadows | Self::ShowNames | Self::Volume(_) => 0,
         }
     }
 
@@ -272,7 +282,7 @@ impl Setting {
             Self::Dlss => pick(&DlssMode::ALL, index, &mut graphics.dlss),
             Self::Ssao => pick(&Ssao::ALL, index, &mut graphics.ssao),
             Self::UiScaling => pick(&UiScaling::ALL, index, &mut graphics.ui_scaling),
-            Self::Vsync | Self::Bloom | Self::Shadows | Self::Volume(_) => {}
+            Self::Vsync | Self::Bloom | Self::Shadows | Self::ShowNames | Self::Volume(_) => {}
         }
     }
 
@@ -289,6 +299,7 @@ impl Setting {
             Self::Vsync => Some(graphics.vsync),
             Self::Bloom => Some(graphics.bloom),
             Self::Shadows => Some(graphics.shadows),
+            Self::ShowNames => Some(graphics.show_names),
             _ => None,
         }
     }
@@ -299,6 +310,7 @@ impl Setting {
             Self::Vsync => graphics.vsync = !graphics.vsync,
             Self::Bloom => graphics.bloom = !graphics.bloom,
             Self::Shadows => graphics.shadows = !graphics.shadows,
+            Self::ShowNames => graphics.show_names = !graphics.show_names,
             _ => {}
         }
     }
@@ -319,6 +331,7 @@ impl Setting {
             Self::Bloom => graphics.bloom = source.bloom,
             Self::Shadows => graphics.shadows = source.shadows,
             Self::UiScaling => graphics.ui_scaling = source.ui_scaling,
+            Self::ShowNames => graphics.show_names = source.show_names,
             Self::Volume(channel) => {
                 let (volume, muted) = channel.read(&from.audio);
                 channel.set_volume(&mut to.audio, volume);
@@ -466,6 +479,7 @@ const BIND_GROUPS: [(&str, &[(PlayerAction, &str)]); 2] = [
         &[
             (PlayerAction::Sit, "Sit / Stand"),
             (PlayerAction::Emote, "Emotes"),
+            (PlayerAction::Names, "Show All Names"),
         ],
     ),
 ];
@@ -502,6 +516,7 @@ fn binds(keybinds: &Keybinds, action: PlayerAction) -> &ActionBinds {
         PlayerAction::Party => &keybinds.party,
         PlayerAction::Guild => &keybinds.guild,
         PlayerAction::Emote => &keybinds.emote,
+        PlayerAction::Names => &keybinds.names,
         slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -517,6 +532,7 @@ fn binds_mut(keybinds: &mut Keybinds, action: PlayerAction) -> &mut ActionBinds 
         PlayerAction::Party => &mut keybinds.party,
         PlayerAction::Guild => &mut keybinds.guild,
         PlayerAction::Emote => &mut keybinds.emote,
+        PlayerAction::Names => &mut keybinds.names,
         slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }

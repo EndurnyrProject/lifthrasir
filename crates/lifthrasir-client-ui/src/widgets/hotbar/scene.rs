@@ -21,6 +21,7 @@ use super::{
 use crate::screens::shared::{
     badge, glow, hud_plate, link, overline, plate_button, plate_sheen, thousands, tooltip_frame,
 };
+use crate::widgets::chat_box::CHAT_RIGHT;
 
 const SLOT: f32 = 44.0;
 const ICON: f32 = 30.0;
@@ -33,6 +34,8 @@ const PAD_Y: f32 = 8.0;
 const VITALS_WIDTH: f32 = 58.0;
 /// Gap between the vitals, the rows and the buttons.
 const COLUMN_GAP: f32 = 12.0;
+/// Room kept between the chat and the plate.
+const CHAT_GAP: f32 = 12.0;
 /// The plate with both rows on show, border included.
 pub(super) const PLATE_HEIGHT: f32 = 2.0 * (SLOT + PAD_Y + 1.0) + ROW_GAP;
 /// Wash over an icon that is cooling down.
@@ -40,8 +43,8 @@ const SHADE: Color = Color::srgba(0.016, 0.024, 0.035, 0.74);
 /// Ink of a skill's level in its slot's corner.
 const LEVEL_INK: Color = Color::srgb_u8(0xa9, 0xc9, 0x9a);
 
-/// The hotbar's layer of the HUD: the plate at the bottom centre, over the backdrop
-/// that closes the picker.
+/// The hotbar's layer of the HUD: the plate at the bottom centre, pushed right where
+/// it would cover the chat, over the backdrop that closes the picker.
 pub(super) fn root() -> impl Scene {
     bsn! {
         Node {
@@ -50,7 +53,6 @@ pub(super) fn root() -> impl Scene {
             right: px(0),
             top: px(0),
             bottom: px(0),
-            justify_content: JustifyContent::Center,
             align_items: AlignItems::FlexEnd,
             padding: {UiRect::bottom(px(HOTBAR_BOTTOM))},
         }
@@ -70,8 +72,21 @@ pub(super) fn root() -> impl Scene {
             Pickable
             on(on_action)
             --
+            @spacer(CHAT_RIGHT + CHAT_GAP)
+            --
             @plate()
+            --
+            @spacer(0.0)
         ]
+    }
+}
+
+/// The room on one side of the plate. Two equal ones centre it, and `min` keeps the
+/// left one from shrinking under the chat.
+fn spacer(min: f32) -> impl Scene {
+    bsn! {
+        Node { flex_grow: 1.0, flex_basis: px(0), min_width: px(min) }
+        @ignore_picking()
     }
 }
 
@@ -80,6 +95,7 @@ fn plate() -> impl Scene {
     bsn! {
         @hud_plate()
         Node {
+            flex_shrink: 0.0,
             align_items: AlignItems::FlexEnd,
             column_gap: px(COLUMN_GAP),
             padding: {UiRect::new(px(PAD_LEFT), px(10), px(PAD_Y), px(PAD_Y))},
@@ -422,32 +438,49 @@ fn toggle(icon: &'static str, on: bool) -> impl Scene {
 }
 
 /// The pager over the row and lock switches. `pages` names the pages on show.
+///
+/// Beside two rows the pager stands on end. That is taller than one row of slots, so
+/// beside one it lies flat and the buttons are exactly as tall as a slot.
 pub(super) fn buttons(pages: String, two_rows: bool, locked: bool) -> impl Scene {
     // The chevron art points right.
     let up = UiTransform::from_rotation(Rot2::degrees(-90.0));
     let down = UiTransform::from_rotation(Rot2::degrees(90.0));
     let lock = if locked { "lock" } else { "unlock" };
+    let (pager, gap) = if two_rows {
+        (FlexDirection::Column, 6)
+    } else {
+        (FlexDirection::Row, 0)
+    };
     bsn! {
         Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            row_gap: px(3),
+            row_gap: px(gap),
         }
         @ignore_picking()
         Children [
-            @plate_button("chev")
-            up
-            HotbarAction::PagePrev
-            on(on_action)
+            Node {
+                flex_direction: {pager},
+                align_items: AlignItems::Center,
+                row_gap: px(3),
+                column_gap: px(3),
+            }
+            @ignore_picking()
+            Children [
+                @plate_button("chev")
+                up
+                HotbarAction::PagePrev
+                on(on_action)
+                --
+                @chrome_text(pages, 11.0, ro_dark::BRONZE_LIGHT)
+                --
+                @plate_button("chev")
+                down
+                HotbarAction::PageNext
+                on(on_action)
+            ]
             --
-            @chrome_text(pages, 11.0, ro_dark::BRONZE_LIGHT)
-            --
-            @plate_button("chev")
-            down
-            HotbarAction::PageNext
-            on(on_action)
-            --
-            Node { column_gap: px(3), margin: {UiRect::top(px(3))} }
+            Node { column_gap: px(3) }
             @ignore_picking()
             Children [
                 @toggle("rows", two_rows)

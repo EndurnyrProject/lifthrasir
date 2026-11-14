@@ -144,7 +144,7 @@ fn each_section_lists_its_own_settings() {
     );
 
     ui.edit(SettingsAction::Section(SettingsTab::Interface));
-    assert_eq!(listed(&ui), [Setting::UiScaling]);
+    assert_eq!(listed(&ui), [Setting::UiScaling, Setting::ShowNames]);
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn every_action_is_listed_under_its_group() {
         .iter()
         .filter(|row| matches!(row, Row::Bind { .. }))
         .count();
-    assert_eq!(actions, 21);
+    assert_eq!(actions, 22);
     assert_eq!(rows.first(), Some(&Row::BindHeader));
     assert_eq!(rows.last(), Some(&Row::BindHint));
 }
@@ -558,6 +558,7 @@ fn plain_capture_round_trips_through_the_input_map() {
         party: ActionBinds::default(),
         guild: ActionBinds::default(),
         emote: ActionBinds::default(),
+        names: ActionBinds::default(),
         hotbar: Default::default(),
     };
     let expected = {
@@ -585,6 +586,7 @@ fn modified_capture_round_trips_through_the_input_map() {
         party: ActionBinds::default(),
         guild: ActionBinds::default(),
         emote: ActionBinds::default(),
+        names: ActionBinds::default(),
         hotbar: Default::default(),
     };
     let expected = {
@@ -933,4 +935,25 @@ fn muting_a_channel_empties_its_slider_and_says_so() {
         .map(|(_, _, node)| node.width)
         .unwrap();
     assert_eq!(fill, Val::Percent(0.0));
+}
+
+#[test]
+fn the_names_key_flips_the_live_setting_and_keeps_the_draft_clean() {
+    let (mut app, _) = desk_app(settings_ui(), SettingsAction::Close);
+    app.add_systems(Update, toggle_names_key);
+    let player = app
+        .world_mut()
+        .spawn((LocalPlayer, ActionState::<PlayerAction>::default()))
+        .id();
+    app.world_mut()
+        .entity_mut(player)
+        .get_mut::<ActionState<PlayerAction>>()
+        .unwrap()
+        .press(&PlayerAction::Names);
+    app.update();
+
+    assert!(app.world().resource::<GraphicsSettings>().show_names);
+    let ui = app.world().resource::<SettingsUi>();
+    assert!(ui.draft.graphics.show_names);
+    assert!(!ui.dirty(), "the next Apply must not undo the key");
 }

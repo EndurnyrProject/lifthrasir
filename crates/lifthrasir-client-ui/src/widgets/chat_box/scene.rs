@@ -20,7 +20,8 @@ use super::{
 };
 use crate::screens::shared::{overline, usable, wide_button};
 
-const PANEL_WIDTH: f32 = 540.0;
+pub(super) const PANEL_LEFT: f32 = 16.0;
+pub(super) const PANEL_WIDTH: f32 = 540.0;
 const LOG_HEIGHT: f32 = 200.0;
 /// How far a popup floats above the bottom of the input row.
 const POPUP_LIFT: f32 = 38.0;
@@ -40,7 +41,7 @@ pub(super) fn panel() -> impl Scene {
         ChatBoxRoot
         Node {
             position_type: PositionType::Absolute,
-            left: px(16),
+            left: px(PANEL_LEFT),
             bottom: px(16),
             width: px(PANEL_WIDTH),
             flex_direction: FlexDirection::Column,

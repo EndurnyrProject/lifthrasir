@@ -442,6 +442,9 @@ pub struct GraphicsSettings {
     /// terrain/model crevices; forces MSAA off (needs the depth/normal prepass).
     /// Runs on all native backends including macOS Metal.
     pub ssao: Ssao,
+    /// Every unit's name shows without the pointer on it. Off shows a stranger's or a
+    /// monster's name only while it is hovered, targeted or Alt is held.
+    pub show_names: bool,
 }
 
 impl Default for GraphicsSettings {
@@ -459,6 +462,7 @@ impl Default for GraphicsSettings {
             shadows: true,
             dlss: DlssMode::Off,
             ssao: Ssao::Off,
+            show_names: false,
         }
     }
 }
@@ -620,13 +624,14 @@ pub struct Keybinds {
     pub party: ActionBinds,
     pub guild: ActionBinds,
     pub emote: ActionBinds,
+    pub names: ActionBinds,
     pub hotbar: [ActionBinds; 12],
 }
 
 impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
     /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q,
-    /// Cart = Alt+W, Party = P, Guild = Alt+G, Emote = Alt+M.
+    /// Cart = Alt+W, Party = P, Guild = Alt+G, Emote = Alt+M, Names = Alt+N.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -665,6 +670,10 @@ impl Default for Keybinds {
                 primary: KeyBind::modified(Modifier::Alt, "KeyM"),
                 secondary: KeyBind::UNBOUND,
             },
+            names: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "KeyN"),
+                secondary: KeyBind::UNBOUND,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -686,6 +695,7 @@ impl Keybinds {
         self.party.insert_into(&mut map, PlayerAction::Party);
         self.guild.insert_into(&mut map, PlayerAction::Guild);
         self.emote.insert_into(&mut map, PlayerAction::Emote);
+        self.names.insert_into(&mut map, PlayerAction::Names);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }

@@ -22,6 +22,8 @@ use bevy::settings::SaveSettings;
 use bevy::text::EditableText;
 use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::Activate;
+use leafwing_input_manager::prelude::ActionState;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::input::PlayerAction;
 use lifthrasir_client::domain::settings::{
     ApplySettings, AudioConfig, GraphicsSettings, KeyBind, Keybinds, Modifier,
@@ -572,6 +574,7 @@ impl Plugin for SettingsWindowPlugin {
         app.add_systems(
             Update,
             (
+                toggle_names_key,
                 capture_rebind.run_if(listening_active),
                 sync_search,
                 end_drag,
@@ -583,6 +586,28 @@ impl Plugin for SettingsWindowPlugin {
                 .chain(),
         );
     }
+}
+
+/// `PlayerAction::Names` (Alt+N) flips the show-all-names setting and saves it, with
+/// no Apply. The draft follows, so the window shows the new value and its next Apply
+/// does not undo it.
+fn toggle_names_key(
+    player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
+    mut graphics: ResMut<GraphicsSettings>,
+    mut ui: ResMut<SettingsUi>,
+    mut commands: Commands,
+) {
+    let pressed = player
+        .single()
+        .is_ok_and(|actions| actions.just_pressed(&PlayerAction::Names));
+    if !pressed {
+        return;
+    }
+    let on = !graphics.show_names;
+    graphics.show_names = on;
+    ui.draft.graphics.show_names = on;
+    ui.committed.graphics.show_names = on;
+    commands.queue(SaveSettings::IfChanged);
 }
 
 /// Spawns the (hidden) window as a top-level BSN scene so it survives state

@@ -41,6 +41,7 @@ fn pre_workspace_settings_load_with_original_groups_and_values() {
             shadows: false,
             dlss: DlssMode::Off,
             ssao: Ssao::High,
+            show_names: false,
         }
     );
     assert_eq!(
