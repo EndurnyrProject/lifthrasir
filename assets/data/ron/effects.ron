@@ -37,7 +37,8 @@
 // the entry as a whole. The layer vocabulary:
 //
 //   Str("x.str" | "x.strfx.ron")  native GRF STR or authored strfx asset.
-//   Sprite("이팩트/firewall")       looping SPR/ACT stem under `data/sprite/`.
+//   Sprite("이팩트/firewall")       SPR/ACT stem under `data/sprite/`: loops on a
+//                                 repeating unit, plays once otherwise.
 //   Shader("fire_bolt")           key into `shader_fx` below; validated at load.
 //   Bespoke("ice_wall")           key dispatched to code (ice_wall/smoke/
 //                                 emitter); never looked up in `shader_fx`.
@@ -2380,6 +2381,46 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // Monster (NPC_*) skills, after roBrowserLegacy's SkillEffect/EffectTable.
+        // Where the reference picks one of firehit1-3 / windhit1-3 at random,
+        // the first variant is used. Left out on purpose (no reference effect,
+        // or one the reference leaves undefined): 177 blind, 190 darkness (EF
+        // 184/180), 191 telekinesis (EF 198), 196/352 summon and call slaves,
+        // 331 randommove, 332 speedup, 347 undead, 660 bleeding, 663/667/677
+        // wide silence/confuse/curse, 687 allheal.
+        173: ( // NPC_SELFDESTRUCTION -- EF_SUI_EXPLOSION with a short quake.
+            visuals: [Str("sui_explosion.str")],
+            sound: Some("effect/ef_hit2.wav"),
+            placement: Caster,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+            shake: Some((amplitude: 3.0, duration_secs: 0.2)),
+        ),
+        176: (visuals: [Str("poison.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_POISON (EF_POISONATTACK)
+        178: (visuals: [Str("silence.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_SILENCEATTACK
+        179: (visuals: [Str("stun.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_STUNATTACK
+        // NPC_CURSEATTACK -- the reference leaves EF_CURSEATTACK (196) undefined;
+        // curse_explosion is the matching GRF sprite by name, not a confirmed mapping.
+        181: (visuals: [Sprite("이팩트/curse_explosion/curse_explosion")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        182: (visuals: [Str("sleep.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_SLEEPATTACK
+        184: (visuals: [], sound: Some("_hit_fist3.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_WATERATTACK (EF_COLDHIT is sound-only)
+        185: (visuals: [Str("earthhit.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_GROUNDATTACK
+        186: (visuals: [Str("firehit1.str")], sound: Some("effect/ef_firehit.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_FIREATTACK
+        187: (visuals: [Str("windhit1.str")], sound: Some("_hit_fist1.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_WINDATTACK
+        188: (visuals: [Sprite("이팩트/poisonhit")], sound: Some("effect/ef_poisonattack.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_POISONATTACK
+        189: (visuals: [Str("holyhit.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_HOLYATTACK
+        340: (visuals: [Shader("soul_strike")], sound: Some("effect/ef_soulstrike.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_DARKSTRIKE, reuses MG_SOULSTRIKE (13)
+        350: (visuals: [Str("inc_agi.strfx.ron")], sound: Some("effect/ef_incagility.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_AGIUP, reuses AL_INCAGI (29)
+        653: ( // NPC_EARTHQUAKE -- EF_NPC_EARTHQUAKE at the cell under the caster.
+            visuals: [Sprite("이팩트/어스퀘이크")],
+            sound: Some("effect/earth_quake.wav"),
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
+            repeating: false,
+            shake: Some((amplitude: 4.0, duration_secs: 0.5)),
+        ),
+        665: (visuals: [Str("wideb.str")], sound: Some("effect/wideb.wav"), placement: Caster, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_WIDEBLEEDING
+        673: (visuals: [Str("cwound.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_CRITICALWOUND
     },
     skill_units: {
         229: ( // AM_DEMONSTRATION -- burning patch on the server-owned field cell.

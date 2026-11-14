@@ -8,12 +8,15 @@
 //! ACT layer. [`sync_effect_sprites`] drives those children off the global clock,
 //! looping the animation for as long as the parent lives — the parent (a
 //! skill-unit cell) despawns the whole subtree when the server removes it.
+//! A root that also carries [`EffectSpriteOnce`] instead plays its action once
+//! from frame zero and despawns itself (one-shot skill hits).
 
 use std::collections::HashMap;
 
 use bevy::asset::LoadState;
 use bevy::prelude::*;
 
+use super::EffectAnchor;
 use crate::rendering::constants::SPRITE_WORLD_SCALE;
 use crate::rendering::layers::{LAYER_EFFECT, Z_OFFSET_PER_LAYER, layer_depth_bias, layer_order};
 use crate::rendering::set_layer_texture;
@@ -40,6 +43,41 @@ pub struct EffectSprite {
 /// May change during playback, for example for a directional attachment.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct EffectSpriteAction(pub usize);
+
+/// Plays an [`EffectSprite`]'s action once from its first frame instead of
+/// looping, then despawns the entity.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct EffectSpriteOnce;
+
+/// Game time (ms) a one-shot sprite's parts spawned: its frame zero.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct EffectSpriteStart(f32);
+
+/// Spawns a one-shot SPR/ACT effect at `anchor` (a stem under `data/sprite/`)
+/// that plays once and despawns.
+pub fn spawn_effect_sprite_once(
+    commands: &mut Commands,
+    path: &str,
+    anchor: EffectAnchor,
+    tint: Color,
+) -> Entity {
+    let translation = match anchor {
+        EffectAnchor::Position(position) => position,
+        EffectAnchor::Entity(_) => Vec3::ZERO,
+    };
+    commands
+        .spawn((
+            EffectSprite {
+                path: path.to_string(),
+                tint,
+            },
+            EffectSpriteOnce,
+            anchor,
+            Transform::from_translation(translation),
+            Visibility::default(),
+        ))
+        .id()
+}
 
 /// One ACT-layer quad of a spawned [`EffectSprite`]. `part` indexes into the
 /// current frame's `parts`; the handle is kept per part so several different
@@ -100,20 +138,27 @@ pub(super) fn apply_animation_part(
 /// A missing GRF sprite otherwise fails silently (`Assets::get` simply never
 /// returns `Some`), so a `LoadState::Failed` on either handle drops the request
 /// with a warning rather than retrying forever.
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_effect_sprites(
     mut commands: Commands,
+    time: Res<Time>,
     asset_server: Res<AssetServer>,
     mut assets: ResMut<EffectSpriteAssets>,
     mut bank: SpriteAssetBank,
     mut materials: ResMut<Assets<StandardMaterial>>,
     shared_quad: Option<Res<SharedSpriteQuad>>,
-    requests: Query<(Entity, &EffectSprite, Option<&EffectSpriteAction>)>,
+    requests: Query<(
+        Entity,
+        &EffectSprite,
+        Option<&EffectSpriteAction>,
+        Has<EffectSpriteOnce>,
+    )>,
 ) {
     let Some(shared_quad) = shared_quad else {
         return;
     };
 
-    for (entity, request, selected_action) in &requests {
+    for (entity, request, selected_action, once) in &requests {
         let action_index = selected_action.map_or(EFFECT_SPRITE_ACTION, |action| action.0);
         let Some(animation) = resolve_animation(
             &asset_server,
@@ -178,7 +223,29 @@ pub fn spawn_effect_sprites(
             ));
         }
 
+        if once {
+            commands
+                .entity(entity)
+                .insert(EffectSpriteStart(time.elapsed_secs() * 1000.0));
+        }
         commands.entity(entity).remove::<EffectSprite>();
+    }
+}
+
+type UnplayedOneShot = (
+    With<EffectSpriteOnce>,
+    Without<EffectSprite>,
+    Without<EffectSpriteStart>,
+);
+
+/// Despawns a one-shot root whose request resolved without spawning parts (a
+/// failed load or a missing action), which would otherwise live forever.
+pub fn despawn_unplayed_one_shot_sprites(
+    mut commands: Commands,
+    unplayed: Query<Entity, UnplayedOneShot>,
+) {
+    for entity in &unplayed {
+        commands.entity(entity).try_despawn();
     }
 }
 
@@ -236,10 +303,12 @@ fn resolve_animation(
 /// the selected ACT action. A part with no data at the current frame hides
 /// rather than showing stale geometry.
 pub fn sync_effect_sprites(
+    mut commands: Commands,
     time: Res<Time>,
     animations: Res<Assets<RoAnimationAsset>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     selected_actions: Query<&EffectSpriteAction>,
+    starts: Query<&EffectSpriteStart>,
     mut parts: Query<(
         &EffectSpritePart,
         &ChildOf,
@@ -261,13 +330,23 @@ pub fn sync_effect_sprites(
             visibility.set_if_neq(Visibility::Hidden);
             continue;
         };
-        if action.frames.is_empty() {
-            visibility.set_if_neq(Visibility::Hidden);
-            continue;
-        }
-
         let delay = action.delay_ms.max(1.0);
-        let frame = &action.frames[(game_time_ms / delay) as usize % action.frames.len()];
+        let frame_index = match starts.get(parent.parent()) {
+            Ok(start) => {
+                let index = ((game_time_ms - start.0) / delay) as usize;
+                if index >= action.frames.len() {
+                    commands.entity(parent.parent()).try_despawn();
+                    continue;
+                }
+                index
+            }
+            Err(_) if action.frames.is_empty() => {
+                visibility.set_if_neq(Visibility::Hidden);
+                continue;
+            }
+            Err(_) => (game_time_ms / delay) as usize % action.frames.len(),
+        };
+        let frame = &action.frames[frame_index];
 
         let Some(part) = frame.parts.get(sprite_part.part) else {
             visibility.set_if_neq(Visibility::Hidden);
@@ -392,6 +471,114 @@ mod tests {
             *app.world().get::<Visibility>(child).unwrap(),
             Visibility::Inherited
         );
+    }
+
+    #[test]
+    fn one_shot_sprite_plays_its_frames_once_then_despawns() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .add_plugins((ContentAssetsPlugin, RuntimeCorePlugin))
+            .init_resource::<EffectSpriteAssets>()
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+                100,
+            )))
+            .add_systems(
+                Update,
+                (
+                    spawn_effect_sprites,
+                    sync_effect_sprites,
+                    despawn_unplayed_one_shot_sprites,
+                )
+                    .chain(),
+            );
+        let textures: Vec<_> = (0..2)
+            .map(|_| {
+                app.world_mut()
+                    .resource_mut::<Assets<Image>>()
+                    .add(Image::default())
+            })
+            .collect();
+        let frame = |texture_index| FrameData {
+            parts: vec![FramePart {
+                texture_index,
+                transform: Mat4::IDENTITY,
+                position: Vec2::ZERO,
+                scale: Vec2::ONE,
+                texture_size: Vec2::ONE,
+                color: Color::WHITE,
+                mirror: false,
+            }],
+            ..default()
+        };
+        let animation = app
+            .world_mut()
+            .resource_mut::<Assets<RoAnimationAsset>>()
+            .add(RoAnimationAsset {
+                textures: textures.clone(),
+                actions: vec![ActionData {
+                    frames: vec![frame(0), frame(1)],
+                    delay_ms: 100.0,
+                }],
+                layer: LAYER_EFFECT,
+                sounds: vec![],
+            });
+        app.world_mut()
+            .resource_mut::<EffectSpriteAssets>()
+            .ready
+            .insert("once".into(), animation);
+        // Spawn so the next update lands on an odd global frame: a looping sprite
+        // would start on frame one there, a one-shot on frame zero.
+        app.update();
+        while !(app.world().resource::<Time>().elapsed().as_millis() / 100).is_multiple_of(2) {
+            app.update();
+        }
+        let root = spawn_effect_sprite_once(
+            &mut app.world_mut().commands(),
+            "once",
+            EffectAnchor::Position(Vec3::ZERO),
+            Color::WHITE,
+        );
+        app.world_mut().flush();
+
+        let texture_of_part = |app: &mut App| {
+            let part = app
+                .world_mut()
+                .query_filtered::<&MeshMaterial3d<StandardMaterial>, With<EffectSpritePart>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone();
+            app.world()
+                .resource::<Assets<StandardMaterial>>()
+                .get(&part)
+                .unwrap()
+                .base_color_texture
+                .clone()
+        };
+
+        app.update();
+        assert_eq!(texture_of_part(&mut app), Some(textures[0].clone()));
+        app.update();
+        assert_eq!(texture_of_part(&mut app), Some(textures[1].clone()));
+        app.update();
+        app.update();
+        assert!(
+            app.world().get_entity(root).is_err(),
+            "despawned after the last frame"
+        );
+    }
+
+    #[test]
+    fn one_shot_sprite_that_cannot_play_is_despawned() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Update, despawn_unplayed_one_shot_sprites);
+        let root = app.world_mut().spawn(EffectSpriteOnce).id();
+        app.update();
+        assert!(app.world().get_entity(root).is_err());
     }
 
     #[test]

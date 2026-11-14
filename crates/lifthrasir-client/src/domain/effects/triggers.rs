@@ -35,6 +35,7 @@ use lifthrasir_runtime::audio::events::PlaySkillSfx;
 use lifthrasir_runtime::effects::EffectAnchor;
 use lifthrasir_runtime::effects::events::PlayProceduralVfx;
 use lifthrasir_runtime::effects::playback::spawn_effect;
+use lifthrasir_runtime::effects::sprites::spawn_effect_sprite_once;
 use lifthrasir_runtime::rendering::coordinates::spawn_coords_to_world_position;
 use net_contract::events::{
     GroundSkillPlaced, SkillDamageReceived, SkillEffectShown, SpecialEffectShown,
@@ -181,10 +182,12 @@ fn resolve_gid(registry: &EntityRegistry, gid: u32) -> Option<Entity> {
     registry.get_entity(gid)
 }
 
-/// Spawn the descriptor's STR effect when it has one, returning the entity the
-/// sound should anchor to: the spawned effect if present, otherwise `fallback`
-/// (sound-only skills like Bash anchor their sound to the fallback unit).
-fn spawn_str_or_fallback(
+/// Spawn the descriptor's one-shot visuals (STR layers, and a non-repeating
+/// `Sprite` that plays once), returning the entity the sound should anchor to:
+/// the spawned STR effect if present, otherwise `fallback` (sound-only skills
+/// like Bash anchor their sound to the fallback unit). A sprite never anchors
+/// the sound, since it despawns with its last frame and would cut the wav.
+fn spawn_visuals_or_fallback(
     commands: &mut Commands,
     asset_server: &AssetServer,
     descriptor: &EffectDescriptor,
@@ -192,6 +195,7 @@ fn spawn_str_or_fallback(
     fallback: Entity,
     lifetime: Option<Timer>,
 ) -> Entity {
+    spawn_sprite_once(commands, descriptor, anchor);
     let mut emitter = None;
     for visual in &descriptor.visuals {
         let Visual::Str(name) = visual else {
@@ -208,6 +212,17 @@ fn spawn_str_or_fallback(
         emitter.get_or_insert(effect);
     }
     emitter.unwrap_or(fallback)
+}
+
+/// Spawn a non-repeating descriptor's `Sprite` layer as a one-shot. Repeating
+/// sprites belong to the skill-unit cells (`domain/skill_units`).
+fn spawn_sprite_once(commands: &mut Commands, descriptor: &EffectDescriptor, anchor: EffectAnchor) {
+    if descriptor.repeating {
+        return;
+    }
+    if let Some(stem) = descriptor.sprite_stem() {
+        spawn_effect_sprite_once(commands, stem, anchor, descriptor_tint(descriptor));
+    }
 }
 
 /// Play the descriptor's sound (if any) anchored to `emitter`.
@@ -313,7 +328,7 @@ pub fn on_skill_effect(
             continue;
         };
 
-        let emitter = spawn_str_or_fallback(
+        let emitter = spawn_visuals_or_fallback(
             &mut ctx.commands,
             &ctx.asset_server,
             descriptor,
@@ -453,7 +468,7 @@ pub fn on_skill_damage(
             }
         };
 
-        let emitter = spawn_str_or_fallback(
+        let emitter = spawn_visuals_or_fallback(
             &mut ctx.commands,
             &ctx.asset_server,
             descriptor,
@@ -538,6 +553,11 @@ pub fn on_ground_skill(
                     event.y as u16,
                     map_altitude.as_deref(),
                     altitude_assets.as_deref(),
+                );
+                spawn_sprite_once(
+                    &mut ctx.commands,
+                    descriptor,
+                    EffectAnchor::Position(position),
                 );
                 load_effect(&ctx.asset_server, descriptor).map(|effect| {
                     spawn_effect(
@@ -627,6 +647,7 @@ mod tests {
     use lifthrasir_assets::catalogs::effect::EffectDataAsset;
     use lifthrasir_runtime::audio::events::ControlSkillSfx;
     use lifthrasir_runtime::effects::playback::despawn_finished_effects;
+    use lifthrasir_runtime::effects::sprites::{EffectSprite, EffectSpriteOnce};
     use lifthrasir_runtime::effects::{ActiveEffect, EffectLifetime};
     use std::time::Duration;
 
@@ -1262,6 +1283,83 @@ mod tests {
         let positions = position_anchored(&mut app);
         assert_eq!(positions.len(), 1, "one landing effect spawned at the cell");
         assert_eq!(positions[0], spawn_coords_to_world_position(40, 50));
+    }
+
+    #[test]
+    fn sprite_skill_damage_spawns_a_one_shot_sprite_on_the_target() {
+        let mut app = test_app();
+        app.insert_resource(skill_catalog(
+            900_002,
+            EffectDescriptor {
+                visuals: vec![lifthrasir_data::Visual::Sprite("이팩트/poisonhit".into())],
+                placement: EffectPlacement::Target,
+                color: [1.0, 1.0, 1.0, 1.0],
+                ..Default::default()
+            },
+        ));
+        app.add_systems(Update, on_skill_damage);
+        let target = spawn_unit(&mut app, 200);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(SkillDamageReceived {
+            skill_id: 900_002,
+            missed: false,
+            level: 1,
+            src_id: 100,
+            target_id: 200,
+            server_tick: 0,
+            damage: 10,
+            div: 1,
+            type_: 0,
+            src_delay: 0,
+            dst_delay: 0,
+        });
+        app.update();
+
+        let sprites: Vec<_> = app
+            .world_mut()
+            .query_filtered::<(&EffectSprite, &EffectAnchor), With<EffectSpriteOnce>>()
+            .iter(app.world())
+            .map(|(sprite, anchor)| (sprite.path.clone(), *anchor))
+            .collect();
+        assert_eq!(sprites.len(), 1);
+        assert_eq!(sprites[0].0, "이팩트/poisonhit");
+        assert!(matches!(sprites[0].1, EffectAnchor::Entity(e) if e == target));
+    }
+
+    #[test]
+    fn sprite_ground_skill_spawns_a_one_shot_sprite_at_the_cell() {
+        let mut app = test_app();
+        app.insert_resource(skill_catalog(
+            900_003,
+            EffectDescriptor {
+                visuals: vec![lifthrasir_data::Visual::Sprite("이팩트/quake".into())],
+                placement: EffectPlacement::Ground,
+                color: [1.0, 1.0, 1.0, 1.0],
+                ..Default::default()
+            },
+        ));
+        app.add_systems(Update, on_ground_skill);
+        let _src = spawn_unit(&mut app, 100);
+
+        app.world_mut().write_message(GroundSkillPlaced {
+            skill_id: 900_003,
+            src_id: 100,
+            level: 1,
+            x: 40,
+            y: 50,
+            server_tick: 0,
+        });
+        app.update();
+
+        let anchors: Vec<_> = app
+            .world_mut()
+            .query_filtered::<&EffectAnchor, With<EffectSpriteOnce>>()
+            .iter(app.world())
+            .copied()
+            .collect();
+        let cell = spawn_coords_to_world_position(40, 50);
+        assert!(matches!(anchors[..], [EffectAnchor::Position(p)] if p == cell));
     }
 
     #[test]

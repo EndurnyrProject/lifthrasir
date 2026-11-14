@@ -9,7 +9,10 @@ use super::procedural::{
     VfxSystems, ambient::MapAmbientVfxPlugin, impact::ImpactVfxPlugin, portal::PortalVfxPlugin,
     skill_fx::SkillFxPlugin,
 };
-use super::sprites::{EffectSpriteAssets, spawn_effect_sprites, sync_effect_sprites};
+use super::sprites::{
+    EffectSpriteAssets, despawn_unplayed_one_shot_sprites, spawn_effect_sprites,
+    sync_effect_sprites,
+};
 use bevy::prelude::*;
 use bevy_hanabi::{EffectAsset, HanabiPlugin};
 use lifthrasir_assets::animation::SpriteProcessingSystems;
@@ -45,7 +48,11 @@ impl Plugin for EffectsPlaybackPlugin {
             (
                 finalize_frozen_ice_assets.after(SpriteProcessingSystems::Dispatch),
                 sync_frozen_overlays,
-                (spawn_effect_sprites, sync_effect_sprites)
+                (
+                    spawn_effect_sprites,
+                    sync_effect_sprites,
+                    despawn_unplayed_one_shot_sprites,
+                )
                     .chain()
                     .after(SpriteProcessingSystems::Dispatch),
                 apply_body_state_tint,
