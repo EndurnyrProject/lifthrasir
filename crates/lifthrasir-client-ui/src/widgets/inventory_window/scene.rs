@@ -16,7 +16,7 @@ use lifthrasir_ui::widgets::primitives::{
 };
 
 use crate::screens::shared::{
-    DANGER_TINT, Ring, cycle_box, flush_button, search_field, slot_frame, thousands, usable,
+    DANGER_TINT, Ring, badge, cycle_box, flush_button, search_field, slot_frame, thousands, usable,
     weight_meter,
 };
 use crate::widgets::inventory_window::{
@@ -365,13 +365,13 @@ pub(crate) fn slot_marks(view: &CellView, icon: f32, badges: bool) -> Vec<Box<dy
     }
     if view.refine > 0 {
         marks.push(Box::new(bsn! {
-            @badge(format!("+{}", view.refine), ro_dark::BRONZE_LIGHT)
+            @badge(format!("+{}", view.refine), 10.5, ro_dark::BRONZE_LIGHT)
             Node { left: px(3), top: px(2) }
         }));
     }
     if view.amount > 1 {
         marks.push(Box::new(bsn! {
-            @badge(thousands(view.amount.into()), ro_dark::VALUE)
+            @badge(thousands(view.amount.into()), 10.5, ro_dark::VALUE)
             Node { right: px(3), bottom: px(2) }
         }));
     }
@@ -418,15 +418,6 @@ fn damage_wash() -> impl Scene {
         }
         BackgroundColor({ro_dark::HP.with_alpha(0.24)})
         @ignore_picking()
-    }
-}
-
-/// A corner label over the icon. The caller pins it with `left`/`right`/`top`/`bottom`.
-fn badge(text: String, color: Color) -> impl Scene {
-    bsn! {
-        @chrome_text(text, 10.5, color)
-        TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
-        Node { position_type: PositionType::Absolute }
     }
 }
 

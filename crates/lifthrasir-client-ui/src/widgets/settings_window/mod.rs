@@ -20,6 +20,8 @@ use lifthrasir_client::domain::settings::{
     Modifier, resolution_label, resolution_next, resolution_prev,
 };
 
+use crate::screens::shared::keycap_label;
+
 pub mod scene;
 
 /// Which slot of an action's bindings a rebind capture targets.
@@ -753,40 +755,6 @@ fn is_modifier_key(key: KeyCode) -> bool {
 /// the exact format `key_code_from_name` parses back when the bind is applied.
 fn keybind_from_capture(modifier: Modifier, key: KeyCode) -> KeyBind {
     KeyBind::modified(modifier, format!("{key:?}"))
-}
-
-/// Human-readable name for a stored key. Strips the `Key`/`Digit` prefixes the
-/// `KeyCode` reflect names carry ("KeyA" → "A", "Digit1" → "1"); other names
-/// pass through ("Insert", "Space", "F5").
-fn key_display(name: &str) -> &str {
-    name.strip_prefix("Key")
-        .or_else(|| name.strip_prefix("Digit"))
-        .unwrap_or(name)
-}
-
-/// The keycap label for a slot: the bound key (with modifier prefix, e.g.
-/// "Alt + A"), or "—" when the slot is empty.
-fn keycap_label(bind: &KeyBind) -> String {
-    if !bind.is_bound() {
-        return "—".to_string();
-    }
-    let key = key_display(&bind.key);
-    match modifier_label(bind.modifier) {
-        Some(modifier) => format!("{modifier} + {key}"),
-        None => key.to_string(),
-    }
-}
-
-/// Short label for a modifier in a chord display; `None` for an unmodified key.
-fn modifier_label(modifier: Modifier) -> Option<&'static str> {
-    let label = match modifier {
-        Modifier::None => return None,
-        Modifier::Alt => "Alt",
-        Modifier::Control => "Ctrl",
-        Modifier::Shift => "Shift",
-        Modifier::Super => "Super",
-    };
-    Some(label)
 }
 
 /// Whether a rebind capture is in progress (gates `capture_rebind`).

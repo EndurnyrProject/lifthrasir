@@ -1977,6 +1977,16 @@ pub struct SkillInfo {
     pub job_id: u32,
     #[prost(uint32, tag = "13")]
     pub splash_radius: u32,
+    /// Base cast time in milliseconds for each level, index 0 = level 1, up to
+    /// max_level. It is the cast of a caster with no DEX or INT, no equipment
+    /// bonuses and no statuses, so the real cast is this or shorter. Empty when
+    /// every level is instant.
+    #[prost(uint32, repeated, tag = "14")]
+    pub cast_time: ::prost::alloc::vec::Vec<u32>,
+    /// Cooldown in milliseconds for each level, index 0 = level 1, up to
+    /// max_level. Empty when no level has one.
+    #[prost(uint32, repeated, tag = "15")]
+    pub cooldown: ::prost::alloc::vec::Vec<u32>,
 }
 /// Client -> server, spend one skill point to learn/raise a skill (replaces RO CZ_UPGRADE_SKILLLEVEL 0x0112).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3854,6 +3864,10 @@ pub struct SkillUnitGroupState {
     /// Scribble bytes; empty for other skill units.
     #[prost(bytes = "vec", tag = "12")]
     pub message: ::prost::alloc::vec::Vec<u8>,
+    /// Visual sub-unit chosen at placement (Ground Drift: wind 0, dark 1, poison 2,
+    /// water 3, fire 4); 0 for other skill units.
+    #[prost(uint32, tag = "13")]
+    pub unit_variant: u32,
 }
 /// Server -> client, an authoritative replacement for the observer's complete
 /// active visible skill-unit set.
@@ -5985,6 +5999,8 @@ pub enum SkillCastFailureReason {
     /// A production skill lacks its materials, cannot fit the product, or the
     /// attempt failed (Create Deadly Poison).
     StuffInsufficient = 21,
+    /// Coin or spirit-ball shortfall for Gunslinger-classed casters.
+    Coins = 22,
 }
 impl SkillCastFailureReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -6015,6 +6031,7 @@ impl SkillCastFailureReason {
             Self::Failed => "SKILL_CAST_FAILURE_REASON_FAILED",
             Self::FullstripCoated => "SKILL_CAST_FAILURE_REASON_FULLSTRIP_COATED",
             Self::StuffInsufficient => "SKILL_CAST_FAILURE_REASON_STUFF_INSUFFICIENT",
+            Self::Coins => "SKILL_CAST_FAILURE_REASON_COINS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -6044,6 +6061,7 @@ impl SkillCastFailureReason {
             "SKILL_CAST_FAILURE_REASON_STUFF_INSUFFICIENT" => {
                 Some(Self::StuffInsufficient)
             }
+            "SKILL_CAST_FAILURE_REASON_COINS" => Some(Self::Coins),
             _ => None,
         }
     }

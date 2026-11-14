@@ -201,6 +201,8 @@ mod tests {
                         inf_type: 0,
                         job_id,
                         splash_radius: 0,
+                        cast_time: vec![],
+                        cooldown: vec![],
                     };
                     (skill_id, node)
                 })

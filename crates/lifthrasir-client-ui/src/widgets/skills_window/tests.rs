@@ -35,6 +35,8 @@ fn node(level: u32, max_level: u32, job_id: u32) -> SkillNode {
         inf_type: 0,
         job_id,
         splash_radius: 0,
+        cast_time: vec![],
+        cooldown: vec![],
     }
 }
 
@@ -55,6 +57,8 @@ fn tree(entries: &[(u32, SkillNode)]) -> SkillTreeState {
                 inf_type: n.inf_type,
                 job_id: n.job_id,
                 splash_radius: n.splash_radius,
+                cast_time: n.cast_time.clone(),
+                cooldown: n.cooldown.clone(),
             },
         );
     }
@@ -472,6 +476,46 @@ fn an_active_skill_above_level_one_offers_its_cast_level() {
         })
     );
     assert!(view.stats.contains(&("Target", "Enemy".to_string())));
+}
+
+#[test]
+fn details_time_a_skill_at_its_cast_level() {
+    let mut bolt = with_inf(node(3, 10, 7), 1);
+    bolt.cast_time = vec![800, 1200, 1600];
+    bolt.cooldown = vec![0, 0, 2500];
+    let t = tree(&[(19, bolt), (42, with_inf(node(1, 10, 7), 1))]);
+    let (staging, gates) = (SkillPanelStaging::default(), gates(50, 3));
+    let mut cast_levels = SkillCastLevels::default();
+    let timing = |skill, cast_levels: &SkillCastLevels| {
+        let sources = details::Sources {
+            tree: &t,
+            staging: &staging,
+            gates: &gates,
+            cast_levels,
+            catalog: None,
+            registry: None,
+        };
+        let stats = details::detail_view(skill, &sources).unwrap().stats;
+        let value = |label| {
+            stats
+                .iter()
+                .find(|(name, _)| *name == label)
+                .unwrap()
+                .1
+                .clone()
+        };
+        (value("Cast"), value("Cooldown"))
+    };
+
+    assert_eq!(timing(19, &cast_levels), ("1.6s".into(), "2.5s".into()));
+    assert_eq!(
+        timing(42, &cast_levels),
+        ("Instant".into(), "\u{2014}".into()),
+        "the server lists no timing for it"
+    );
+
+    cast_levels.set(19, 2, 3);
+    assert_eq!(timing(19, &cast_levels), ("1.2s".into(), "\u{2014}".into()));
 }
 
 fn skills_app() -> App {

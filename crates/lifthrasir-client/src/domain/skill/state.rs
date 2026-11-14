@@ -25,6 +25,28 @@ pub struct SkillNode {
     pub inf_type: u32,
     pub job_id: u32,
     pub splash_radius: u16,
+    /// Base cast time in milliseconds per level (index 0 = level 1), before DEX, INT,
+    /// equipment and statuses shorten it. Empty when every level is instant.
+    pub cast_time: Vec<u32>,
+    /// Cooldown in milliseconds per level (index 0 = level 1). Empty when it has none.
+    pub cooldown: Vec<u32>,
+}
+
+impl SkillNode {
+    /// Base cast time in milliseconds at `level`; 0 is instant.
+    pub fn cast_time_at(&self, level: u32) -> u32 {
+        at_level(&self.cast_time, level)
+    }
+
+    /// Cooldown in milliseconds at `level`; 0 is none.
+    pub fn cooldown_at(&self, level: u32) -> u32 {
+        at_level(&self.cooldown, level)
+    }
+}
+
+fn at_level(per_level: &[u32], level: u32) -> u32 {
+    let index = level.saturating_sub(1) as usize;
+    per_level.get(index).copied().unwrap_or(0)
 }
 
 #[auto_add_system(
@@ -57,6 +79,8 @@ pub fn apply_skill_list(
                     inf_type: s.type_,
                     job_id: s.job_id,
                     splash_radius: s.splash_radius,
+                    cast_time: s.cast_time.clone(),
+                    cooldown: s.cooldown.clone(),
                 },
             )
         })
@@ -92,6 +116,8 @@ mod tests {
             req_job_level: 5,
             job_id,
             splash_radius,
+            cast_time: vec![800, 1200],
+            cooldown: vec![],
         }
     }
 
@@ -125,5 +151,28 @@ mod tests {
         let node41 = tree.skills.get(&41).expect("skill 41 present");
         assert_eq!(node41.inf_type, 16);
         assert_eq!(node41.splash_radius, 2);
+    }
+
+    #[test]
+    fn a_node_times_each_level_and_reads_a_missing_one_as_none() {
+        let mut app = App::new();
+        app.add_message::<SkillListReceived>()
+            .init_resource::<SkillTreeState>()
+            .add_systems(Update, apply_skill_list);
+        app.world_mut().write_message(SkillListReceived {
+            skills: vec![skill(40, 1, 7)],
+        });
+        app.update();
+
+        let node = &app.world().resource::<SkillTreeState>().skills[&40];
+        assert_eq!(node.cast_time_at(1), 800);
+        assert_eq!(node.cast_time_at(2), 1200);
+        assert_eq!(node.cast_time_at(3), 0, "past the list");
+        assert_eq!(
+            node.cast_time_at(0),
+            800,
+            "an unlearned skill reads level 1"
+        );
+        assert_eq!(node.cooldown_at(2), 0, "no cooldown at any level");
     }
 }

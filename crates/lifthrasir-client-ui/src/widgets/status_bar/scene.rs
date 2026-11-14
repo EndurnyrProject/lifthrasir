@@ -17,7 +17,7 @@ use super::{
     ApRow, Banner, BarAction, Fill, LowPulse, Plate, PlateHost, PortraitRing, StatusBarRoot,
     StatusTip, Trail, hide_tip, on_bar_button, show_tip,
 };
-use crate::screens::shared::{overline, plate_button, tooltip};
+use crate::screens::shared::{hud_plate, overline, plate_button, plate_sheen, tooltip};
 use crate::widgets::status_icons;
 
 /// Gap between the bar and the screen's top-left corner.
@@ -86,48 +86,15 @@ pub(super) fn plate_edge(glow: f32) -> BorderColor {
     BorderColor::all(ro_dark::BUTTON_STROKE.mix(&LEVEL_GLOW, glow))
 }
 
-/// The slate plate both sizes are laid out on.
+/// The slate plate both sizes are laid out on. Its shadow is the one the level-up
+/// glow is added to.
 fn plate(size: Vec2) -> impl Scene {
-    let slate = BackgroundGradient::from(LinearGradient::to_bottom(vec![
-        ColorStop::new(ro_dark::TOOLTIP_BODY.with_alpha(0.92), percent(0)),
-        ColorStop::new(ro_dark::INSET.with_alpha(0.92), percent(100)),
-    ]));
-    let rim = ro_dark::WINDOW_OUTLINE.with_alpha(0.8);
-    let (shadow, edge) = (plate_shadow(0.0), plate_edge(0.0));
+    let shadow = plate_shadow(0.0);
     bsn! {
         Plate
-        Node {
-            width: px(size.x),
-            height: px(size.y),
-            border: px(1),
-            border_radius: BorderRadius::all(px(8)),
-            position_type: PositionType::Relative,
-        }
-        slate
-        edge
-        Outline { width: px(1), offset: px(0), color: rim }
+        @hud_plate()
+        Node { width: px(size.x), height: px(size.y) }
         shadow
-        Pickable
-    }
-}
-
-/// The light caught along the plate's top edge.
-fn sheen() -> impl Scene {
-    let light = BackgroundGradient::from(LinearGradient::to_right(vec![
-        ColorStop::new(ro_dark::BRONZE_LIGHT.with_alpha(0.0), percent(0)),
-        ColorStop::new(ro_dark::BRONZE_LIGHT.with_alpha(0.7), percent(50)),
-        ColorStop::new(ro_dark::BRONZE_LIGHT.with_alpha(0.0), percent(100)),
-    ]));
-    bsn! {
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(10),
-            right: px(10),
-            top: px(-1),
-            height: px(1),
-        }
-        light
-        @ignore_picking()
     }
 }
 
@@ -138,7 +105,7 @@ pub(super) fn full() -> impl Scene {
         @plate(FULL)
         Node { padding: {UiRect::axes(px(11), px(9))}, column_gap: px(12) }
         Children [
-            @sheen()
+            @plate_sheen()
             --
             @avatar(72.0, true)
             Node { margin: {UiRect::top(px(4))} }
@@ -179,7 +146,7 @@ pub(super) fn mini() -> impl Scene {
             padding: {UiRect::new(px(7), px(7), px(6), px(8))},
         }
         Children [
-            @sheen()
+            @plate_sheen()
             --
             @avatar(34.0, false)
             --

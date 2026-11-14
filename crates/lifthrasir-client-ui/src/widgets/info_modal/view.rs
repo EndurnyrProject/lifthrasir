@@ -1183,6 +1183,8 @@ mod tests {
             inf_type,
             job_id: 1,
             splash_radius: 0,
+            cast_time: vec![],
+            cooldown: vec![],
         }
     }
 

@@ -8,7 +8,7 @@ use net_contract::state::ZoneSession;
 use crate::core::state::GameState;
 use crate::domain::world::plugin::ZoneDomainAutoPlugin;
 
-use crate::domain::hotbar::model::Hotbar;
+use crate::domain::hotbar::model::{Hotbar, Page};
 
 #[derive(Resource, Default)]
 #[auto_init_resource(plugin = ZoneDomainAutoPlugin)]
@@ -31,11 +31,27 @@ fn hotbar_path(char_id: u32) -> PathBuf {
     hotbar_dir().join(format!("{char_id}.ron"))
 }
 
+/// The save file from before the bar had pages: one row of slots.
+#[derive(serde::Deserialize)]
+struct SinglePageHotbar {
+    slots: Page,
+}
+
+/// Reads a saved bar. A single-page save becomes the first page.
+fn parse_hotbar(text: &str) -> Hotbar {
+    if let Ok(old) = ron::from_str::<SinglePageHotbar>(text) {
+        let mut hotbar = Hotbar::default();
+        hotbar.pages[0] = old.slots;
+        return hotbar;
+    }
+    ron::from_str(text).unwrap_or_default()
+}
+
 fn read_hotbar(path: &Path) -> Hotbar {
     let Ok(text) = std::fs::read_to_string(path) else {
         return Hotbar::default();
     };
-    ron::from_str(&text).unwrap_or_default()
+    parse_hotbar(&text)
 }
 
 fn write_hotbar(path: &Path, hotbar: &Hotbar) {
@@ -157,6 +173,25 @@ mod tests {
         assert_eq!(bar, restored);
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn single_page_save_loads_into_the_first_page() {
+        let old = "(slots:(Some(Skill(40)),None,Some(Item(501)),None,None,None,None,None,None,None,None,None))";
+        let bar = parse_hotbar(old);
+        assert_eq!(bar.get(0), Some(HotbarSlot::Skill(40)));
+        assert_eq!(bar.get(2), Some(HotbarSlot::Item(501)));
+        assert_eq!((bar.page, bar.two_rows, bar.locked), (0, false, false));
+    }
+
+    #[test]
+    fn paged_save_keeps_its_view_state() {
+        let mut bar = Hotbar::default();
+        bar.assign(13, HotbarSlot::Skill(7));
+        bar.page = 1;
+        bar.two_rows = true;
+        bar.locked = true;
+        assert_eq!(parse_hotbar(&ron::to_string(&bar).unwrap()), bar);
     }
 
     #[test]

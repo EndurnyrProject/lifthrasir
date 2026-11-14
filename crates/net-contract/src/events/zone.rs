@@ -451,6 +451,11 @@ pub struct ZoneSkillInfo {
     pub req_job_level: u32,
     pub job_id: u32,
     pub splash_radius: u16,
+    /// Base cast time in milliseconds per level (index 0 = level 1): the cast with no
+    /// DEX or INT, equipment bonuses or statuses. Empty when every level is instant.
+    pub cast_time: Vec<u32>,
+    /// Cooldown in milliseconds per level (index 0 = level 1). Empty when it has none.
+    pub cooldown: Vec<u32>,
 }
 
 /// The full learned-skill list.

@@ -206,6 +206,7 @@ mod tests {
             phase: net::SkillUnitPhase::Active as i32,
             message: vec![],
             cells,
+            unit_variant: 0,
         }
     }
 

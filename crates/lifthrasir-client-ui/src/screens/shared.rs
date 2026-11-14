@@ -1,6 +1,8 @@
 //! Helpers any menu screen can use: number formatting, header pieces and the layout
 //! and state helpers for the RO-dark art buttons.
 
+use std::time::Duration;
+
 use bevy::color::{Luminance, Mix};
 use bevy::input_focus::InputFocus;
 use bevy::picking::hover::Hovered;
@@ -11,6 +13,7 @@ use bevy::text::{
 };
 use bevy::ui::ShadowStyle;
 use bevy::ui_widgets::{Button, TextInput};
+use lifthrasir_client::domain::settings::{KeyBind, Modifier};
 use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::placeholder::Placeholder;
@@ -846,6 +849,115 @@ pub fn disabled_checkbox(label: &'static str) -> impl Scene {
     }
 }
 
+/// The countdown of a timed effect: `9s`, `1:52`, `2h`.
+pub fn clock(remaining: Duration) -> String {
+    let secs = remaining.as_secs();
+    match secs {
+        3600.. => format!("{}h", secs / 3600),
+        60.. => format!("{}:{:02}", secs / 60, secs % 60),
+        _ => format!("{secs}s"),
+    }
+}
+
+/// A length of time in seconds, from milliseconds, without trailing zeros: `2s`,
+/// `1.5s`, `0.25s`.
+pub fn seconds(millis: u32) -> String {
+    let secs = format!("{:.2}", millis as f32 / 1000.0);
+    format!("{}s", secs.trim_end_matches('0').trim_end_matches('.'))
+}
+
+/// Human-readable name for a stored key. Strips the `Key`/`Digit` prefixes the
+/// `KeyCode` reflect names carry ("KeyA" → "A", "Digit1" → "1"); other names
+/// pass through ("Insert", "Space", "F5").
+fn key_display(name: &str) -> &str {
+    name.strip_prefix("Key")
+        .or_else(|| name.strip_prefix("Digit"))
+        .unwrap_or(name)
+}
+
+/// The keycap label for a bind: the bound key (with modifier prefix, e.g.
+/// "Alt + A"), or "—" when nothing is bound.
+pub fn keycap_label(bind: &KeyBind) -> String {
+    if !bind.is_bound() {
+        return "—".to_string();
+    }
+    let key = key_display(&bind.key);
+    match modifier_label(bind.modifier) {
+        Some(modifier) => format!("{modifier} + {key}"),
+        None => key.to_string(),
+    }
+}
+
+/// Short label for a modifier in a chord display; `None` for an unmodified key.
+fn modifier_label(modifier: Modifier) -> Option<&'static str> {
+    let label = match modifier {
+        Modifier::None => return None,
+        Modifier::Alt => "Alt",
+        Modifier::Control => "Ctrl",
+        Modifier::Shift => "Shift",
+        Modifier::Super => "Super",
+    };
+    Some(label)
+}
+
+/// A corner label over a slot's icon. The caller pins it with
+/// `left`/`right`/`top`/`bottom`.
+pub fn badge(text: String, size: f32, color: Color) -> impl Scene {
+    bsn! {
+        @chrome_text(text, size, color)
+        TextShadow { offset: Vec2::splat(1.0), color: Color::BLACK }
+        Node { position_type: PositionType::Absolute }
+    }
+}
+
+/// The slate plate the HUD's bars are laid out on. The caller sizes and fills it.
+pub fn hud_plate() -> impl Scene {
+    let slate = BackgroundGradient::from(LinearGradient::to_bottom(vec![
+        ColorStop::new(ro_dark::TOOLTIP_BODY.with_alpha(0.92), percent(0)),
+        ColorStop::new(ro_dark::INSET.with_alpha(0.92), percent(100)),
+    ]));
+    let rim = ro_dark::WINDOW_OUTLINE.with_alpha(0.8);
+    let shadow = BoxShadow::new(
+        Color::BLACK.with_alpha(0.6),
+        Val::ZERO,
+        px(6),
+        Val::ZERO,
+        px(16),
+    );
+    bsn! {
+        Node {
+            border: px(1),
+            border_radius: BorderRadius::all(px(8)),
+            position_type: PositionType::Relative,
+        }
+        slate
+        BorderColor::all(ro_dark::BUTTON_STROKE)
+        Outline { width: px(1), offset: px(0), color: rim }
+        shadow
+        Pickable
+    }
+}
+
+/// The light caught along the top edge of a [`hud_plate`].
+pub fn plate_sheen() -> impl Scene {
+    let light = BackgroundGradient::from(LinearGradient::to_right(vec![
+        ColorStop::new(ro_dark::BRONZE_LIGHT.with_alpha(0.0), percent(0)),
+        ColorStop::new(ro_dark::BRONZE_LIGHT.with_alpha(0.7), percent(50)),
+        ColorStop::new(ro_dark::BRONZE_LIGHT.with_alpha(0.0), percent(100)),
+    ]));
+    bsn! {
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(10),
+            right: px(10),
+            top: px(-1),
+            height: px(1),
+        }
+        light
+        @ignore_picking()
+    }
+}
+
 /// RO colour codes were authored for a white window, so dark hues are mixed towards
 /// white until they reach 4.5:1 contrast on the RO-dark window body.
 pub fn slate_ink(color: Color) -> Color {
@@ -874,6 +986,21 @@ mod tests {
         assert_eq!(Load::of(1799, 2000), Load::Heavy);
         assert_eq!(Load::of(1800, 2000), Load::Overweight);
         assert_eq!(Load::of(0, 0), Load::Light);
+    }
+
+    #[test]
+    fn seconds_drop_trailing_zeros() {
+        assert_eq!(seconds(2000), "2s");
+        assert_eq!(seconds(1500), "1.5s");
+        assert_eq!(seconds(250), "0.25s");
+        assert_eq!(seconds(10_000), "10s");
+    }
+
+    #[test]
+    fn clock_shortens_with_the_time_left() {
+        assert_eq!(clock(Duration::from_secs(9)), "9s");
+        assert_eq!(clock(Duration::from_secs(112)), "1:52");
+        assert_eq!(clock(Duration::from_secs(2 * 3600 + 5)), "2h");
     }
 
     #[test]

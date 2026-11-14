@@ -425,6 +425,8 @@ mod tests {
                 inf_type: 0,
                 job_id: 1,
                 splash_radius: 0,
+                cast_time: vec![],
+                cooldown: vec![],
             },
         );
         app.insert_resource(SkillTreeState { skills });
@@ -523,6 +525,8 @@ mod tests {
                     inf_type: 0,
                     job_id: 1,
                     splash_radius: 0,
+                    cast_time: vec![],
+                    cooldown: vec![],
                 },
             );
     }

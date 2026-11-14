@@ -24,11 +24,11 @@ use lifthrasir_client::domain::entities::character::states::status_icons::{
 use lifthrasir_ui::theme::{self, ro_dark};
 use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
 
-use crate::screens::shared::tooltip_frame;
+use crate::screens::shared::{clock, tooltip_frame};
 use crate::widgets::status_bar::HudSettings;
 use crate::widgets::status_icons::presentation::{StatusPresentation, resolve_status_presentation};
 use crate::widgets::status_icons::scene::{
-    BLINK_THRESHOLD, TIMER_ROOM, blink_alpha, clock, diff_efsts, format_remaining, icon_size,
+    BLINK_THRESHOLD, TIMER_ROOM, blink_alpha, diff_efsts, format_remaining, icon_size,
 };
 
 /// Ink of a countdown in its final seconds.

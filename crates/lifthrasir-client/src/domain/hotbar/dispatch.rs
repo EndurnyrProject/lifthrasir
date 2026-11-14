@@ -24,16 +24,29 @@ pub struct HotbarSlotActivated {
 )]
 pub fn activate_from_keys(
     player: Query<&ActionState<PlayerAction>, With<LocalPlayer>>,
+    hotbar: Res<Hotbar>,
+    keys: Res<ButtonInput<KeyCode>>,
     mut activated: MessageWriter<HotbarSlotActivated>,
 ) {
     let Ok(state) = player.single() else {
         return;
     };
+    let row = second_row_held(&hotbar, &keys);
     for (i, action) in HOTBAR_ACTIONS.iter().enumerate() {
         if state.just_pressed(action) {
-            activated.write(HotbarSlotActivated { index: i });
+            activated.write(HotbarSlotActivated {
+                index: hotbar.index(row, i),
+            });
         }
     }
+}
+
+/// The row a slot key fires: the second one while Shift is held and it is on show.
+// NOTE: Shift is read raw, so the second row cannot be rebound and a slot bound to a
+// Shift chord always fires it. Give the row its own `PlayerAction`s if that matters.
+fn second_row_held(hotbar: &Hotbar, keys: &ButtonInput<KeyCode>) -> usize {
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    usize::from(hotbar.two_rows && shift)
 }
 
 #[auto_add_system(
@@ -186,39 +199,62 @@ mod tests {
         assert!(chats(&app).is_empty());
     }
 
-    #[test]
-    fn no_player_entity_does_not_panic() {
+    fn keys_app() -> App {
         let mut app = App::new();
         app.add_message::<HotbarSlotActivated>()
+            .init_resource::<Hotbar>()
+            .init_resource::<ButtonInput<KeyCode>>()
             .add_systems(Update, activate_from_keys);
-        app.update();
-
-        let msgs: Vec<HotbarSlotActivated> = app
-            .world()
-            .resource::<Messages<HotbarSlotActivated>>()
-            .iter_current_update_messages()
-            .cloned()
-            .collect();
-        assert!(msgs.is_empty());
+        app
     }
 
-    #[test]
-    fn slot3_just_pressed_emits_activated_index_2() {
-        let mut app = App::new();
-        app.add_message::<HotbarSlotActivated>()
-            .add_systems(Update, activate_from_keys);
+    fn press_slot3(app: &mut App) {
         let mut state = ActionState::<PlayerAction>::default();
         state.press(&PlayerAction::Slot3);
         app.world_mut().spawn((LocalPlayer, state));
         app.update();
+    }
 
-        let msgs: Vec<HotbarSlotActivated> = app
-            .world()
+    fn activated(app: &App) -> Vec<usize> {
+        app.world()
             .resource::<Messages<HotbarSlotActivated>>()
             .iter_current_update_messages()
-            .cloned()
-            .collect();
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].index, 2);
+            .map(|message| message.index)
+            .collect()
+    }
+
+    #[test]
+    fn no_player_entity_does_not_panic() {
+        let mut app = keys_app();
+        app.update();
+        assert!(activated(&app).is_empty());
+    }
+
+    #[test]
+    fn slot3_just_pressed_emits_activated_index_2() {
+        let mut app = keys_app();
+        press_slot3(&mut app);
+        assert_eq!(activated(&app), vec![2]);
+    }
+
+    #[test]
+    fn slot_keys_fire_the_page_on_show() {
+        let mut app = keys_app();
+        app.world_mut().resource_mut::<Hotbar>().page = 1;
+        press_slot3(&mut app);
+        assert_eq!(activated(&app), vec![14]);
+    }
+
+    #[test]
+    fn shift_fires_the_second_row_only_while_it_is_on_show() {
+        for (two_rows, expected) in [(true, 14), (false, 2)] {
+            let mut app = keys_app();
+            app.world_mut().resource_mut::<Hotbar>().two_rows = two_rows;
+            app.world_mut()
+                .resource_mut::<ButtonInput<KeyCode>>()
+                .press(KeyCode::ShiftLeft);
+            press_slot3(&mut app);
+            assert_eq!(activated(&app), vec![expected]);
+        }
     }
 }

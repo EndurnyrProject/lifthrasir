@@ -103,7 +103,8 @@ pub fn skill_cast_failed(f: net::SkillCastFailed) -> SkillCastFailed {
         net::SkillCastFailureReason::NeedEquipment => SkillCastFailureReason::NeedEquipment,
         net::SkillCastFailureReason::Failed
         | net::SkillCastFailureReason::FullstripCoated
-        | net::SkillCastFailureReason::StuffInsufficient => SkillCastFailureReason::Failed,
+        | net::SkillCastFailureReason::StuffInsufficient
+        | net::SkillCastFailureReason::Coins => SkillCastFailureReason::Failed,
     };
 
     SkillCastFailed {
@@ -149,6 +150,8 @@ fn skill_info(s: net::SkillInfo) -> ZoneSkillInfo {
         req_job_level: s.req_job_level,
         job_id: s.job_id,
         splash_radius: s.splash_radius as u16,
+        cast_time: s.cast_time,
+        cooldown: s.cooldown,
     }
 }
 
@@ -326,6 +329,8 @@ mod tests {
                     req_job_level: 8,
                     job_id: 4002,
                     splash_radius: 0,
+                    cast_time: vec![],
+                    cooldown: vec![],
                 },
                 net::SkillInfo {
                     skill_id: 6,
@@ -341,6 +346,8 @@ mod tests {
                     req_job_level: 0,
                     job_id: 0,
                     splash_radius: 2,
+                    cast_time: vec![],
+                    cooldown: vec![],
                 },
             ],
         });
@@ -359,6 +366,21 @@ mod tests {
         assert_eq!(received.skills[1].skill_id, 6);
         assert!(!received.skills[1].upgradable);
         assert_eq!(received.skills[1].splash_radius, 2);
+    }
+
+    #[test]
+    fn skill_list_keeps_per_level_cast_time_and_cooldown() {
+        let received = skill_list(net::SkillList {
+            skills: vec![net::SkillInfo {
+                skill_id: 19,
+                cast_time: vec![800, 1200],
+                cooldown: vec![0, 2000],
+                ..Default::default()
+            }],
+        });
+
+        assert_eq!(received.skills[0].cast_time, vec![800, 1200]);
+        assert_eq!(received.skills[0].cooldown, vec![0, 2000]);
     }
 
     #[test]

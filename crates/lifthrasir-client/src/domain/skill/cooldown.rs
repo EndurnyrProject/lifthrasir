@@ -22,6 +22,11 @@ impl SkillCooldownTracker {
     pub fn remaining_secs(&self, id: u32) -> Option<f32> {
         self.remaining.get(&id).map(Timer::remaining_secs)
     }
+
+    /// How much of the cooldown is still to run, from 1 down to 0.
+    pub fn fraction_remaining(&self, id: u32) -> Option<f32> {
+        self.remaining.get(&id).map(Timer::fraction_remaining)
+    }
 }
 
 #[auto_add_system(

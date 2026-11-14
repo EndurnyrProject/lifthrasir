@@ -1,9 +1,10 @@
 //! The rebuilt read-outs of the Skills window: the details of the selected skill and
 //! the footer with the point bank and the plan buttons.
 //!
-//! NOTE: the design also lists per-level effect values, cast time, cooldown and AP. The
-//! client knows none of them, so the panel shows SP cost, range and target only. Add
-//! the rows once the catalog or the protocol carries that data.
+//! NOTE: the design also lists per-level effect values and AP. The client knows
+//! neither, so the panel shows SP cost, range, target, the base cast time (before DEX,
+//! INT, equipment and statuses shorten it) and the cooldown. Add the rows once the
+//! catalog or the protocol carries that data.
 
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
@@ -17,7 +18,7 @@ use lifthrasir_ui::widgets::chrome::{chrome_text, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{BUTTON_SHADOW, ButtonArt, divider, divider_diamond};
 
 use crate::screens::shared::{
-    Ring, flush_button, overline, slate_lines, slot_frame, small_button, usable,
+    Ring, flush_button, overline, seconds, slate_lines, slot_frame, small_button, usable,
 };
 use crate::widgets::info_modal::description;
 use crate::widgets::info_modal::view::{ColoredLine, level_value};
@@ -126,11 +127,21 @@ pub(super) fn detail_view(skill_id: u32, sources: &Sources) -> Option<DetailView
             Form::Supportive => "Supportive",
             _ => "Active",
         };
+        let cast = match node.cast_time_at(cast_level) {
+            0 => "Instant".to_string(),
+            cast => seconds(cast),
+        };
+        let cooldown = match node.cooldown_at(cast_level) {
+            0 => DASH.to_string(),
+            cooldown => seconds(cooldown),
+        };
         vec![
             ("SP", value_or_dash(level_value(sp_costs, cast_level))),
             ("Range", range.map_or(DASH.to_string(), cells)),
             ("Target", target_label(node.inf_type).to_string()),
             ("Type", kind.to_string()),
+            ("Cast", cast),
+            ("Cooldown", cooldown),
         ]
     };
     let requires = node

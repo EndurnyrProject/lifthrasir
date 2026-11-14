@@ -479,6 +479,8 @@ mod tests {
                     inf_type: 0,
                     job_id: 0,
                     splash_radius: 2,
+                    cast_time: vec![],
+                    cooldown: vec![],
                 },
             );
         *app.world_mut().resource_mut::<TargetingMode>() = TargetingMode::AwaitingGround {
@@ -632,6 +634,8 @@ mod tests {
                     inf_type: 0,
                     job_id: 0,
                     splash_radius: 2,
+                    cast_time: vec![],
+                    cooldown: vec![],
                 },
             );
 

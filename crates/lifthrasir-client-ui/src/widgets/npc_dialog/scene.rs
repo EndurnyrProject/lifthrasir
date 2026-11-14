@@ -17,6 +17,7 @@ use lifthrasir_ui::widgets::primitives::{
 use net_contract::dto::NpcDialogExpect;
 
 use crate::screens::shared::{colored_lines, key_cap};
+use crate::widgets::hotbar::{HOTBAR_BOTTOM, HOTBAR_HEIGHT};
 use crate::widgets::npc_dialog::{
     ActiveNpcDialog, DIGITS, FooterButtonAction, MenuOption, NpcDialogLog, NpcDialogRoot,
     NpcInputField, ShownWhileTyping, Speaker, Typewriter, TypingLabel, on_footer_button,
@@ -26,7 +27,7 @@ use crate::widgets::npc_dialog::{
 const WIDTH: f32 = 640.0;
 /// Gap under the window's shape. The artboard draws 22 on an empty screen; this
 /// clears the hotbar, which the window would otherwise cover.
-const BOTTOM: f32 = 100.0;
+const BOTTOM: f32 = HOTBAR_BOTTOM + HOTBAR_HEIGHT + 8.0;
 const LOG_WIDTH: f32 = 620.0;
 const LOG_MAX_HEIGHT: f32 = 190.0;
 /// Past the end of any log, so the panel opens on its latest line. Layout clamps it.
