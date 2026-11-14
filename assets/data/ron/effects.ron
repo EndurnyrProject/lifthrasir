@@ -2689,6 +2689,18 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // Potion use. Aesir plays these on the user from the item id
+        // (Mmo.ItemManagement.UseEffect); 220 is also fired by Manuk's and
+        // similar food scripts. Native STRs; the drink sound Potion Pitcher uses.
+        204: (visuals: [Str("빨간포션.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION1
+        205: (visuals: [Str("주홍포션.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION2
+        206: (visuals: [Str("노란포션.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION3
+        207: (visuals: [Str("하얀포션.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION4
+        208: (visuals: [Str("파란포션.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION5
+        209: (visuals: [Str("초록포션.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION6
+        218: (visuals: [Str("집중.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION_CON
+        219: (visuals: [Str("각성.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION_
+        220: (visuals: [Str("버서크.str")], sound: Some("se_drink_potion.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_POTION_BERSERK
         252: ( // EF_REFLECTSHIELD -- Reflect Shield's reactive proc flash on
                // the reflecting unit (aesir Unit.SpecialEffect); reuses the
                // authored skill-252 asset.
