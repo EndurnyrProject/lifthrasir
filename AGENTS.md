@@ -178,6 +178,21 @@ cargo build --release
 cargo run -p lifthrasir
 ```
 
+### Editor MCP (agents co-authoring maps)
+
+The map editor can serve itself to AI agents over MCP. It is opt-in and
+listens on localhost only:
+
+```bash
+cargo run -p lifthrasir-editor -- --mcp            # http://127.0.0.1:7700/mcp
+cargo run -p lifthrasir-editor -- --mcp --mcp-port 7800
+claude mcp add --transport http lifthrasir http://127.0.0.1:7700/mcp
+```
+
+Agent edits land in the editor's own undo history as one `Agent: <tool>` entry
+each, and wait while a mouse button is held. Tools live in
+`apps/lifthrasir-editor/src/mcp/`; a port that cannot be bound exits the editor.
+
 ### Game assets (Lifthrasir pak)
 
 The runtime does **not** read GRF archives. All game content loads from a

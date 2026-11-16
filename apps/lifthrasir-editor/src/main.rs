@@ -1,7 +1,8 @@
 //! `cargo run -p lifthrasir-editor`, from the repository root.
 //!
 //! Composes the shared content stack like the runtime's `content_viewer`
-//! example, then adds egui, mesh picking and the editor plugins.
+//! example, then adds egui, mesh picking and the editor plugins. `--mcp`
+//! (optionally `--mcp-port <n>`) also serves the editor to agents over MCP.
 
 use bevy::{
     gltf::GltfPlugin, image::ImageSamplerDescriptor, picking::mesh_picking::MeshPickingPlugin,
@@ -16,6 +17,7 @@ use lifthrasir_assets::{
 use lifthrasir_editor::{
     EditorPaths,
     map::MapEditorPlugin,
+    mcp::{McpPlugin, parse_mcp_args},
     shell::{EditorShellPlugin, gizmo::GizmoPlugin},
 };
 use lifthrasir_runtime::ContentRuntimePlugins;
@@ -24,6 +26,7 @@ use std::sync::{Arc, RwLock};
 const LOADER_CONFIG: &str = "assets/loader.toml";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mcp_port = parse_mcp_args(std::env::args().skip(1))?;
     let text = std::fs::read_to_string(LOADER_CONFIG)
         .map_err(|error| format!("reading {LOADER_CONFIG}: {error}"))?;
     let config: AssetConfig =
@@ -78,6 +81,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         MapEditorPlugin,
     ))
     .insert_resource(EditorPaths::from_config(&config));
+    if let Some(port) = mcp_port {
+        app.add_plugins(McpPlugin { port });
+    }
 
     match app.run() {
         AppExit::Success => Ok(()),
