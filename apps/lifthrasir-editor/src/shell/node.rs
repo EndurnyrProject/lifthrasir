@@ -242,6 +242,27 @@ pub fn light_entity(world: &World, node: Entity) -> Option<Entity> {
     })
 }
 
+/// [`node_kind`] for callers holding the world instead of queries.
+pub fn kind_of(world: &World, node: Entity) -> Option<NodeKind> {
+    if world.get::<LifPropRef>(node).is_some() {
+        return Some(NodeKind::Prop);
+    }
+    if world.get::<LifAudioEmitter>(node).is_some() {
+        return Some(NodeKind::Sound);
+    }
+    if world.get::<LifEffectEmitter>(node).is_some() {
+        return Some(NodeKind::Effect);
+    }
+    let light = light_entity(world, node)?;
+    if world.get::<DirectionalLight>(light).is_some() {
+        return Some(NodeKind::Sun);
+    }
+    if world.get::<SpotLight>(light).is_some() {
+        return Some(NodeKind::SpotLight);
+    }
+    Some(NodeKind::PointLight)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

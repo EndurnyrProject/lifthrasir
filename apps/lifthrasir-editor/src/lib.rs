@@ -1,6 +1,7 @@
 //! Lifthrasir map editor: edits map glbs through the runtime's own scene.
 
 pub mod map;
+pub mod mcp;
 pub mod shell;
 
 use bevy::prelude::*;
