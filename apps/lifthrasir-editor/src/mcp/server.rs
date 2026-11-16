@@ -2,11 +2,11 @@
 //! into a [`Call`] for the Bevy world and waits for its reply; rmcp's default
 //! config accepts only loopback `Host` headers (DNS rebinding protection).
 
-use super::call::{AgentCall, AgentOutput, AgentResult, Call};
+use super::call::{AgentCall, AgentOutput, AgentResult, Call, NewMapToolParams, OpenMapParams};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rmcp::{
     ErrorData, ServerHandler,
-    handler::server::router::tool::ToolRouter,
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig},
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
@@ -62,6 +62,43 @@ impl EditorMcp {
     #[tool(description = "Redo the entry undo last reverted.")]
     async fn redo(&self) -> Result<CallToolResult, ErrorData> {
         self.call(Call::Redo).await
+    }
+
+    #[tool(description = "Every map the editor can open, by name.")]
+    async fn list_maps(&self) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::ListMaps).await
+    }
+
+    #[tool(
+        description = "Start opening a map (ro://maps/<name>/<name>.glb). Refused while there \
+        are unsaved edits. Returns at once; poll editor_status until operation is idle and \
+        map is set, or last_error explains a failure."
+    )]
+    async fn open_map(
+        &self,
+        Parameters(p): Parameters<OpenMapParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::OpenMap(p)).await
+    }
+
+    #[tool(
+        description = "Create a new flat, fully walkable map with one ground texture and open \
+        it. Refused while there are unsaved edits or when the name exists. Poll editor_status \
+        until it is open."
+    )]
+    async fn new_map(
+        &self,
+        Parameters(p): Parameters<NewMapToolParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::NewMap(p)).await
+    }
+
+    #[tool(
+        description = "Save the open map under its own name. Validation errors (missing \
+        assets, invalid data) come back as the tool error."
+    )]
+    async fn save_map(&self) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::SaveMap).await
     }
 }
 
@@ -132,7 +169,18 @@ mod tests {
         let tools = EditorMcp::new(tx).tool_router.list_all();
         let mut names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
         names.sort();
-        assert_eq!(names, ["editor_status", "redo", "undo"]);
+        assert_eq!(
+            names,
+            [
+                "editor_status",
+                "list_maps",
+                "new_map",
+                "open_map",
+                "redo",
+                "save_map",
+                "undo"
+            ]
+        );
         for tool in &tools {
             assert_eq!(
                 tool.input_schema.get("type"),

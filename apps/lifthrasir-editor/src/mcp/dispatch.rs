@@ -15,8 +15,11 @@ pub struct AgentInbox(pub UnboundedReceiver<AgentCall>);
 
 /// Runs every queued call, unless a mouse button is held or was released this
 /// frame (a stroke, gizmo or widget drag records its edit on release): the
-/// calls then wait. Calls whose client gave up are dropped unrun, so a retry
-/// cannot apply an edit twice.
+/// calls then wait. A call that queues a map open ends the frame's calls, so
+/// `request_open` (ordered after this system) starts loading before any later
+/// call could dirty the map and raise the human's unsaved-changes prompt.
+/// Calls whose client gave up are dropped unrun, so a retry cannot apply an
+/// edit twice.
 pub fn drain_calls(world: &mut World) {
     let gesture = world
         .get_resource::<ButtonInput<MouseButton>>()
@@ -30,7 +33,11 @@ pub fn drain_calls(world: &mut World) {
         if reply.is_closed() {
             continue;
         }
+        let opens = matches!(call, Call::OpenMap(_) | Call::NewMap(_));
         let _ = reply.send(run(world, call));
+        if opens {
+            return;
+        }
     }
 }
 

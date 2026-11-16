@@ -82,9 +82,13 @@ fn exit_on_server_error(failure: Res<McpServerError>, mut exit: MessageWriter<Ap
     exit.write(AppExit::error());
 }
 
-/// Runs agent calls from [`dispatch::AgentInbox`] every frame.
+/// Runs agent calls from [`dispatch::AgentInbox`] every frame, before the
+/// editor acts on the open requests they queue.
 pub fn dispatch_plugin(app: &mut App) {
-    app.add_systems(Update, dispatch::drain_calls);
+    app.add_systems(
+        Update,
+        dispatch::drain_calls.before(crate::map::open::StartOpening),
+    );
 }
 
 #[cfg(test)]

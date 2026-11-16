@@ -24,5 +24,9 @@ pub fn run(world: &mut World, call: Call) -> AgentResult {
         Call::Status => session::editor_status(world),
         Call::Undo => session::undo(world),
         Call::Redo => session::redo(world),
+        Call::ListMaps => session::list(world),
+        Call::OpenMap(p) => session::open(world, p),
+        Call::NewMap(p) => session::new_map(world, p),
+        Call::SaveMap => session::save_map(world),
     }
 }

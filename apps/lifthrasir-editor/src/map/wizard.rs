@@ -70,6 +70,11 @@ impl NewMapWizard {
 
     /// The form as `new_flat` parameters.
     pub fn params(&self) -> Result<NewMapParams, String> {
+        for (field, cells) in [("width", self.width), ("height", self.height)] {
+            if cells > MAX_CELLS {
+                return Err(format!("{field} {cells} exceeds {MAX_CELLS} cells"));
+            }
+        }
         let uri = self.texture_uri.clone().ok_or("pick a ground texture")?;
         let name = Path::new(&uri)
             .file_stem()

@@ -1,10 +1,18 @@
-//! Editor state, undo and redo.
+//! Editor state, maps (list, open, new, save), undo and redo.
 
 use super::kind_name;
 use crate::{
-    map::open::{EditorOperation, EditorScreen, ErrorModal, OpenMap},
+    EditorPaths,
+    map::{
+        layout::map_name_from_path,
+        open::{EditorOperation, EditorScreen, ErrorModal, OpenMap, OpenMapRequest, list_maps},
+        save::save,
+        wizard::{NewMapWizard, create},
+    },
     mcp::{
-        call::{AgentError, AgentOutput, AgentResult},
+        call::{
+            AgentError, AgentOutput, AgentResult, NewMapToolParams, OpenMapParams, PresetParam,
+        },
         coords::map_bounds,
     },
     shell::{
@@ -14,6 +22,8 @@ use crate::{
     },
 };
 use bevy::prelude::*;
+use lifthrasir_assets::source::{AssetSource, SharedCompositeAssetSource};
+use lifthrasir_tooling::converters::map::blank::LightingPreset;
 use serde_json::{Value, json};
 
 /// The open map, the current operation, history labels, the last error the
@@ -62,6 +72,88 @@ fn history(world: &World) -> AgentOutput {
         "undo_label": stack.undo_label(),
         "redo_label": stack.redo_label(),
     }))
+}
+
+/// Every map name the source holds, sorted.
+pub fn list(world: &mut World) -> AgentResult {
+    let source = world.resource::<SharedCompositeAssetSource>().0.clone();
+    let source = source
+        .read()
+        .map_err(|_| AgentError::Invalid("the ro:// source lock is poisoned".into()))?;
+    Ok(AgentOutput::json(json!({ "maps": list_maps(&*source) })))
+}
+
+/// Starts opening `path`; the agent polls `editor_status` until it is editing.
+pub fn open(world: &mut World, p: OpenMapParams) -> AgentResult {
+    refuse_if_dirty(world)?;
+    if map_name_from_path(&p.path).is_none() {
+        return Err(AgentError::Invalid(format!(
+            "'{}' is not a ro://maps/<name>/<name>.glb path",
+            p.path
+        )));
+    }
+    let exists = {
+        let source = world.resource::<SharedCompositeAssetSource>().0.clone();
+        let source = source
+            .read()
+            .map_err(|_| AgentError::Invalid("the ro:// source lock is poisoned".into()))?;
+        source.exists(p.path.trim_start_matches("ro://"))
+    };
+    if !exists {
+        return Err(AgentError::NotFound(p.path));
+    }
+    world.write_message(OpenMapRequest { path: p.path });
+    Ok(AgentOutput::json(json!({ "started": true })))
+}
+
+/// Writes a new flat map and starts opening it, like the New map wizard.
+pub fn new_map(world: &mut World, p: NewMapToolParams) -> AgentResult {
+    refuse_if_dirty(world)?;
+    let wizard = NewMapWizard {
+        name: p.name,
+        width: p.width,
+        height: p.height,
+        texture_uri: Some(p.texture),
+        heightmap: String::new(),
+        preset: match p.preset {
+            PresetParam::Outdoor => LightingPreset::Outdoor,
+            PresetParam::Indoor => LightingPreset::Indoor,
+        },
+        ..default()
+    };
+    let data_folder = world.resource::<EditorPaths>().data_folder.clone();
+    let path = {
+        let source = world.resource::<SharedCompositeAssetSource>().0.clone();
+        let source = source
+            .read()
+            .map_err(|_| AgentError::Invalid("the ro:// source lock is poisoned".into()))?;
+        create(&wizard, &*source, &data_folder).map_err(AgentError::Invalid)?
+    };
+    world.write_message(OpenMapRequest { path: path.clone() });
+    Ok(AgentOutput::json(json!({ "started": true, "path": path })))
+}
+
+/// Saves the open map under its own name. Failures go to the agent, not to
+/// the human's error modal.
+pub fn save_map(world: &mut World) -> AgentResult {
+    if world.get_resource::<OpenMap>().is_none() {
+        return Err(AgentError::NoMapOpen);
+    }
+    save(world, None).map_err(|messages| {
+        warn!("agent save failed: {}", messages.join("; "));
+        AgentError::Invalid(messages.join("; "))
+    })?;
+    let path = world.resource::<OpenMap>().path.clone();
+    Ok(AgentOutput::json(json!({ "saved": true, "path": path })))
+}
+
+fn refuse_if_dirty(world: &World) -> Result<(), AgentError> {
+    if world.resource::<UndoStack>().is_dirty() {
+        return Err(AgentError::Guarded(
+            "unsaved changes; save or undo first".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// The map being edited; `null` on the start screen and while loading.

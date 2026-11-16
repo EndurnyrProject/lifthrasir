@@ -103,6 +103,11 @@ pub enum GuardedAction {
     Quit,
 }
 
+/// Where queued [`OpenMapRequest`]s start loading; run edits that may queue an
+/// open before it so the open starts in the same frame.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StartOpening;
+
 /// The action waiting for the user to discard unsaved changes or cancel.
 #[derive(Resource, Default)]
 pub struct UnsavedGuard(pub Option<GuardedAction>);
@@ -131,7 +136,7 @@ pub(super) fn plugin(app: &mut App) {
         .add_systems(
             Update,
             (
-                request_open,
+                request_open.in_set(StartOpening),
                 request_quit,
                 finish_open
                     .after(MapSceneSystems::Readiness)
