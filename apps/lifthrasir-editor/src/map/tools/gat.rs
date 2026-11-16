@@ -540,6 +540,25 @@ fn overlay_visibility(overlay: &GatOverlay) -> Visibility {
     }
 }
 
+/// Sets `cells` of the open map to `raw_type` as one undoable step (none when
+/// no type changed); heights stay. Cells must be on the map.
+pub fn paint_region(world: &mut World, cells: &[(u32, u32)], raw_type: u32) {
+    let Some(root) = world.get_resource::<MapLayout>().map(|layout| layout.root) else {
+        return;
+    };
+    let Some(mut data) = world.get_mut::<LifMapData>(root) else {
+        return;
+    };
+    let before = data.clone();
+    let width = data.altitude.width as usize;
+    for &(x, y) in cells {
+        data.altitude.cells[y as usize * width + x as usize].cell_type =
+            GatCellType::from(raw_type);
+    }
+    refresh_gat_overlay(world, root);
+    end_stroke(world, before);
+}
+
 /// Records the stroke that started from `before` as one undoable step, when
 /// it changed a cell. The overlay already shows it (painting recolors live).
 pub fn end_stroke(world: &mut World, before: LifMapData) {

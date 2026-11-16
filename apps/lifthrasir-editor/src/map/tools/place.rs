@@ -120,22 +120,28 @@ fn snapshot(asset: &AssetRef, id: EditorNodeId, at: Vec3) -> Option<NodeSnapshot
 /// undoable step, selects the new node and returns to the Select tool with
 /// the Move gizmo.
 pub fn place(world: &mut World, asset: &AssetRef, at: Vec3) {
-    let Some(layout) = world.get_resource::<MapLayout>().cloned() else {
+    let Some(id) = spawn_placed(world, asset, at) else {
         return;
     };
+    world.resource_mut::<Selection>().0 = Some(id);
+    return_to_move(world);
+}
+
+/// Adds `asset` at world point `at` as one undoable step and returns its id;
+/// selection and tool mode stay as they are. `None` without an open map or
+/// for an asset that cannot be placed.
+pub fn spawn_placed(world: &mut World, asset: &AssetRef, at: Vec3) -> Option<EditorNodeId> {
+    let layout = world.get_resource::<MapLayout>().cloned()?;
     if !is_placeable(asset) {
-        return;
+        return None;
     }
     let id = world.resource_mut::<EditorNodeIds>().allocate();
-    let Some(snapshot) = snapshot(asset, id, at) else {
-        return;
-    };
+    let snapshot = snapshot(asset, id, at)?;
     commit(
         world,
         Box::new(SpawnNode::new(layout.root, layout.map_node, snapshot, None)),
     );
-    world.resource_mut::<Selection>().0 = Some(id);
-    return_to_move(world);
+    Some(id)
 }
 
 /// Keeps exactly one ghost, for the asset being placed, and none otherwise.

@@ -101,24 +101,26 @@ pub fn light_snapshot(
 /// undoable step, with the defaults for the map's indoor flag, selects it and
 /// returns to the Select tool with the Move gizmo, ready to position it.
 pub fn add_light(world: &mut World, kind: LightKind, hit: Vec3) {
-    let Some(layout) = world.get_resource::<MapLayout>().cloned() else {
+    let Some(id) = spawn_light(world, kind, hit + Vec3::Y * LIGHT_HEIGHT) else {
         return;
     };
-    let Some(indoor) = world
-        .get::<LifMapData>(layout.root)
-        .map(|data| data.meta.indoor)
-    else {
-        return;
-    };
+    world.resource_mut::<Selection>().0 = Some(id);
+    return_to_move(world);
+}
+
+/// Adds a `kind` light at world point `at` as one undoable step, with the
+/// defaults for the map's indoor flag, and returns its id; selection and tool
+/// mode stay as they are. `None` without an open map.
+pub fn spawn_light(world: &mut World, kind: LightKind, at: Vec3) -> Option<EditorNodeId> {
+    let layout = world.get_resource::<MapLayout>().cloned()?;
+    let indoor = world.get::<LifMapData>(layout.root)?.meta.indoor;
     let id = world.resource_mut::<EditorNodeIds>().allocate();
-    let at = hit + Vec3::Y * LIGHT_HEIGHT;
     let snapshot = light_snapshot(kind, default_light(indoor), id, at);
     commit(
         world,
         Box::new(SpawnNode::new(layout.root, layout.map_node, snapshot, None)),
     );
-    world.resource_mut::<Selection>().0 = Some(id);
-    return_to_move(world);
+    Some(id)
 }
 
 fn add_on_click(

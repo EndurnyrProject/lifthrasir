@@ -330,7 +330,7 @@ fn fail_open(world: &mut World, open: &OpenMap, error: String) {
 }
 
 /// Map names with a `maps/<n>/<n>.glb` in the source, sorted.
-fn list_maps(source: &dyn AssetSource) -> Vec<String> {
+pub(crate) fn list_maps(source: &dyn AssetSource) -> Vec<String> {
     let mut maps: Vec<String> = source
         .list_files()
         .iter()

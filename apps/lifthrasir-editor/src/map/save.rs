@@ -97,7 +97,7 @@ fn handle_save_requests(
 
 /// Collects, validates, checks references, writes, then marks the history
 /// saved. Save-as renames the open map without reloading it.
-fn save(world: &mut World, save_as: Option<&str>) -> Result<(), Vec<String>> {
+pub(crate) fn save(world: &mut World, save_as: Option<&str>) -> Result<(), Vec<String>> {
     let mut layout = world
         .get_resource::<MapLayout>()
         .cloned()

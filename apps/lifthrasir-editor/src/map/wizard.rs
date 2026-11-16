@@ -139,7 +139,7 @@ fn create_new_map(
 }
 
 /// Writes the wizard's map into `data_folder`; returns its `ro://` path.
-fn create(
+pub(crate) fn create(
     wizard: &NewMapWizard,
     source: &dyn AssetSource,
     data_folder: &Path,
