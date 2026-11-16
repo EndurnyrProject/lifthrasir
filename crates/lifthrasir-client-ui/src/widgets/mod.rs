@@ -12,6 +12,7 @@ pub mod announcement;
 pub mod card_compounding;
 pub mod character_window;
 pub mod chat_box;
+pub mod chat_room;
 pub mod cutin;
 pub mod death_dialog;
 pub mod emote;
@@ -76,6 +77,7 @@ impl Plugin for InGameHudPlugin {
         app.add_plugins(skill_target_toast::SkillTargetToastPlugin);
         app.add_plugins(cutin::CutinPlugin);
         app.add_plugins(toasts::ToastsPlugin);
+        app.add_plugins(chat_room::ChatRoomWidgetPlugin);
     }
 }
 
@@ -96,6 +98,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     status_bar::spawn_status_bar(&mut commands, root);
     character_window::shell::build(&mut commands, root);
     chat_box::spawn_chat_box(&mut commands, root);
+    chat_room::spawn_chat_room(&mut commands, root);
     emote::spawn_emote_picker(&mut commands, root);
     guild_window::spawn_guild_window(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root);

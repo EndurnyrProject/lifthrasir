@@ -3,6 +3,7 @@
 pub mod announcement;
 pub mod cart;
 pub mod character;
+pub mod chat_room;
 pub mod cutin;
 pub mod gameplay;
 pub mod guild;
@@ -23,6 +24,7 @@ pub mod zone;
 pub use announcement::*;
 pub use cart::*;
 pub use character::*;
+pub use chat_room::*;
 pub use cutin::*;
 pub use gameplay::*;
 pub use guild::*;

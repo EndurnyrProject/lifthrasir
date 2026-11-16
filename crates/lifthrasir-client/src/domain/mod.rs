@@ -3,6 +3,7 @@ pub mod authentication;
 pub mod camera;
 pub mod cart;
 pub mod character;
+pub mod chat_room;
 pub mod combat;
 pub mod effects;
 pub mod emote;

@@ -472,6 +472,7 @@ const BIND_GROUPS: [(&str, &[(PlayerAction, &str)]); 2] = [
             (PlayerAction::Party, "Party"),
             (PlayerAction::Guild, "Guild"),
             (PlayerAction::Cart, "Pushcart"),
+            (PlayerAction::ChatRoom, "New Chat Room"),
         ],
     ),
     (
@@ -517,6 +518,7 @@ fn binds(keybinds: &Keybinds, action: PlayerAction) -> &ActionBinds {
         PlayerAction::Guild => &keybinds.guild,
         PlayerAction::Emote => &keybinds.emote,
         PlayerAction::Names => &keybinds.names,
+        PlayerAction::ChatRoom => &keybinds.chat_room,
         slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -533,6 +535,7 @@ fn binds_mut(keybinds: &mut Keybinds, action: PlayerAction) -> &mut ActionBinds 
         PlayerAction::Guild => &mut keybinds.guild,
         PlayerAction::Emote => &mut keybinds.emote,
         PlayerAction::Names => &mut keybinds.names,
+        PlayerAction::ChatRoom => &mut keybinds.chat_room,
         slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }

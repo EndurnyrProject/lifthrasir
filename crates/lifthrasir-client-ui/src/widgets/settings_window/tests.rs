@@ -371,7 +371,7 @@ fn every_action_is_listed_under_its_group() {
         .iter()
         .filter(|row| matches!(row, Row::Bind { .. }))
         .count();
-    assert_eq!(actions, 22);
+    assert_eq!(actions, 23);
     assert_eq!(rows.first(), Some(&Row::BindHeader));
     assert_eq!(rows.last(), Some(&Row::BindHint));
 }
@@ -559,6 +559,7 @@ fn plain_capture_round_trips_through_the_input_map() {
         guild: ActionBinds::default(),
         emote: ActionBinds::default(),
         names: ActionBinds::default(),
+        chat_room: ActionBinds::default(),
         hotbar: Default::default(),
     };
     let expected = {
@@ -587,6 +588,7 @@ fn modified_capture_round_trips_through_the_input_map() {
         guild: ActionBinds::default(),
         emote: ActionBinds::default(),
         names: ActionBinds::default(),
+        chat_room: ActionBinds::default(),
         hotbar: Default::default(),
     };
     let expected = {

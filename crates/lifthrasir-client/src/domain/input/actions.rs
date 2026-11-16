@@ -28,6 +28,8 @@ pub enum PlayerAction {
     Emote,
     /// Toggle showing every unit's name without the pointer on it.
     Names,
+    /// Toggle the New Chat Room dialog.
+    ChatRoom,
     /// Activate hotbar slot 1 (default F1).
     Slot1,
     /// Activate hotbar slot 2 (default F2).
@@ -95,7 +97,7 @@ impl PlayerAction {
     /// `Status` is the classic RO Alt+A chord. `Inventory` is the classic RO Alt+E chord.
     /// `Skills` is the classic RO Alt+S chord. `Equipment` is the classic RO Alt+Q chord.
     /// `Cart` uses Alt+W. `Party` uses the unmodified P key. `Guild` uses Alt+G.
-    /// `Emote` uses Alt+M. `Names` uses Alt+N.
+    /// `Emote` uses Alt+M. `Names` uses Alt+N. `ChatRoom` is the classic RO Alt+C chord.
     pub fn default_input_map() -> InputMap<Self> {
         let mut map = InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
             .with(
@@ -130,6 +132,10 @@ impl PlayerAction {
             .with(
                 Self::Names,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyN),
+            )
+            .with(
+                Self::ChatRoom,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyC),
             );
         for (action, key) in HOTBAR_ACTIONS.into_iter().zip(HOTBAR_KEYS) {
             map.insert(action, key);

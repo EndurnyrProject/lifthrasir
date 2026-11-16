@@ -1,6 +1,7 @@
 pub mod action;
 pub mod cart;
 pub mod character;
+pub mod chat_room;
 pub mod equipment;
 pub mod ground;
 pub mod guild;

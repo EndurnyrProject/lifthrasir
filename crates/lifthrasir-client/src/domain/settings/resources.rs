@@ -625,13 +625,15 @@ pub struct Keybinds {
     pub guild: ActionBinds,
     pub emote: ActionBinds,
     pub names: ActionBinds,
+    pub chat_room: ActionBinds,
     pub hotbar: [ActionBinds; 12],
 }
 
 impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
     /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q,
-    /// Cart = Alt+W, Party = P, Guild = Alt+G, Emote = Alt+M, Names = Alt+N.
+    /// Cart = Alt+W, Party = P, Guild = Alt+G, Emote = Alt+M, Names = Alt+N,
+    /// ChatRoom = Alt+C.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -674,6 +676,10 @@ impl Default for Keybinds {
                 primary: KeyBind::modified(Modifier::Alt, "KeyN"),
                 secondary: KeyBind::UNBOUND,
             },
+            chat_room: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "KeyC"),
+                secondary: KeyBind::UNBOUND,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -696,6 +702,7 @@ impl Keybinds {
         self.guild.insert_into(&mut map, PlayerAction::Guild);
         self.emote.insert_into(&mut map, PlayerAction::Emote);
         self.names.insert_into(&mut map, PlayerAction::Names);
+        self.chat_room.insert_into(&mut map, PlayerAction::ChatRoom);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }

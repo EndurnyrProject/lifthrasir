@@ -1,6 +1,7 @@
 pub mod announcement;
 pub mod audio;
 pub mod cart;
+pub mod chat_room;
 pub mod combat;
 pub mod cutin;
 pub mod gameplay;

@@ -20,6 +20,7 @@ use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::ignore_picking;
 
 pub mod chat_bubbles;
+pub mod chat_room_signs;
 pub mod damage_numbers;
 #[cfg(feature = "dev")]
 pub mod debug_gizmos;
@@ -215,6 +216,7 @@ impl Plugin for WorldspaceUiPlugin {
             chat_bubbles::ChatBubblePlugin,
             progress_bar::NpcProgressBarPlugin,
             vending_boards::VendingBoardPlugin,
+            chat_room_signs::ChatRoomSignPlugin,
             scribble_labels::ScribbleLabelPlugin,
         ));
     }

@@ -1,11 +1,33 @@
 //! Outbound command Messages (client to server).
 
 use crate::dto::{
-    BuyEntry, NavigationTarget, NpcResponse, SellEntry, StorageKind, VendingBuyLine,
-    VendingCloseTarget, VendingOffer,
+    BuyEntry, ChatRoomSettings, NavigationTarget, NpcResponse, SellEntry, StorageKind,
+    VendingBuyLine, VendingCloseTarget, VendingOffer,
 };
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
+
+/// What the local player asks of chat rooms. Kick, owner change and settings only
+/// work for the owner of the room the player is in.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub enum ChatRoomCommand {
+    /// Open a room over the player's own head.
+    Create(ChatRoomSettings),
+    /// `password` is only checked for a room that is not public.
+    Join {
+        room_id: u32,
+        password: String,
+    },
+    /// Leave the room the player is in.
+    Leave,
+    Say(String),
+    /// Remove the member with this name. They cannot come back to this room.
+    Kick(String),
+    /// Hand the room to the member with this name.
+    MakeOwner(String),
+    ChangeSettings(ChatRoomSettings),
+}
 
 /// Answer a skill text request. `None` cancels the request.
 #[derive(Message, Debug, Clone)]

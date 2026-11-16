@@ -12,6 +12,7 @@ pub use crate::domain::authentication::AuthenticationPlugin;
 pub use crate::domain::camera::CameraPlugin;
 pub use crate::domain::cart::CartPlugin;
 pub use crate::domain::character::CharacterDomainPlugin;
+pub use crate::domain::chat_room::ChatRoomPlugin;
 pub use crate::domain::combat::CombatPlugin;
 pub use crate::domain::emote::EmotePlugin;
 pub use crate::domain::entities::character::UnifiedCharacterEntityPlugin;
@@ -67,6 +68,7 @@ impl PluginGroup for ClientPlugins {
             .add(VendingPlugin)
             .add(EmotePlugin)
             .add(PartyPlugin)
+            .add(ChatRoomPlugin)
             .add(GuildPlugin)
             .add(ItemDropPlugin)
             .add(EquipmentPlugin)
