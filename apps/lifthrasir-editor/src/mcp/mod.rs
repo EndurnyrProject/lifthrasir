@@ -87,7 +87,10 @@ fn exit_on_server_error(failure: Res<McpServerError>, mut exit: MessageWriter<Ap
 pub fn dispatch_plugin(app: &mut App) {
     app.add_systems(
         Update,
-        dispatch::drain_calls.before(crate::map::open::StartOpening),
+        (
+            dispatch::drain_calls.before(crate::map::open::StartOpening),
+            handlers::capture::tick_captures,
+        ),
     );
 }
 

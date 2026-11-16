@@ -5,7 +5,7 @@
 use super::call::{
     AddLightParams, AgentCall, AgentOutput, AgentResult, Call, ListAssetsParams, ListNodesParams,
     MapSettingsParams, NewMapToolParams, NodeRef, OpenMapParams, PlaceParams, RegionQuery,
-    UpdateNodeParams,
+    TopDownParams, UpdateNodeParams,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rmcp::{
@@ -211,6 +211,26 @@ impl EditorMcp {
     ) -> Result<CallToolResult, ErrorData> {
         self.call(Call::SetMapSettings(p)).await
     }
+
+    #[tool(
+        description = "A 1280x720 PNG of what the editor camera sees right now (without the \
+        editor's panels). Use it to judge how an area looks."
+    )]
+    async fn screenshot(&self) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::Screenshot).await
+    }
+
+    #[tool(
+        description = "A PNG of a GAT rectangle seen from straight above, orthographic, north \
+        (+y) at the top and +x to the right. px_per_cell in the reply maps pixels to cells; \
+        pixel (0, 0) is cell [min.x, max.y]. Use it to check placement and painting."
+    )]
+    async fn render_top_down(
+        &self,
+        Parameters(p): Parameters<TopDownParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::RenderTopDown(p)).await
+    }
 }
 
 impl EditorMcp {
@@ -296,7 +316,9 @@ mod tests {
                 "place_asset",
                 "query_region",
                 "redo",
+                "render_top_down",
                 "save_map",
+                "screenshot",
                 "set_map_settings",
                 "undo",
                 "update_node"

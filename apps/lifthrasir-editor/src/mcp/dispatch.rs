@@ -33,6 +33,14 @@ pub fn drain_calls(world: &mut World) {
         if reply.is_closed() {
             continue;
         }
+        if let Some(busy) = busy(world).filter(|_| !matches!(call, Call::Status)) {
+            let _ = reply.send(Err(AgentError::Busy(busy)));
+            continue;
+        }
+        if matches!(call, Call::Screenshot | Call::RenderTopDown(_)) {
+            handlers::capture::start(world, call, reply);
+            continue;
+        }
         let opens = matches!(call, Call::OpenMap(_) | Call::NewMap(_));
         let _ = reply.send(run(world, call));
         if opens {
@@ -44,11 +52,6 @@ pub fn drain_calls(world: &mut World) {
 /// Runs one call and folds whatever it pushed into one `Agent: <tool>` entry.
 /// Undo and redo move existing entries, so they keep their labels.
 fn run(world: &mut World, call: Call) -> AgentResult {
-    if let Some(busy) = busy(world)
-        && !matches!(call, Call::Status)
-    {
-        return Err(AgentError::Busy(busy));
-    }
     if matches!(call, Call::Undo | Call::Redo) {
         return handlers::run(world, call);
     }

@@ -33,6 +33,8 @@ pub enum Call {
     UpdateNode(Box<UpdateNodeParams>),
     DeleteNode(NodeRef),
     SetMapSettings(MapSettingsParams),
+    Screenshot,
+    RenderTopDown(TopDownParams),
 }
 
 impl Call {
@@ -56,8 +58,19 @@ impl Call {
             Call::UpdateNode(_) => "update_node",
             Call::DeleteNode(_) => "delete_node",
             Call::SetMapSettings(_) => "set_map_settings",
+            Call::Screenshot => "screenshot",
+            Call::RenderTopDown(_) => "render_top_down",
         }
     }
+}
+
+/// A GAT rectangle to render from above, inclusive.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct TopDownParams {
+    /// The corner with the smallest x and y, as a GAT cell [x, y].
+    pub min: [u32; 2],
+    /// The corner with the largest x and y, as a GAT cell [x, y].
+    pub max: [u32; 2],
 }
 
 /// A placeable asset: a prop model, a sound or an effect (see list_assets).
@@ -75,6 +88,7 @@ pub enum AssetParam {
 /// Where to put a new node: exactly one of `cell` and `world`.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PlaceParams {
+    /// What to place.
     pub asset: AssetParam,
     /// Stand it on the walk surface at the centre of this GAT cell [x, y].
     #[serde(default)]
@@ -84,6 +98,7 @@ pub struct PlaceParams {
     pub world: Option<[f32; 3]>,
 }
 
+/// A light kind add_light can create.
 #[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LightKindParam {
@@ -94,6 +109,7 @@ pub enum LightKindParam {
 /// A new point or spot light with the map's default values.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AddLightParams {
+    /// Point (all directions) or spot (a downward cone).
     pub kind: LightKindParam,
     /// Above the centre of this GAT cell [x, y]; exactly one of `cell`, `world`.
     #[serde(default)]
@@ -109,7 +125,9 @@ pub struct AddLightParams {
 /// Changes to one node; omitted fields stay as they are.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct UpdateNodeParams {
+    /// The node to change (from list_nodes or the call that created it).
     pub node_id: u64,
+    /// A new display name.
     #[serde(default)]
     pub name: Option<String>,
     /// Move onto the walk surface at the centre of this GAT cell [x, y].
@@ -124,10 +142,13 @@ pub struct UpdateNodeParams {
     /// Scale per axis (props only).
     #[serde(default)]
     pub scale: Option<[f32; 3]>,
+    /// Prop fields (props only).
     #[serde(default)]
     pub prop: Option<PropPatch>,
+    /// Sound fields (sound emitters only).
     #[serde(default)]
     pub sound: Option<SoundPatch>,
+    /// Effect fields (effect emitters only).
     #[serde(default)]
     pub effect: Option<EffectPatch>,
     /// Light fields (point, spot or sun).
@@ -135,22 +156,27 @@ pub struct UpdateNodeParams {
     pub light: Option<LightPatch>,
 }
 
+/// Prop fields; omitted ones stay.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct PropPatch {
     /// A `ro://models/...glb` model from list_assets.
     #[serde(default)]
     pub model: Option<String>,
+    /// The model's animation mode (0 = none).
     #[serde(default)]
     pub anim_type: Option<u32>,
+    /// Animation speed multiplier.
     #[serde(default)]
     pub anim_speed: Option<f32>,
 }
 
+/// Sound emitter fields; omitted ones stay.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct SoundPatch {
     /// A `ro://data/wav/...wav` file from list_assets.
     #[serde(default)]
     pub file: Option<String>,
+    /// Volume, 0..=1.
     #[serde(default)]
     pub volume: Option<f32>,
     /// Hearing range in world units.
@@ -161,17 +187,21 @@ pub struct SoundPatch {
     pub cycle: Option<f32>,
 }
 
+/// Effect emitter fields; omitted ones stay.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct EffectPatch {
     /// An effect catalog id from list_assets.
     #[serde(default)]
     pub effect_type: Option<u32>,
+    /// How fast the effect re-emits.
     #[serde(default)]
     pub emit_speed: Option<f32>,
+    /// The effect's four free parameters.
     #[serde(default)]
     pub params: Option<[f32; 4]>,
 }
 
+/// Light fields; omitted ones stay. Each applies only to the kinds named.
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct LightPatch {
     /// sRGB color, each channel 0..=1.

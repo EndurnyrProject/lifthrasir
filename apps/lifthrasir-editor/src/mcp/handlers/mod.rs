@@ -1,10 +1,11 @@
 //! One handler per tool. Each validates everything before its first change.
 
+pub mod capture;
 pub mod objects;
 pub mod query;
 pub mod session;
 
-use super::call::{AgentResult, Call};
+use super::call::{AgentError, AgentResult, Call};
 use crate::shell::node::NodeKind;
 use bevy::prelude::*;
 
@@ -40,5 +41,8 @@ pub fn run(world: &mut World, call: Call) -> AgentResult {
         Call::UpdateNode(p) => objects::update_node(world, *p),
         Call::DeleteNode(p) => objects::delete_node(world, p),
         Call::SetMapSettings(p) => objects::set_map_settings(world, p),
+        Call::Screenshot | Call::RenderTopDown(_) => Err(AgentError::Invalid(
+            "captures reply from the render; dispatch starts them".into(),
+        )),
     }
 }
