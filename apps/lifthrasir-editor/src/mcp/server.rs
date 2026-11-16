@@ -3,9 +3,10 @@
 //! config accepts only loopback `Host` headers (DNS rebinding protection).
 
 use super::call::{
-    AddLightParams, AgentCall, AgentOutput, AgentResult, Call, ColorParams, ListAssetsParams,
-    ListNodesParams, MapSettingsParams, NewMapToolParams, NodeRef, OpenMapParams, PaintTilesParams,
-    PlaceParams, RegionQuery, SculptParams, TopDownParams, UpdateNodeParams, WallParams,
+    AddLightParams, AgentCall, AgentOutput, AgentResult, AutoGatParams, Call, ColorParams,
+    GatParams, ListAssetsParams, ListNodesParams, MapSettingsParams, NewMapToolParams, NodeRef,
+    OpenMapParams, PaintTilesParams, PlaceParams, RegionQuery, SculptParams, TopDownParams,
+    UpdateNodeParams, WallParams, WaterParams,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rmcp::{
@@ -212,6 +213,34 @@ impl EditorMcp {
         self.call(Call::SetMapSettings(p)).await
     }
 
+    #[tool(description = "Add or remove water on ground tiles.")]
+    async fn paint_water(
+        &self,
+        Parameters(p): Parameters<WaterParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::PaintWater(p)).await
+    }
+
+    #[tool(
+        description = "Paint GAT cells: 0: walkable, 1: blocked, 2: walkable, 3: walkable water, 4: walkable, 5: blocked, snipable, 6: walkable."
+    )]
+    async fn paint_gat(
+        &self,
+        Parameters(p): Parameters<GatParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::PaintGat(p)).await
+    }
+
+    #[tool(
+        description = "Regenerate GAT cell heights and walkability from terrain, water and props."
+    )]
+    async fn auto_gat(
+        &self,
+        Parameters(p): Parameters<AutoGatParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::AutoGat(p)).await
+    }
+
     #[tool(description = "Sculpt terrain around a GAT cell, with radius in GAT cells.")]
     async fn sculpt(
         &self,
@@ -339,6 +368,7 @@ mod tests {
             [
                 "add_light",
                 "add_wall",
+                "auto_gat",
                 "delete_node",
                 "editor_status",
                 "get_node",
@@ -348,8 +378,10 @@ mod tests {
                 "map_summary",
                 "new_map",
                 "open_map",
+                "paint_gat",
                 "paint_tiles",
                 "paint_vertex_color",
+                "paint_water",
                 "place_asset",
                 "query_region",
                 "redo",

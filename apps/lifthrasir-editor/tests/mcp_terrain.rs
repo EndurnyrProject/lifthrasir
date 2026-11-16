@@ -208,3 +208,179 @@ fn add_wall_between_non_adjacent_tiles_is_invalid() {
     assert_eq!(app.world().resource::<UndoStack>().depth(), depth);
     assert_eq!(document(&mut app, &layout, false), before);
 }
+
+#[test]
+fn paint_water_on_a_dry_map_is_one_undoable_step() {
+    use lifthrasir_editor::mcp::call::WaterParams;
+    use lifthrasir_runtime::world::LifMapData;
+    let folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(folder.path());
+    let layout = common::open_fixture(&mut app);
+    {
+        let mut data = app.world_mut().get_mut::<LifMapData>(layout.root).unwrap();
+        data.water = None;
+        data.water_tiles.clear();
+    }
+    let before = document(&mut app, &layout, false);
+    run_edit(
+        &mut app,
+        &tx,
+        Call::PaintWater(WaterParams {
+            tiles: vec![[0, 0]],
+            add: true,
+        }),
+    );
+    assert_eq!(
+        app.world()
+            .get::<LifMapData>(layout.root)
+            .unwrap()
+            .water_tiles,
+        vec![(0, 0)]
+    );
+    undo(app.world_mut());
+    assert_eq!(document(&mut app, &layout, false), before);
+}
+
+#[test]
+fn paint_gat_is_one_undoable_step() {
+    use lifthrasir_editor::mcp::{call::GatParams, coords::Region};
+    use lifthrasir_runtime::world::LifMapData;
+    let folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(folder.path());
+    let layout = common::open_fixture(&mut app);
+    let before = document(&mut app, &layout, false);
+    run_edit(
+        &mut app,
+        &tx,
+        Call::PaintGat(GatParams {
+            region: Region::Cells(vec![[0, 0]]),
+            raw_type: 5,
+        }),
+    );
+    assert_eq!(
+        app.world()
+            .get::<LifMapData>(layout.root)
+            .unwrap()
+            .altitude
+            .cells[0]
+            .cell_type
+            .raw(),
+        5
+    );
+    undo(app.world_mut());
+    assert_eq!(document(&mut app, &layout, false), before);
+}
+
+#[test]
+fn auto_gat_is_one_undoable_step() {
+    use lifthrasir_editor::mcp::call::AutoGatParams;
+    use lifthrasir_runtime::world::LifMapData;
+    use ro_formats::gat::GatCellType;
+    let folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(folder.path());
+    let layout = common::open_fixture(&mut app);
+    app.world_mut()
+        .get_mut::<LifMapData>(layout.root)
+        .unwrap()
+        .altitude
+        .cells[0]
+        .cell_type = GatCellType::from(5);
+    let before = document(&mut app, &layout, false);
+    run_edit(
+        &mut app,
+        &tx,
+        Call::AutoGat(AutoGatParams {
+            set_heights: true,
+            set_walkability: true,
+            block_under_water: false,
+            block_props: false,
+        }),
+    );
+    assert_ne!(
+        app.world()
+            .get::<LifMapData>(layout.root)
+            .unwrap()
+            .altitude
+            .cells[0]
+            .cell_type
+            .raw(),
+        5
+    );
+    undo(app.world_mut());
+    assert_eq!(document(&mut app, &layout, false), before);
+}
+
+#[test]
+fn paint_gat_with_an_unknown_raw_type_is_invalid() {
+    use lifthrasir_editor::mcp::{call::GatParams, coords::Region};
+    let folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(folder.path());
+    let layout = common::open_fixture(&mut app);
+    let before = document(&mut app, &layout, false);
+    let depth = app.world().resource::<UndoStack>().depth();
+    assert!(matches!(
+        call(
+            &mut app,
+            &tx,
+            Call::PaintGat(GatParams {
+                region: Region::Cells(vec![[0, 0]]),
+                raw_type: 7
+            })
+        ),
+        Err(AgentError::Invalid(_))
+    ));
+    assert_eq!(app.world().resource::<UndoStack>().depth(), depth);
+    assert_eq!(document(&mut app, &layout, false), before);
+}
+
+#[test]
+fn removing_water_from_a_dry_map_is_invalid() {
+    use lifthrasir_editor::mcp::call::WaterParams;
+    use lifthrasir_runtime::world::LifMapData;
+    let folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(folder.path());
+    let layout = common::open_fixture(&mut app);
+    {
+        let mut data = app.world_mut().get_mut::<LifMapData>(layout.root).unwrap();
+        data.water = None;
+        data.water_tiles.clear();
+    }
+    let before = document(&mut app, &layout, false);
+    let depth = app.world().resource::<UndoStack>().depth();
+    assert!(matches!(
+        call(
+            &mut app,
+            &tx,
+            Call::PaintWater(WaterParams {
+                tiles: vec![[0, 0]],
+                add: false
+            })
+        ),
+        Err(AgentError::Invalid(_))
+    ));
+    assert_eq!(app.world().resource::<UndoStack>().depth(), depth);
+    assert_eq!(document(&mut app, &layout, false), before);
+}
+
+#[test]
+fn water_tiles_outside_the_ground_grid_are_rejected_without_changes() {
+    use lifthrasir_editor::mcp::call::WaterParams;
+    let folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(folder.path());
+    let layout = common::open_fixture(&mut app);
+    let before = document(&mut app, &layout, false);
+    let depth = app.world().resource::<UndoStack>().depth();
+    assert!(matches!(
+        call(
+            &mut app,
+            &tx,
+            Call::PaintWater(WaterParams {
+                tiles: vec![[0, 0], [2, 0]],
+                add: true
+            })
+        ),
+        Err(AgentError::OutOfBounds(_))
+    ));
+    assert_eq!(app.world().resource::<UndoStack>().depth(), depth);
+    assert_eq!(document(&mut app, &layout, false), before);
+}

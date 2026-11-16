@@ -25,6 +25,9 @@ pub fn kind_name(kind: NodeKind) -> &'static str {
 /// Runs `call` against the world.
 pub fn run(world: &mut World, call: Call) -> AgentResult {
     match call {
+        Call::PaintWater(p) => terrain::paint_water(world, p),
+        Call::PaintGat(p) => terrain::paint_gat(world, p),
+        Call::AutoGat(p) => terrain::auto_gat(world, p),
         Call::PaintTiles(p) => terrain::paint_tiles(world, p),
         Call::AddWall(p) => terrain::add_wall(world, p),
         Call::PaintVertexColor(p) => terrain::paint_vertex_color(world, p),

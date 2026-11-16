@@ -16,6 +16,9 @@ pub struct AgentCall {
 /// Every tool an agent can call, with its parameters.
 #[derive(Debug)]
 pub enum Call {
+    PaintWater(WaterParams),
+    PaintGat(GatParams),
+    AutoGat(AutoGatParams),
     AddWall(WallParams),
     PaintVertexColor(ColorParams),
     Sculpt(SculptParams),
@@ -45,6 +48,9 @@ impl Call {
     /// The MCP tool name; also the undo label suffix (`Agent: <name>`).
     pub fn name(&self) -> &'static str {
         match self {
+            Call::PaintWater(_) => "paint_water",
+            Call::PaintGat(_) => "paint_gat",
+            Call::AutoGat(_) => "auto_gat",
             Call::AddWall(_) => "add_wall",
             Call::PaintVertexColor(_) => "paint_vertex_color",
             Call::Sculpt(_) => "sculpt",
@@ -448,4 +454,35 @@ pub enum AgentError {
     Invalid(String),
     #[error("refused: {0}")]
     Guarded(String),
+}
+
+/// Paint water on ground tiles.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WaterParams {
+    /// Ground tiles to paint.
+    pub tiles: Vec<[u32; 2]>,
+    /// Add rather than remove water.
+    pub add: bool,
+}
+
+/// Paint GAT cell types in a region.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct GatParams {
+    /// GAT cells to paint.
+    pub region: super::coords::Region,
+    /// Raw GAT cell type.
+    pub raw_type: u32,
+}
+
+/// Regenerate GAT cell heights and walkability.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct AutoGatParams {
+    /// Conform GAT heights to terrain.
+    pub set_heights: bool,
+    /// Recompute walkability.
+    pub set_walkability: bool,
+    /// Block cells under water.
+    pub block_under_water: bool,
+    /// Block cells occupied by props.
+    pub block_props: bool,
 }

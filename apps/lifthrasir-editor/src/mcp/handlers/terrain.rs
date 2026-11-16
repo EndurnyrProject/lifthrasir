@@ -151,3 +151,67 @@ pub fn paint_vertex_color(world: &mut World, p: crate::mcp::call::ColorParams) -
         json!({"changed": world.resource::<UndoStack>().depth() > depth}),
     ))
 }
+
+pub fn paint_water(world: &mut World, p: crate::mcp::call::WaterParams) -> AgentResult {
+    use crate::map::tools::water;
+    let bounds = coords::map_bounds(world)? / 2;
+    let tiles = p
+        .tiles
+        .into_iter()
+        .map(|tile| coords::in_bounds(coords::from_wire(tile), bounds))
+        .collect::<Result<Vec<_>, _>>()?;
+    let root = world.resource::<MapLayout>().root;
+    let data = world.get::<LifMapData>(root).ok_or(AgentError::NoMapOpen)?;
+    if data.water.is_none() && !p.add {
+        return Err(AgentError::Invalid(
+            "cannot remove water from a dry map".into(),
+        ));
+    }
+    let depth = world.resource::<UndoStack>().depth();
+    if data.water.is_none() {
+        water::add_water(world);
+    }
+    let data = world.get::<LifMapData>(root).ok_or(AgentError::NoMapOpen)?;
+    let water = data.water.clone();
+    let tiles = water::paint_tiles(
+        &data.water_tiles,
+        tiles.into_iter().map(coords::to_usize),
+        p.add,
+    );
+    water::commit_water(world, water, tiles);
+    Ok(AgentOutput::json(
+        json!({"changed": world.resource::<UndoStack>().depth() > depth}),
+    ))
+}
+
+pub fn paint_gat(world: &mut World, p: crate::mcp::call::GatParams) -> AgentResult {
+    use crate::map::tools::gat;
+    let cells = coords::region_cells(&p.region, coords::map_bounds(world)?)?;
+    if !gat::CELL_TYPES.contains(&p.raw_type) {
+        return Err(AgentError::Invalid("unknown GAT cell type".into()));
+    }
+    let cells: Vec<_> = cells.into_iter().map(coords::to_tuple).collect();
+    let depth = world.resource::<UndoStack>().depth();
+    gat::paint_region(world, &cells, p.raw_type);
+    Ok(AgentOutput::json(
+        json!({"changed": world.resource::<UndoStack>().depth() > depth}),
+    ))
+}
+
+pub fn auto_gat(world: &mut World, p: crate::mcp::call::AutoGatParams) -> AgentResult {
+    use crate::map::tools::gat::{self, AutoGatOptions};
+    coords::map_bounds(world)?;
+    let depth = world.resource::<UndoStack>().depth();
+    gat::auto_gat(
+        world,
+        AutoGatOptions {
+            set_heights: p.set_heights,
+            set_walkability: p.set_walkability,
+            block_under_water: p.block_under_water,
+            block_props: p.block_props,
+        },
+    );
+    Ok(AgentOutput::json(
+        json!({"changed": world.resource::<UndoStack>().depth() > depth}),
+    ))
+}
