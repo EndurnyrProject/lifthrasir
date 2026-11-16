@@ -28,6 +28,11 @@ pub enum Call {
     ListNodes(ListNodesParams),
     GetNode(NodeRef),
     ListAssets(ListAssetsParams),
+    PlaceAsset(PlaceParams),
+    AddLight(AddLightParams),
+    UpdateNode(Box<UpdateNodeParams>),
+    DeleteNode(NodeRef),
+    SetMapSettings(MapSettingsParams),
 }
 
 impl Call {
@@ -46,8 +51,174 @@ impl Call {
             Call::ListNodes(_) => "list_nodes",
             Call::GetNode(_) => "get_node",
             Call::ListAssets(_) => "list_assets",
+            Call::PlaceAsset(_) => "place_asset",
+            Call::AddLight(_) => "add_light",
+            Call::UpdateNode(_) => "update_node",
+            Call::DeleteNode(_) => "delete_node",
+            Call::SetMapSettings(_) => "set_map_settings",
         }
     }
+}
+
+/// A placeable asset: a prop model, a sound or an effect (see list_assets).
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AssetParam {
+    /// A prop model, `ro://models/...glb`.
+    Model { uri: String },
+    /// A sound emitter, `ro://data/wav/...wav`.
+    Sound { uri: String },
+    /// An effect emitter, by effect catalog id.
+    Effect { id: u32 },
+}
+
+/// Where to put a new node: exactly one of `cell` and `world`.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct PlaceParams {
+    pub asset: AssetParam,
+    /// Stand it on the walk surface at the centre of this GAT cell [x, y].
+    #[serde(default)]
+    pub cell: Option<[u32; 2]>,
+    /// Or put it at this exact world point [x, y, z] (y is up).
+    #[serde(default)]
+    pub world: Option<[f32; 3]>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LightKindParam {
+    Point,
+    Spot,
+}
+
+/// A new point or spot light with the map's default values.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct AddLightParams {
+    pub kind: LightKindParam,
+    /// Above the centre of this GAT cell [x, y]; exactly one of `cell`, `world`.
+    #[serde(default)]
+    pub cell: Option<[u32; 2]>,
+    /// Or at this exact world point [x, y, z] (y is up).
+    #[serde(default)]
+    pub world: Option<[f32; 3]>,
+    /// With `cell`: world units above the walk surface; default 10.
+    #[serde(default)]
+    pub height: Option<f32>,
+}
+
+/// Changes to one node; omitted fields stay as they are.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct UpdateNodeParams {
+    pub node_id: u64,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Move onto the walk surface at the centre of this GAT cell [x, y].
+    #[serde(default)]
+    pub cell: Option<[u32; 2]>,
+    /// Or move to this exact world point [x, y, z]; not with `cell`.
+    #[serde(default)]
+    pub translation: Option<[f32; 3]>,
+    /// Rotation as XYZ Euler angles in degrees (props and spot lights).
+    #[serde(default)]
+    pub rotation_deg: Option<[f32; 3]>,
+    /// Scale per axis (props only).
+    #[serde(default)]
+    pub scale: Option<[f32; 3]>,
+    #[serde(default)]
+    pub prop: Option<PropPatch>,
+    #[serde(default)]
+    pub sound: Option<SoundPatch>,
+    #[serde(default)]
+    pub effect: Option<EffectPatch>,
+    /// Light fields (point, spot or sun).
+    #[serde(default)]
+    pub light: Option<LightPatch>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct PropPatch {
+    /// A `ro://models/...glb` model from list_assets.
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub anim_type: Option<u32>,
+    #[serde(default)]
+    pub anim_speed: Option<f32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct SoundPatch {
+    /// A `ro://data/wav/...wav` file from list_assets.
+    #[serde(default)]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub volume: Option<f32>,
+    /// Hearing range in world units.
+    #[serde(default)]
+    pub range: Option<f32>,
+    /// Seconds between repeats.
+    #[serde(default)]
+    pub cycle: Option<f32>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct EffectPatch {
+    /// An effect catalog id from list_assets.
+    #[serde(default)]
+    pub effect_type: Option<u32>,
+    #[serde(default)]
+    pub emit_speed: Option<f32>,
+    #[serde(default)]
+    pub params: Option<[f32; 4]>,
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct LightPatch {
+    /// sRGB color, each channel 0..=1.
+    #[serde(default)]
+    pub color: Option<[f32; 3]>,
+    /// Point and spot lights: intensity in candela.
+    #[serde(default)]
+    pub candela: Option<f32>,
+    /// Point and spot lights: range in world units.
+    #[serde(default)]
+    pub range: Option<f32>,
+    /// Spot lights: inner cone angle, 0 < inner <= outer <= 90.
+    #[serde(default)]
+    pub inner_angle_deg: Option<f32>,
+    /// Spot lights: outer cone angle.
+    #[serde(default)]
+    pub outer_angle_deg: Option<f32>,
+    /// Sun: illuminance in lux.
+    #[serde(default)]
+    pub lux: Option<f32>,
+    /// Sun: angle above the horizon, 0..=90 degrees.
+    #[serde(default)]
+    pub elevation_deg: Option<f32>,
+    /// Sun: compass direction in degrees.
+    #[serde(default)]
+    pub azimuth_deg: Option<f32>,
+}
+
+/// Map-wide lighting; omitted fields stay as they are.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct MapSettingsParams {
+    /// Indoor maps; switching also applies the indoor/outdoor ambient and
+    /// exposure presets, which explicit values below then override.
+    #[serde(default)]
+    pub indoor: Option<bool>,
+    /// Ambient light color, RGB 0..=1.
+    #[serde(default)]
+    pub ambient_color: Option<[f32; 3]>,
+    /// Ambient brightness in lux.
+    #[serde(default)]
+    pub ambient_brightness: Option<f32>,
+    /// Camera exposure (EV100).
+    #[serde(default)]
+    pub exposure_ev100: Option<f32>,
+    /// Tint applied to props' unshaded side, RGB 0..=1.
+    #[serde(default)]
+    pub no_shade_tint: Option<[f32; 3]>,
 }
 
 /// A rectangle of GAT cells, inclusive; at most 64 x 64.

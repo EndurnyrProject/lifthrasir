@@ -1,5 +1,6 @@
 //! One handler per tool. Each validates everything before its first change.
 
+pub mod objects;
 pub mod query;
 pub mod session;
 
@@ -34,5 +35,10 @@ pub fn run(world: &mut World, call: Call) -> AgentResult {
         Call::ListNodes(p) => query::list_nodes(world, p),
         Call::GetNode(p) => query::get_node(world, p),
         Call::ListAssets(p) => query::list_assets(world, p),
+        Call::PlaceAsset(p) => objects::place_asset(world, p),
+        Call::AddLight(p) => objects::add_light(world, p),
+        Call::UpdateNode(p) => objects::update_node(world, *p),
+        Call::DeleteNode(p) => objects::delete_node(world, p),
+        Call::SetMapSettings(p) => objects::set_map_settings(world, p),
     }
 }

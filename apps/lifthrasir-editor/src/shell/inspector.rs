@@ -378,7 +378,7 @@ fn sun_elevation(rotation: Quat) -> f32 {
 }
 
 /// `rotation` with its elevation set to `elevation` radians; yaw and roll kept.
-fn with_sun_elevation(rotation: Quat, elevation: f32) -> Quat {
+pub(crate) fn with_sun_elevation(rotation: Quat, elevation: f32) -> Quat {
     let (yaw, _, roll) = rotation.to_euler(EulerRot::YXZ);
     Quat::from_euler(EulerRot::YXZ, yaw, -elevation, roll)
 }

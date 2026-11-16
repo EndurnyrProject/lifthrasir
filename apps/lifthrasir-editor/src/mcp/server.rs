@@ -3,8 +3,9 @@
 //! config accepts only loopback `Host` headers (DNS rebinding protection).
 
 use super::call::{
-    AgentCall, AgentOutput, AgentResult, Call, ListAssetsParams, ListNodesParams, NewMapToolParams,
-    NodeRef, OpenMapParams, RegionQuery,
+    AddLightParams, AgentCall, AgentOutput, AgentResult, Call, ListAssetsParams, ListNodesParams,
+    MapSettingsParams, NewMapToolParams, NodeRef, OpenMapParams, PlaceParams, RegionQuery,
+    UpdateNodeParams,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rmcp::{
@@ -157,6 +158,59 @@ impl EditorMcp {
     ) -> Result<CallToolResult, ErrorData> {
         self.call(Call::ListAssets(p)).await
     }
+
+    #[tool(
+        description = "Place a prop model, sound or effect (see list_assets) on the walk \
+        surface of a GAT cell, or at a world point. Returns its node_id."
+    )]
+    async fn place_asset(
+        &self,
+        Parameters(p): Parameters<PlaceParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::PlaceAsset(p)).await
+    }
+
+    #[tool(
+        description = "Add a point or spot light with the map's defaults, 10 units above a \
+        GAT cell (or `height`), or at a world point. Returns its node_id."
+    )]
+    async fn add_light(
+        &self,
+        Parameters(p): Parameters<AddLightParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::AddLight(p)).await
+    }
+
+    #[tool(
+        description = "Change one node: name, position (cell or world), rotation (props, spot \
+        lights), scale (props), prop/sound/effect fields, or light fields (color, candela, \
+        range, cone angles; sun: lux, elevation, azimuth). Omitted fields stay."
+    )]
+    async fn update_node(
+        &self,
+        Parameters(p): Parameters<UpdateNodeParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::UpdateNode(Box::new(p))).await
+    }
+
+    #[tool(description = "Delete one node. The sun cannot be deleted.")]
+    async fn delete_node(
+        &self,
+        Parameters(p): Parameters<NodeRef>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::DeleteNode(p)).await
+    }
+
+    #[tool(
+        description = "Change map-wide lighting: indoor flag (applies its presets), ambient \
+        color and brightness, exposure, prop shade tint. Omitted fields stay."
+    )]
+    async fn set_map_settings(
+        &self,
+        Parameters(p): Parameters<MapSettingsParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::SetMapSettings(p)).await
+    }
 }
 
 impl EditorMcp {
@@ -229,6 +283,8 @@ mod tests {
         assert_eq!(
             names,
             [
+                "add_light",
+                "delete_node",
                 "editor_status",
                 "get_node",
                 "list_assets",
@@ -237,10 +293,13 @@ mod tests {
                 "map_summary",
                 "new_map",
                 "open_map",
+                "place_asset",
                 "query_region",
                 "redo",
                 "save_map",
-                "undo"
+                "set_map_settings",
+                "undo",
+                "update_node"
             ]
         );
         for tool in &tools {
