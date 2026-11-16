@@ -2,7 +2,10 @@
 //! into a [`Call`] for the Bevy world and waits for its reply; rmcp's default
 //! config accepts only loopback `Host` headers (DNS rebinding protection).
 
-use super::call::{AgentCall, AgentOutput, AgentResult, Call, NewMapToolParams, OpenMapParams};
+use super::call::{
+    AgentCall, AgentOutput, AgentResult, Call, ListAssetsParams, ListNodesParams, NewMapToolParams,
+    NodeRef, OpenMapParams, RegionQuery,
+};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rmcp::{
     ErrorData, ServerHandler,
@@ -100,6 +103,60 @@ impl EditorMcp {
     async fn save_map(&self) -> Result<CallToolResult, ErrorData> {
         self.call(Call::SaveMap).await
     }
+
+    #[tool(
+        description = "Summary of the open map: name, size in cells and tiles, indoor flag, \
+        ambient and exposure, water zones, node counts by kind and the ground textures used."
+    )]
+    async fn map_summary(&self) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::MapSummary).await
+    }
+
+    #[tool(
+        description = "Per GAT cell of a rectangle (at most 64 x 64 cells): the 4 GAT corner \
+        heights, walk_y (world height at the cell centre), the GAT type (raw + label), the \
+        ground texture of its tile and whether its tile has water."
+    )]
+    async fn query_region(
+        &self,
+        Parameters(p): Parameters<RegionQuery>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::QueryRegion(p)).await
+    }
+
+    #[tool(
+        description = "Nodes (props, sounds, effects, lights, sun) with id, name, kind, GAT \
+        cell and world translation; optionally of one kind or inside a cell rectangle."
+    )]
+    async fn list_nodes(
+        &self,
+        Parameters(p): Parameters<ListNodesParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::ListNodes(p)).await
+    }
+
+    #[tool(
+        description = "One node: transform (translation, rotation in degrees, scale), GAT cell \
+        and payload (prop model, sound, effect, or light color/candela/range/angles)."
+    )]
+    async fn get_node(
+        &self,
+        Parameters(p): Parameters<NodeRef>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::GetNode(p)).await
+    }
+
+    #[tool(
+        description = "Valid asset references to use in other tools: models, ground textures, \
+        sounds (ro:// URIs) or effect ids, filtered by substring; returns total and up to \
+        limit (default 100)."
+    )]
+    async fn list_assets(
+        &self,
+        Parameters(p): Parameters<ListAssetsParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::ListAssets(p)).await
+    }
 }
 
 impl EditorMcp {
@@ -173,9 +230,14 @@ mod tests {
             names,
             [
                 "editor_status",
+                "get_node",
+                "list_assets",
                 "list_maps",
+                "list_nodes",
+                "map_summary",
                 "new_map",
                 "open_map",
+                "query_region",
                 "redo",
                 "save_map",
                 "undo"

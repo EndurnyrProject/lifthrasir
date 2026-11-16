@@ -1,5 +1,6 @@
 //! One handler per tool. Each validates everything before its first change.
 
+pub mod query;
 pub mod session;
 
 use super::call::{AgentResult, Call};
@@ -28,5 +29,10 @@ pub fn run(world: &mut World, call: Call) -> AgentResult {
         Call::OpenMap(p) => session::open(world, p),
         Call::NewMap(p) => session::new_map(world, p),
         Call::SaveMap => session::save_map(world),
+        Call::MapSummary => query::map_summary(world),
+        Call::QueryRegion(p) => query::query_region(world, p),
+        Call::ListNodes(p) => query::list_nodes(world, p),
+        Call::GetNode(p) => query::get_node(world, p),
+        Call::ListAssets(p) => query::list_assets(world, p),
     }
 }

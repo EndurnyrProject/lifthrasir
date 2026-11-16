@@ -23,6 +23,11 @@ pub enum Call {
     OpenMap(OpenMapParams),
     NewMap(NewMapToolParams),
     SaveMap,
+    MapSummary,
+    QueryRegion(RegionQuery),
+    ListNodes(ListNodesParams),
+    GetNode(NodeRef),
+    ListAssets(ListAssetsParams),
 }
 
 impl Call {
@@ -36,8 +41,82 @@ impl Call {
             Call::OpenMap(_) => "open_map",
             Call::NewMap(_) => "new_map",
             Call::SaveMap => "save_map",
+            Call::MapSummary => "map_summary",
+            Call::QueryRegion(_) => "query_region",
+            Call::ListNodes(_) => "list_nodes",
+            Call::GetNode(_) => "get_node",
+            Call::ListAssets(_) => "list_assets",
         }
     }
+}
+
+/// A rectangle of GAT cells, inclusive; at most 64 x 64.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RegionQuery {
+    /// The corner with the smallest x and y, as a GAT cell [x, y].
+    pub min: [u32; 2],
+    /// The corner with the largest x and y, as a GAT cell [x, y].
+    pub max: [u32; 2],
+}
+
+/// Node kinds as the tools name them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeKindParam {
+    Prop,
+    Sound,
+    Effect,
+    PointLight,
+    SpotLight,
+    Sun,
+}
+
+/// Which nodes to list; every filter is optional.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct ListNodesParams {
+    /// Only nodes of this kind.
+    #[serde(default)]
+    pub kind: Option<NodeKindParam>,
+    /// With `max`: only nodes standing on a GAT cell in this rectangle.
+    #[serde(default)]
+    pub min: Option<[u32; 2]>,
+    /// With `min`: only nodes standing on a GAT cell in this rectangle.
+    #[serde(default)]
+    pub max: Option<[u32; 2]>,
+}
+
+/// One node, by the id list_nodes reports.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct NodeRef {
+    /// The node id from list_nodes, get_node or the call that created it.
+    pub node_id: u64,
+}
+
+/// The asset catalogs.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AssetKindParam {
+    /// Prop models (`ro://models/...glb`), placeable with place_asset.
+    Model,
+    /// Ground textures (`ro://ground/tex/...ktx2`), for paint_tiles and new_map.
+    GroundTexture,
+    /// Sounds (`ro://data/wav/...wav`), placeable with place_asset.
+    Sound,
+    /// Effect ids from the effect catalog, placeable with place_asset.
+    Effect,
+}
+
+/// A slice of one asset catalog.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ListAssetsParams {
+    /// Which catalog to read.
+    pub kind: AssetKindParam,
+    /// Case-sensitive substring the asset must contain (paths are lowercase).
+    #[serde(default)]
+    pub filter: Option<String>,
+    /// At most this many results; default 100.
+    #[serde(default)]
+    pub limit: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
