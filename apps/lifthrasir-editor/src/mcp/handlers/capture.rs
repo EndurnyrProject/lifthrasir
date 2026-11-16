@@ -65,7 +65,7 @@ pub fn top_down_frame(
     let (low, high) = (cell_center(altitude, min)?, cell_center(altitude, max)?);
     let center = (low + high) / 2.0;
     let cells = max - min + UVec2::ONE;
-    let px_per_cell = (MAX_PX / cells.max_element()).clamp(4, 32);
+    let px_per_cell = (MAX_PX / cells.max_element()).clamp(1, 32);
     let eye = Vec3::new(center.x, low.y.max(high.y) + TOP_DOWN_HEIGHT, center.z);
     Ok(TopDownFrame {
         transform: Transform::from_translation(eye).looking_at(eye - Vec3::Y, Vec3::NEG_Z),
@@ -303,6 +303,12 @@ mod tests {
         let big = top_down_frame(&altitude(400, 400), UVec2::ZERO, UVec2::splat(399)).unwrap();
         assert_eq!(big.px_per_cell, 5);
         assert!(big.px.max_element() <= MAX_PX);
+    }
+
+    #[test]
+    fn top_down_large_rect_fits_maximum_pixels() {
+        let frame = top_down_frame(&altitude(1024, 1024), UVec2::ZERO, UVec2::splat(1023)).unwrap();
+        assert!(frame.px.max_element() <= MAX_PX);
     }
 
     #[test]

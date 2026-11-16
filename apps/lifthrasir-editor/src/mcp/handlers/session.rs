@@ -109,6 +109,7 @@ pub fn open(world: &mut World, p: OpenMapParams) -> AgentResult {
 /// Writes a new flat map and starts opening it, like the New map wizard.
 pub fn new_map(world: &mut World, p: NewMapToolParams) -> AgentResult {
     refuse_if_dirty(world)?;
+    super::require_ground_texture(world, &p.texture)?;
     let wizard = NewMapWizard {
         name: p.name,
         width: p.width,

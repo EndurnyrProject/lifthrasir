@@ -357,3 +357,56 @@ fn invalid_spot_angles_are_rejected() {
     assert!(matches!(result, Err(AgentError::Invalid(_))), "{result:?}");
     assert_eq!(app.world().resource::<UndoStack>().depth(), depth);
 }
+
+#[test]
+fn invalid_sound_cycle_does_not_add_undo_entry() {
+    use lifthrasir_editor::mcp::call::SoundPatch;
+    use lifthrasir_runtime::world::LifAudioEmitter;
+    let data_folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(data_folder.path());
+    common::open_fixture(&mut app);
+    let id = app
+        .world_mut()
+        .query_filtered::<&EditorNodeId, With<LifAudioEmitter>>()
+        .iter(app.world())
+        .next()
+        .unwrap()
+        .0;
+    let depth = app.world().resource::<UndoStack>().depth();
+    let result = call(
+        &mut app,
+        &tx,
+        Call::UpdateNode(Box::new(UpdateNodeParams {
+            node_id: id,
+            sound: Some(SoundPatch {
+                cycle: Some(-1.0),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })),
+    );
+    assert!(matches!(result, Err(AgentError::Invalid(_))), "{result:?}");
+    assert_eq!(app.world().resource::<UndoStack>().depth(), depth);
+}
+
+#[test]
+fn placing_sound_file_as_model_is_invalid_and_does_not_add_node() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(data_folder.path());
+    let layout = common::open_fixture(&mut app);
+    let children = |app: &App| app.world().get::<Children>(layout.map_node).unwrap().len();
+    let before = children(&app);
+    let result = call(
+        &mut app,
+        &tx,
+        Call::PlaceAsset(PlaceParams {
+            asset: AssetParam::Model {
+                uri: "ro://data/wav/effect/water.wav".into(),
+            },
+            cell: Some([0, 0]),
+            world: None,
+        }),
+    );
+    assert!(matches!(result, Err(AgentError::Invalid(_))), "{result:?}");
+    assert_eq!(children(&app), before);
+}

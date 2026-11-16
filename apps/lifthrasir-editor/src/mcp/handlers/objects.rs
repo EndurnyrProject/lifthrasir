@@ -196,11 +196,11 @@ fn placed(id: EditorNodeId, at: Vec3, data: &LifMapData) -> AgentOutput {
 fn asset_ref(world: &World, asset: AssetParam) -> Result<AssetRef, AgentError> {
     match asset {
         AssetParam::Model { uri } => {
-            require_file(world, &uri)?;
+            require_asset_file(world, &uri, ".glb")?;
             Ok(AssetRef::Model(uri))
         }
         AssetParam::Sound { uri } => {
-            require_file(world, &uri)?;
+            require_asset_file(world, &uri, ".wav")?;
             Ok(AssetRef::Sound(uri))
         }
         AssetParam::Effect { id } => {
@@ -208,6 +208,15 @@ fn asset_ref(world: &World, asset: AssetParam) -> Result<AssetRef, AgentError> {
             Ok(AssetRef::Effect(id))
         }
     }
+}
+
+fn require_asset_file(world: &World, uri: &str, extension: &str) -> Result<(), AgentError> {
+    if !uri.ends_with(extension) {
+        return Err(AgentError::Invalid(format!(
+            "'{uri}' must end in {extension}"
+        )));
+    }
+    require_file(world, uri)
 }
 
 fn require_file(world: &World, uri: &str) -> Result<(), AgentError> {
@@ -344,7 +353,7 @@ fn payload_edits(
             return Err(wrong("prop"));
         }
         if let Some(model) = &prop.model {
-            require_file(world, model)?;
+            require_asset_file(world, model, ".glb")?;
         }
         edits.push(edit(world, id, node, "prop", |r: &mut LifPropRef| {
             if let Some(model) = &prop.model {
@@ -363,7 +372,22 @@ fn payload_edits(
             return Err(wrong("sound"));
         }
         if let Some(file) = &sound.file {
-            require_file(world, file)?;
+            require_asset_file(world, file, ".wav")?;
+        }
+        for (name, value) in [
+            ("volume", sound.volume),
+            ("range", sound.range),
+            ("cycle", sound.cycle),
+        ] {
+            if value.is_some_and(|v| !v.is_finite() || v < 0.0) {
+                return Err(AgentError::Invalid(format!("invalid sound {name}")));
+            }
+        }
+        if sound
+            .cycle
+            .is_some_and(|v| std::time::Duration::try_from_secs_f32(v).is_err())
+        {
+            return Err(AgentError::Invalid("invalid sound cycle".into()));
         }
         edits.push(edit(
             world,

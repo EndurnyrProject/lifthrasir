@@ -10,6 +10,18 @@ use super::call::{AgentError, AgentResult, Call};
 use crate::shell::node::NodeKind;
 use bevy::prelude::*;
 
+fn require_ground_texture(world: &World, texture: &str) -> Result<(), AgentError> {
+    if !world
+        .resource::<crate::shell::browser::AssetIndex>()
+        .ground_textures
+        .iter()
+        .any(|uri| uri == texture)
+    {
+        return Err(AgentError::NotFound(texture.to_string()));
+    }
+    Ok(())
+}
+
 /// How tools name a node kind.
 pub fn kind_name(kind: NodeKind) -> &'static str {
     match kind {

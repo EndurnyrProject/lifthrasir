@@ -57,18 +57,9 @@ pub fn sculpt(world: &mut World, p: SculptParams) -> AgentResult {
 }
 
 pub fn paint_tiles(world: &mut World, p: crate::mcp::call::PaintTilesParams) -> AgentResult {
-    use crate::{
-        map::tools::paint::{self, TileBrush},
-        shell::browser::AssetIndex,
-    };
+    use crate::map::tools::paint::{self, TileBrush};
     let bounds = coords::map_bounds(world)? / 2;
-    if !world
-        .resource::<AssetIndex>()
-        .ground_textures
-        .contains(&p.texture)
-    {
-        return Err(AgentError::NotFound(p.texture));
-    }
+    super::require_ground_texture(world, &p.texture)?;
     if p.rotation > 3 {
         return Err(AgentError::Invalid("rotation must be 0..=3".into()));
     }
@@ -94,18 +85,9 @@ pub fn paint_tiles(world: &mut World, p: crate::mcp::call::PaintTilesParams) -> 
 }
 
 pub fn add_wall(world: &mut World, p: crate::mcp::call::WallParams) -> AgentResult {
-    use crate::{
-        map::tools::wall::{self, WallBrush},
-        shell::browser::AssetIndex,
-    };
+    use crate::map::tools::wall::{self, WallBrush};
     coords::map_bounds(world)?;
-    if !world
-        .resource::<AssetIndex>()
-        .ground_textures
-        .contains(&p.texture)
-    {
-        return Err(AgentError::NotFound(p.texture));
-    }
+    super::require_ground_texture(world, &p.texture)?;
     let depth = world.resource::<UndoStack>().depth();
     wall::add_wall(
         world,

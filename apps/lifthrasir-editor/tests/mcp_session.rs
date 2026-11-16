@@ -204,3 +204,17 @@ fn save_map_reports_validation_errors_without_a_modal() {
     assert!(app.world().resource::<ErrorModal>().messages.is_empty());
     assert!(!map_glb_path(data_folder.path(), common::FIXTURE_NAME).exists());
 }
+
+#[test]
+fn new_map_rejects_missing_ground_texture_without_writing() {
+    let data_folder = tempfile::tempdir().unwrap();
+    let (mut app, tx) = mcp_app(data_folder.path());
+    app.update();
+    let Call::NewMap(mut params) = new_map("bad_texture", &app) else {
+        unreachable!()
+    };
+    params.texture = "ro://ground/tex/does_not_exist.ktx2".into();
+    let result = call(&mut app, &tx, Call::NewMap(params));
+    assert!(matches!(result, Err(AgentError::NotFound(_))), "{result:?}");
+    assert!(!map_glb_path(data_folder.path(), "bad_texture").exists());
+}
