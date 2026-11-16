@@ -301,6 +301,26 @@ impl EditOp for Batch {
     }
 }
 
+/// An op under a different name, such as `Agent: place_asset`.
+pub struct Labeled {
+    pub inner: Box<dyn EditOp>,
+    pub label: String,
+}
+
+impl EditOp for Labeled {
+    fn apply(&mut self, world: &mut World) {
+        self.inner.apply(world);
+    }
+
+    fn undo(&mut self, world: &mut World) {
+        self.inner.undo(world);
+    }
+
+    fn label(&self) -> &str {
+        &self.label
+    }
+}
+
 /// Done and undone ops plus the depth of the last save.
 #[derive(Resource)]
 pub struct UndoStack {
@@ -355,6 +375,25 @@ impl UndoStack {
 
     pub fn redo_label(&self) -> Option<&str> {
         self.undone.last().map(|op| op.label())
+    }
+
+    /// How many ops can be undone.
+    pub fn depth(&self) -> usize {
+        self.done.len()
+    }
+
+    /// Folds every op pushed since the stack held `len` ops into one entry
+    /// named `label`, so a multi-op action undoes in one step. A no-op when
+    /// nothing was pushed since.
+    pub fn squash_since(&mut self, len: usize, label: String) {
+        if self.done.len() <= len {
+            return;
+        }
+        let ops = self.done.split_off(len);
+        self.done.push(Box::new(Labeled {
+            inner: Box::new(Batch(ops)),
+            label,
+        }));
     }
 
     fn push(&mut self, op: Box<dyn EditOp>) {
@@ -666,6 +705,71 @@ mod tests {
         assert_eq!(translation(&mut scene.world, id).x, 8.0);
         undo(&mut scene.world);
         assert_eq!(translation(&mut scene.world, id).x, 1.0);
+    }
+
+    fn step(id: EditorNodeId, from: f32, to: f32) -> Box<dyn EditOp> {
+        Box::new(ComponentEdit::new(
+            id,
+            Transform::from_xyz(from, 0.0, 0.0),
+            Transform::from_xyz(to, 0.0, 0.0),
+        ))
+    }
+
+    #[test]
+    fn squash_since_folds_ops_into_one_labeled_entry() {
+        let mut scene = scene();
+        let (id, _) = spawn_prop(&mut scene, "tree");
+        let mark = scene.world.resource::<UndoStack>().depth();
+        commit(&mut scene.world, step(id, 1.0, 5.0));
+        commit(&mut scene.world, step(id, 5.0, 6.0));
+        commit(&mut scene.world, step(id, 6.0, 7.0));
+
+        scene
+            .world
+            .resource_mut::<UndoStack>()
+            .squash_since(mark, "Agent: move".into());
+
+        let stack = scene.world.resource::<UndoStack>();
+        assert_eq!(stack.depth(), mark + 1);
+        assert_eq!(stack.undo_label(), Some("Agent: move"));
+        undo(&mut scene.world);
+        assert_eq!(translation(&mut scene.world, id).x, 1.0);
+        redo(&mut scene.world);
+        assert_eq!(translation(&mut scene.world, id).x, 7.0);
+    }
+
+    #[test]
+    fn squash_since_without_new_ops_is_a_no_op() {
+        let mut scene = scene();
+        let (id, _) = spawn_prop(&mut scene, "tree");
+        commit(&mut scene.world, step(id, 1.0, 5.0));
+        let mark = scene.world.resource::<UndoStack>().depth();
+        undo(&mut scene.world);
+
+        let mut stack = scene.world.resource_mut::<UndoStack>();
+        stack.squash_since(mark, "Agent: undo".into());
+        stack.squash_since(0, "Agent: nothing".into());
+
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.redo_label(), Some("Edit Transform"));
+    }
+
+    #[test]
+    fn squash_since_keeps_dirty_tracking() {
+        let mut scene = scene();
+        let (id, _) = spawn_prop(&mut scene, "tree");
+        scene.world.resource_mut::<UndoStack>().mark_saved();
+        let mark = scene.world.resource::<UndoStack>().depth();
+        commit(&mut scene.world, step(id, 1.0, 5.0));
+        commit(&mut scene.world, step(id, 5.0, 6.0));
+
+        scene
+            .world
+            .resource_mut::<UndoStack>()
+            .squash_since(mark, "Agent: move".into());
+        assert!(scene.world.resource::<UndoStack>().is_dirty());
+        undo(&mut scene.world);
+        assert!(!scene.world.resource::<UndoStack>().is_dirty());
     }
 
     #[test]
