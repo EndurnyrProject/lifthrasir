@@ -333,11 +333,9 @@ impl Window {
             self.weights[0] = 2;
         }
 
-        let mut sum = 0u16;
-        for i in 0..=self.num_values as usize {
-            sum = sum.wrapping_add(self.weights[i]);
-        }
-        self.total = sum;
+        self.total = self.weights[..=self.num_values as usize]
+            .iter()
+            .fold(0u16, |sum, &w| sum.wrapping_add(w));
     }
 
     /// Decode one symbol. If the window has seen it before, returns its value;
