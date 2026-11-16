@@ -21,6 +21,7 @@ use ro_formats::CELL_SIZE;
 use std::{collections::BTreeMap, f32::consts::FRAC_PI_2};
 
 const MAX_RADIUS: f32 = 500.0;
+pub(crate) const STRENGTH_RANGE: std::ops::RangeInclusive<f32> = 0.05..=50.0;
 
 /// The color brush: a linear RGBA target, `radius` in world units, and
 /// `strength` as a blend rate per second at the center.
@@ -217,7 +218,7 @@ fn options_window(mut contexts: EguiContexts, mut mode: ResMut<ToolMode>) -> Res
             ui.label("Strength");
             ui.add(
                 egui::DragValue::new(&mut brush.strength)
-                    .range(0.05..=50.0)
+                    .range(STRENGTH_RANGE)
                     .speed(0.05),
             )
             .on_hover_text("blend rate per second at the center");

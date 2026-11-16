@@ -37,6 +37,7 @@ use std::{
 const REACH_CELLS: f32 = 4.0;
 const BRUSH_COLOR: Color = Color::srgb(1.0, 0.85, 0.3);
 const MAX_RADIUS: f32 = 500.0;
+pub(crate) const STRENGTH_RANGE: std::ops::RangeInclusive<f32> = 0.1..=200.0;
 
 /// What a sculpt stroke does to the ground under the brush.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,7 +408,7 @@ fn options_window(mut contexts: EguiContexts, mut mode: ResMut<ToolMode>) -> Res
             ui.label("Strength");
             ui.add(
                 egui::DragValue::new(&mut brush.strength)
-                    .range(0.1..=200.0)
+                    .range(STRENGTH_RANGE)
                     .speed(0.5),
             )
             .on_hover_text("units per second (Raise/Lower), blend rate (Smooth/Flatten)");

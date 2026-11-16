@@ -16,6 +16,10 @@ pub struct AgentCall {
 /// Every tool an agent can call, with its parameters.
 #[derive(Debug)]
 pub enum Call {
+    AddWall(WallParams),
+    PaintVertexColor(ColorParams),
+    Sculpt(SculptParams),
+    PaintTiles(PaintTilesParams),
     Status,
     Undo,
     Redo,
@@ -41,6 +45,10 @@ impl Call {
     /// The MCP tool name; also the undo label suffix (`Agent: <name>`).
     pub fn name(&self) -> &'static str {
         match self {
+            Call::AddWall(_) => "add_wall",
+            Call::PaintVertexColor(_) => "paint_vertex_color",
+            Call::Sculpt(_) => "sculpt",
+            Call::PaintTiles(_) => "paint_tiles",
             Call::Status => "editor_status",
             Call::Undo => "undo",
             Call::Redo => "redo",
@@ -62,6 +70,66 @@ impl Call {
             Call::RenderTopDown(_) => "render_top_down",
         }
     }
+}
+
+/// The operation applied by a sculpt brush.
+#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SculptOpParam {
+    Raise,
+    Lower,
+    Smooth,
+    Flatten,
+}
+
+/// Sculpt a circular region of GAT cells.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SculptParams {
+    /// Centre GAT cell.
+    pub center: [u32; 2],
+    /// Radius in GAT cells.
+    pub radius_cells: u32,
+    /// Sculpt operation.
+    pub op: SculptOpParam,
+    /// Brush strength.
+    pub strength: f32,
+}
+
+/// Paint ground tiles with a texture.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct PaintTilesParams {
+    /// Ground tiles.
+    pub tiles: Vec<[u32; 2]>,
+    /// Ground texture URI.
+    pub texture: String,
+    /// Quarter turns, 0 through 3.
+    pub rotation: u8,
+    /// Mirror the texture.
+    pub flip: bool,
+}
+
+/// Add a wall between adjacent ground tiles.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct WallParams {
+    /// First ground tile.
+    pub a: [u32; 2],
+    /// Second ground tile.
+    pub b: [u32; 2],
+    /// Ground texture URI.
+    pub texture: String,
+}
+
+/// Paint vertex colors within a GAT cell radius.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ColorParams {
+    /// Centre GAT cell.
+    pub center: [u32; 2],
+    /// Radius in GAT cells.
+    pub radius_cells: u32,
+    /// Linear RGBA color.
+    pub color: [f32; 4],
+    /// Brush strength.
+    pub strength: f32,
 }
 
 /// A GAT rectangle to render from above, inclusive.

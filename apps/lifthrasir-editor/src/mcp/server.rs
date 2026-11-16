@@ -3,9 +3,9 @@
 //! config accepts only loopback `Host` headers (DNS rebinding protection).
 
 use super::call::{
-    AddLightParams, AgentCall, AgentOutput, AgentResult, Call, ListAssetsParams, ListNodesParams,
-    MapSettingsParams, NewMapToolParams, NodeRef, OpenMapParams, PlaceParams, RegionQuery,
-    TopDownParams, UpdateNodeParams,
+    AddLightParams, AgentCall, AgentOutput, AgentResult, Call, ColorParams, ListAssetsParams,
+    ListNodesParams, MapSettingsParams, NewMapToolParams, NodeRef, OpenMapParams, PaintTilesParams,
+    PlaceParams, RegionQuery, SculptParams, TopDownParams, UpdateNodeParams, WallParams,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rmcp::{
@@ -212,6 +212,40 @@ impl EditorMcp {
         self.call(Call::SetMapSettings(p)).await
     }
 
+    #[tool(description = "Sculpt terrain around a GAT cell, with radius in GAT cells.")]
+    async fn sculpt(
+        &self,
+        Parameters(p): Parameters<SculptParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::Sculpt(p)).await
+    }
+
+    #[tool(description = "Paint ground tiles with a ground texture.")]
+    async fn paint_tiles(
+        &self,
+        Parameters(p): Parameters<PaintTilesParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::PaintTiles(p)).await
+    }
+
+    #[tool(description = "Add a wall between adjacent ground tiles.")]
+    async fn add_wall(
+        &self,
+        Parameters(p): Parameters<WallParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::AddWall(p)).await
+    }
+
+    #[tool(
+        description = "Paint terrain vertex colors around a GAT cell, with radius in GAT cells."
+    )]
+    async fn paint_vertex_color(
+        &self,
+        Parameters(p): Parameters<ColorParams>,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.call(Call::PaintVertexColor(p)).await
+    }
+
     #[tool(
         description = "A 1280x720 PNG of what the editor camera sees right now (without the \
         editor's panels). Use it to judge how an area looks."
@@ -304,6 +338,7 @@ mod tests {
             names,
             [
                 "add_light",
+                "add_wall",
                 "delete_node",
                 "editor_status",
                 "get_node",
@@ -313,12 +348,15 @@ mod tests {
                 "map_summary",
                 "new_map",
                 "open_map",
+                "paint_tiles",
+                "paint_vertex_color",
                 "place_asset",
                 "query_region",
                 "redo",
                 "render_top_down",
                 "save_map",
                 "screenshot",
+                "sculpt",
                 "set_map_settings",
                 "undo",
                 "update_node"

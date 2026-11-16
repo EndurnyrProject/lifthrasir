@@ -4,6 +4,7 @@ pub mod capture;
 pub mod objects;
 pub mod query;
 pub mod session;
+pub mod terrain;
 
 use super::call::{AgentError, AgentResult, Call};
 use crate::shell::node::NodeKind;
@@ -24,6 +25,10 @@ pub fn kind_name(kind: NodeKind) -> &'static str {
 /// Runs `call` against the world.
 pub fn run(world: &mut World, call: Call) -> AgentResult {
     match call {
+        Call::PaintTiles(p) => terrain::paint_tiles(world, p),
+        Call::AddWall(p) => terrain::add_wall(world, p),
+        Call::PaintVertexColor(p) => terrain::paint_vertex_color(world, p),
+        Call::Sculpt(p) => terrain::sculpt(world, p),
         Call::Status => session::editor_status(world),
         Call::Undo => session::undo(world),
         Call::Redo => session::redo(world),
