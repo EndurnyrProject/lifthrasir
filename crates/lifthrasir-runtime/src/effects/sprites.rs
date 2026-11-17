@@ -86,6 +86,7 @@ pub fn spawn_effect_sprite_once(
 pub struct EffectSpritePart {
     animation: Handle<RoAnimationAsset>,
     part: usize,
+    tint: Color,
 }
 
 /// Shared, processed effect animations keyed by sprite path, plus the SPR/ACT
@@ -96,9 +97,13 @@ pub struct EffectSpriteAssets {
     pending: HashMap<String, (Handle<RoSpriteAsset>, Handle<RoActAsset>)>,
 }
 
+/// Poses one ACT layer quad and colours it `tint` times the layer's authored
+/// RGBA. The ACT colour carries real intent: `이팩트/torch_01`'s halo layer is
+/// a ~8x-scaled glow at ~13% alpha, which draws as an opaque square without it.
 pub(super) fn apply_animation_part(
     part: &FramePart,
     animation: &RoAnimationAsset,
+    tint: Color,
     materials: &mut Assets<StandardMaterial>,
     material: &MeshMaterial3d<StandardMaterial>,
     mut transform: Mut<Transform>,
@@ -106,6 +111,10 @@ pub(super) fn apply_animation_part(
 ) {
     if let Some(texture) = animation.textures.get(part.texture_index) {
         set_layer_texture(materials, &material.0, texture);
+    }
+    let color = layer_color(tint, part.color);
+    if let Some(mut material) = materials.get_mut(&material.0) {
+        material.base_color = color;
     }
 
     let scale_x = part.scale.x
@@ -129,6 +138,17 @@ pub(super) fn apply_animation_part(
         ..current
     });
     visibility.set_if_neq(Visibility::Inherited);
+}
+
+/// Channel-wise sRGBA multiply, alpha included.
+fn layer_color(tint: Color, layer: Color) -> Color {
+    let (a, b) = (tint.to_srgba(), layer.to_srgba());
+    Color::srgba(
+        a.red * b.red,
+        a.green * b.green,
+        a.blue * b.blue,
+        a.alpha * b.alpha,
+    )
 }
 
 /// Resolves every [`EffectSprite`] request: starts the SPR/ACT load the first
@@ -198,7 +218,6 @@ pub fn spawn_effect_sprites(
         let z_offset = layer_order(LAYER_EFFECT) as f32 * Z_OFFSET_PER_LAYER;
         for part in 0..parts {
             let material = materials.add(StandardMaterial {
-                base_color: request.tint,
                 alpha_mode: AlphaMode::Blend,
                 unlit: true,
                 cull_mode: None,
@@ -213,6 +232,7 @@ pub fn spawn_effect_sprites(
                 EffectSpritePart {
                     animation: animation.clone(),
                     part,
+                    tint: request.tint,
                 },
                 Transform::from_translation(Vec3::new(0.0, 0.0, z_offset + part as f32 * 0.001)),
                 Visibility::Hidden,
@@ -356,6 +376,7 @@ pub fn sync_effect_sprites(
         apply_animation_part(
             part,
             animation,
+            sprite_part.tint,
             &mut materials,
             material_handle,
             transform,
@@ -569,6 +590,74 @@ mod tests {
             app.world().get_entity(root).is_err(),
             "despawned after the last frame"
         );
+    }
+
+    #[test]
+    fn act_layer_color_multiplies_into_the_request_tint() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .add_plugins((ContentAssetsPlugin, RuntimeCorePlugin))
+            .init_resource::<EffectSpriteAssets>()
+            .add_systems(Update, (spawn_effect_sprites, sync_effect_sprites).chain());
+        let texture = app
+            .world_mut()
+            .resource_mut::<Assets<Image>>()
+            .add(Image::default());
+        // torch_01's halo: a yellow glow authored at alpha 30/255.
+        let halo = Color::srgba(1.0, 0.95, 0.3, 0.12);
+        let animation = app
+            .world_mut()
+            .resource_mut::<Assets<RoAnimationAsset>>()
+            .add(RoAnimationAsset {
+                textures: vec![texture],
+                actions: vec![ActionData {
+                    frames: vec![FrameData {
+                        parts: vec![FramePart {
+                            texture_index: 0,
+                            transform: Mat4::IDENTITY,
+                            position: Vec2::ZERO,
+                            scale: Vec2::ONE,
+                            texture_size: Vec2::ONE,
+                            color: halo,
+                            mirror: false,
+                        }],
+                        ..default()
+                    }],
+                    delay_ms: 100.0,
+                }],
+                layer: LAYER_EFFECT,
+                sounds: vec![],
+            });
+        app.world_mut()
+            .resource_mut::<EffectSpriteAssets>()
+            .ready
+            .insert("halo".into(), animation);
+        app.world_mut().spawn(EffectSprite {
+            path: "halo".into(),
+            tint: Color::srgba(0.5, 1.0, 1.0, 0.5),
+        });
+        app.update();
+
+        let material = app
+            .world_mut()
+            .query_filtered::<&MeshMaterial3d<StandardMaterial>, With<EffectSpritePart>>()
+            .single(app.world())
+            .unwrap()
+            .0
+            .clone();
+        let color = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&material)
+            .unwrap()
+            .base_color
+            .to_srgba();
+        assert!((color.red - 0.5).abs() < 1e-4);
+        assert!((color.blue - 0.3).abs() < 1e-4);
+        assert!((color.alpha - 0.06).abs() < 1e-4);
     }
 
     #[test]

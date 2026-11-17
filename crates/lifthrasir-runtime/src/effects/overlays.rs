@@ -367,6 +367,7 @@ pub fn sync_frozen_overlays(
         apply_animation_part(
             part,
             animation,
+            Color::WHITE,
             &mut materials,
             material_handle,
             transform,
