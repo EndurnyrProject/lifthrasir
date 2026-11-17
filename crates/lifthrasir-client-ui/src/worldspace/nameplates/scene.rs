@@ -12,10 +12,12 @@ use crate::worldspace::{hung_root, plate_frame, world_bar};
 const OWN_HP: Color = Color::srgb_u8(0xc4, 0x55, 0x4b);
 const OWN_SP: Color = Color::srgb_u8(0x4a, 0x8a, 0xc8);
 const PARTY_HP: Color = Color::srgb_u8(0x6f, 0xb3, 0x5a);
-const EMBLEM_SIZE: f32 = 16.0;
+/// RO's emblem size: one native emblem pixel per screen pixel.
+const EMBLEM_SIZE: f32 = 24.0;
 
-/// One unit's plate: the hero's bars, the name line, the guild line and a party
-/// member's health, hanging from the unit's feet.
+/// One unit's plate, hanging from the unit's feet: the hero's bars, then the guild
+/// emblem beside the name over the guild name, as RO draws it, then a party
+/// member's health.
 pub(super) fn plate(view: PlateView) -> impl Scene {
     let kind = view.kind;
     let own_bars: Vec<_> = (kind == PlateKind::Own)
@@ -31,7 +33,13 @@ pub(super) fn plate(view: PlateView) -> impl Scene {
         .into_iter()
         .map(|party| outlined_text(format!("({party})"), 11.0, ro_dark::BRONZE_LIGHT))
         .collect();
-    let guild: Vec<_> = view.guild.into_iter().map(guild_line).collect();
+    let emblem: Vec<_> = view
+        .guild
+        .is_some()
+        .then(plate_emblem)
+        .into_iter()
+        .collect();
+    let guild: Vec<_> = view.guild.into_iter().map(guild_name).collect();
     let party_bar: Vec<_> = (kind == PlateKind::Party)
         .then(|| vital_bar(Vec2::new(46.0, 4.0), Vital::Hp, PARTY_HP, 2.0))
         .into_iter()
@@ -46,14 +54,27 @@ pub(super) fn plate(view: PlateView) -> impl Scene {
                 Node { align_items: AlignItems::Center, column_gap: px(4) }
                 @ignore_picking()
                 Children [
-                    {crown}
+                    {emblem}
                     --
-                    @outlined_text(view.name, 13.0, kind.name_color())
-                    --
-                    {party}
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::FlexStart,
+                    }
+                    @ignore_picking()
+                    Children [
+                        Node { align_items: AlignItems::Center, column_gap: px(4) }
+                        @ignore_picking()
+                        Children [
+                            {crown}
+                            --
+                            @outlined_text(view.name, 13.0, kind.name_color())
+                            --
+                            {party}
+                        ]
+                        --
+                        {guild}
+                    ]
                 ]
-                --
-                {guild}
                 --
                 {party_bar}
             ]
@@ -88,23 +109,22 @@ fn vital_bar(size: Vec2, vital: Vital, color: Color, lift: f32) -> impl Scene {
     }
 }
 
-/// The guild's emblem and name. The emblem takes no room until its image arrives.
-fn guild_line(guild: GuildLine) -> impl Scene {
-    let color = guild.color();
+/// The guild emblem beside the name. It takes no room until its image arrives.
+fn plate_emblem() -> impl Scene {
     bsn! {
-        Node { align_items: AlignItems::Center, column_gap: px(4) }
+        PlateEmblem
+        ImageNode
+        Node {
+            width: px(EMBLEM_SIZE),
+            height: px(EMBLEM_SIZE),
+            display: Display::None,
+        }
         @ignore_picking()
-        Children [
-            PlateEmblem
-            ImageNode
-            Node {
-                width: px(EMBLEM_SIZE),
-                height: px(EMBLEM_SIZE),
-                display: Display::None,
-            }
-            @ignore_picking()
-            --
-            @outlined_text(guild.name, 11.0, color)
-        ]
     }
+}
+
+/// The guild's name under the unit's name.
+fn guild_name(guild: GuildLine) -> impl Scene {
+    let color = guild.color();
+    outlined_text(guild.name, 11.0, color)
 }
