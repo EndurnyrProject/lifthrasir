@@ -17,17 +17,21 @@ use ro_formats::{
 };
 use std::collections::HashSet;
 
-/// Historical pre-GLB lighting constants, originally mirrored from
+/// Historical pre-GLB sun constant, originally mirrored from
 /// `game-engine/src/presentation/rendering/lighting.rs`.
 pub const SUN_MAX_LUX: f32 = 10_000.0;
-pub const POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 500.0;
 
-/// Indoor lighting/exposure, live-tuned against `prt_cas` at EV100 9.7 (see
-/// `notes/map-lighting-tuning.md`). Point lights get an 18x intensity boost
-/// (`500 -> 9000` lux-at-half-range) and doubled range; the RSW sun is pinned
-/// to a dim interior value; ambient sits at a slightly higher floor.
-pub const INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 9_000.0;
-pub const INDOOR_POINT_LIGHT_RANGE_SCALE: f32 = 2.0;
+/// Point-light strength, fitted against the retail GND lightmaps (which bake
+/// these RSW lights as additive `colour * (1 - d / range)` at their authored
+/// position and range) on `gefg_cas01` and `comodo` at EV100 10.5.
+pub const POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 80_000.0;
+
+/// Indoor point-light strength, fitted the same way on `prt_cas` and
+/// `geffen_in` at EV100 9.7. Indoor lights keep their authored range like
+/// outdoor ones; the RSW sun is pinned to a dim interior value and ambient
+/// sits at a slightly higher floor.
+pub const INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE: f32 = 25_000.0;
+pub const INDOOR_POINT_LIGHT_RANGE_SCALE: f32 = 1.0;
 pub const INDOOR_SUN_LUX: f32 = 200.0;
 pub const INDOOR_AMBIENT_BRIGHTNESS: f32 = 100.0;
 /// Indoor maps stay at Bevy's default `Exposure::BLENDER` (9.7), the exposure
@@ -472,7 +476,7 @@ pub(crate) fn sun_illuminance(light: &RswLight, indoor: bool) -> f32 {
 
 /// Candela for a point light, chosen so Bevy's importer (`lumens = candela *
 /// 4 * pi`) lands on the native lumens from `lighting.rs::spawn_point_light`.
-/// Indoor maps use the boosted lux-at-half-range so interiors read at EV100 9.7.
+/// Indoor maps use their own lux-at-half-range, tuned at EV100 9.7.
 pub(crate) fn point_light_candela(light: &RswLightObj, indoor: bool) -> f32 {
     let lux_at_half = if indoor {
         INDOOR_POINT_LIGHT_LUX_AT_HALF_RANGE
@@ -483,8 +487,8 @@ pub(crate) fn point_light_candela(light: &RswLightObj, indoor: bool) -> f32 {
     lux_at_half * half_range * half_range
 }
 
-/// The baked point-light cutoff range. Indoor maps widen it so boosted
-/// interior lights still reach the far walls.
+/// The baked point-light cutoff range, scaled by
+/// [`INDOOR_POINT_LIGHT_RANGE_SCALE`] on indoor maps.
 pub fn point_light_range(light: &RswLightObj, indoor: bool) -> f32 {
     if indoor {
         light.range * INDOOR_POINT_LIGHT_RANGE_SCALE
@@ -652,7 +656,7 @@ mod tests {
         else {
             panic!("second light is the point light");
         };
-        assert_eq!(candela, 500.0 * 20.0 * 20.0);
+        assert_eq!(candela, POINT_LIGHT_LUX_AT_HALF_RANGE * 20.0 * 20.0);
         assert_eq!(range, 40.0);
         assert_eq!(translation, Vec3::new(20.0, -5.0, 30.0));
 

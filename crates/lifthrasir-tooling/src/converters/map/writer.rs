@@ -909,7 +909,10 @@ mod tests {
         assert_eq!(light.range(), Some(40.0));
         // Bevy's importer multiplies candela by 4*pi, landing on the native
         // lumens of `POINT_LIGHT_LUX_AT_HALF_RANGE * 4 * pi * half_range^2`.
-        assert_eq!(light.intensity(), 500.0 * 20.0 * 20.0);
+        assert_eq!(
+            light.intensity(),
+            POINT_LIGHT_LUX_AT_HALF_RANGE * 20.0 * 20.0
+        );
         assert_eq!(
             light.intensity() * 4.0 * PI,
             POINT_LIGHT_LUX_AT_HALF_RANGE * 4.0 * PI * 20.0 * 20.0
