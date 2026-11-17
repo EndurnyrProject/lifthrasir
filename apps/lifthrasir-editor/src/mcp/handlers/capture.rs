@@ -15,6 +15,7 @@ use crate::{
 use bevy::{
     camera::{Exposure, RenderTarget, ScalingMode},
     core_pipeline::tonemapping::Tonemapping,
+    light::cluster::{ClusterConfig, ClusterFarZMode, ClusterZConfig},
     prelude::*,
     render::{
         render_resource::{TextureFormat, TextureUsages},
@@ -122,6 +123,7 @@ fn spawn_capture(
         .next()
         .map(|(exposure, tonemapping)| (exposure.copied(), tonemapping.copied()));
     let (exposure, tonemapping) = editor.unwrap_or_default();
+    let clusters = cluster_config(&projection);
     world.spawn((
         Name::new("mcp capture camera"),
         Camera3d::default(),
@@ -132,6 +134,7 @@ fn spawn_capture(
         RenderTarget::Image(image.clone().into()),
         exposure.unwrap_or_default(),
         tonemapping.unwrap_or_default(),
+        clusters,
         projection,
         transform,
         // Not the world camera: the runtime's billboard and effect systems
@@ -147,6 +150,29 @@ fn spawn_capture(
         },
     ));
     Ok(())
+}
+
+/// Light clusters reaching the projection's far plane.
+///
+/// The default config sizes the cluster depth from last frame's GPU readback,
+/// which a fresh capture camera does not have yet; until then it stops at
+/// 1000 units and drops every light past that, so a zoomed-out screenshot
+/// rendered the map without its point lights.
+fn cluster_config(projection: &Projection) -> ClusterConfig {
+    let far = match projection {
+        Projection::Perspective(perspective) => perspective.far,
+        Projection::Orthographic(orthographic) => orthographic.far,
+        Projection::Custom(_) => return ClusterConfig::default(),
+    };
+    ClusterConfig::FixedZ {
+        total: 4096,
+        z_slices: 24,
+        z_config: ClusterZConfig {
+            first_slice_depth: 5.0,
+            far_z_mode: ClusterFarZMode::Constant(far),
+        },
+        dynamic_resizing: true,
+    }
 }
 
 type Plan = (Transform, Projection, UVec2, Value);
