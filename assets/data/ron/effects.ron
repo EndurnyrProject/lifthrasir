@@ -61,10 +61,10 @@
 // STR layers in non-repeating target skill effects.
 //
 // Caveats (`special` section):
-//   - Only effects backed by an STR asset (or a `Bespoke`/`Shader` layer) can
-//     play here. Many classic ambient effects (firefly=45, sandwind=46,
-//     torch=47, ...) are hardcoded particle systems in the original client with
-//     no STR -- leave them unmapped; they need bespoke emitters, not this path.
+//   - Only effects backed by an STR asset (or a `Sprite`/`Bespoke`/`Shader`
+//     layer) can play here. Many classic ambient effects (firefly=45,
+//     sandwind=46, ...) are hardcoded particle systems in the original client
+//     with no STR -- leave them unmapped; they need bespoke emitters.
 //   - Unmapped `effect_type`s are logged by `spawn_map_effects`; use those
 //     logs to discover which ids real maps actually reference, then add them
 //     here.
@@ -2691,6 +2691,13 @@
             sound: None,
             placement: Ground,
             color: (0.5, 0.5, 0.5, 0.6),
+            repeating: true,
+        ),
+        47: ( // EF_TORCH — looping SPR flame on map torches.
+            visuals: [Sprite("이팩트/torch_01")],
+            sound: None,
+            placement: Ground,
+            color: (1.0, 1.0, 1.0, 1.0),
             repeating: true,
         ),
         89: ( // EF_STORMGUST

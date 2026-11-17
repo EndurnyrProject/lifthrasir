@@ -3,7 +3,8 @@
 //!
 //! RSW `effect_type` is the rAthena `e_special_effects` (EF_*) id — the same
 //! namespace aesir's `SpecialEffect` packet keys on. A descriptor with a `Str`
-//! layer plays as an STR effect, reusing the skill-effect runtime. A descriptor
+//! layer plays as an STR effect, reusing the skill-effect runtime; a `Sprite`
+//! layer loops its SPR/ACT animation in place (EF_TORCH). A descriptor
 //! with a `Bespoke` layer instead (the classic hardcoded-particle ambient
 //! effects like smoke and generic emitters, which have no STR in the original
 //! client) spawns a `MapAmbientVfx` bridge entity for the presentation layer to
@@ -18,6 +19,7 @@ use bevy::prelude::*;
 use super::components::{EmitterOutput, LifEffectEmitter, SceneOwner};
 use crate::audio::map_sounds::{GltfMapSoundSpawned, MapSound, MapSoundSource};
 use crate::effects::spawn_effect;
+use crate::effects::sprites::EffectSprite;
 use crate::effects::{EffectAnchor, MapAmbientVfx};
 use crate::effects::{descriptor_tint, load_effect};
 use lifthrasir_assets::catalogs::EffectCatalog;
@@ -138,9 +140,23 @@ fn spawn_map_effect(
         return true;
     }
 
+    if let Some(stem) = descriptor.sprite_stem() {
+        commands.spawn((
+            EffectSprite {
+                path: stem.to_string(),
+                tint: descriptor_tint(descriptor),
+            },
+            Transform::from_translation(position),
+            Visibility::default(),
+            SceneOwner(owner),
+            EmitterOutput(emitter),
+        ));
+        return true;
+    }
+
     let Some(key) = descriptor.bespoke_key() else {
         debug!(
-            "Map effect {} has neither a Str nor a Bespoke layer; skipping",
+            "Map effect {} has no Str, Sprite or Bespoke layer; skipping",
             effect.effect_type
         );
         return true;
