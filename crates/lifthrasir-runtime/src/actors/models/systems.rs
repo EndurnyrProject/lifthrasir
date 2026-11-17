@@ -241,6 +241,7 @@ pub fn wire_scenes(
                 let default_texture = material.base_color_texture.clone();
                 commands.entity(mesh).insert((
                     MeshMaterial3d(materials.add(material)),
+                    Visibility::Hidden,
                     EmblemSurface {
                         actor,
                         default_texture,
@@ -274,17 +275,27 @@ pub(super) fn sync_facing(
     }
 }
 
+/// Shows each emblem surface only while its owner has an emblem. The model's
+/// own emblem texture is a placeholder blob, so it is never displayed.
 pub fn sync_emblems(
-    surfaces: Query<(&EmblemSurface, &MeshMaterial3d<StandardMaterial>)>,
+    mut surfaces: Query<(
+        &EmblemSurface,
+        &MeshMaterial3d<StandardMaterial>,
+        &mut Visibility,
+    )>,
     owners: Query<&ActorEmblem>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (surface, handle) in &surfaces {
-        let texture = owners
+    for (surface, handle, mut visibility) in &mut surfaces {
+        let emblem = owners
             .get(surface.actor)
             .ok()
-            .and_then(|emblem| emblem.0.clone())
-            .or_else(|| surface.default_texture.clone());
+            .and_then(|emblem| emblem.0.clone());
+        visibility.set_if_neq(match emblem {
+            Some(_) => Visibility::Inherited,
+            None => Visibility::Hidden,
+        });
+        let texture = emblem.or_else(|| surface.default_texture.clone());
         if materials
             .get(&handle.0)
             .is_some_and(|m| m.base_color_texture != texture)

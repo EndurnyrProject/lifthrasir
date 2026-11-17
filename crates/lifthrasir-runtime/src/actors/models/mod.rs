@@ -14,7 +14,7 @@ pub struct Gr2Actor {
     pub model: String,
 }
 
-/// Caller-resolved emblem image. An empty image keeps the model's default texture.
+/// Caller-resolved emblem image. An empty image hides the emblem surface.
 #[derive(Component, Default, Debug, Clone, PartialEq, Eq)]
 pub struct ActorEmblem(pub Option<Handle<Image>>);
 

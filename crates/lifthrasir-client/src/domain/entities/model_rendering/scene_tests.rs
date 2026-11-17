@@ -242,6 +242,43 @@ fn delayed_materials_wire_once_and_emblems_are_isolated_by_owner() {
 }
 
 #[test]
+fn emblem_surface_shows_only_with_an_emblem() {
+    let mut app = app();
+    let gltf = gltf(&mut app, true);
+    let material = app
+        .world_mut()
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial::default());
+    let (actor, _, _, mesh) = scene(&mut app, gltf, material, 0);
+    app.update();
+    app.update();
+    assert_eq!(
+        app.world().get::<Visibility>(mesh),
+        Some(&Visibility::Hidden)
+    );
+
+    app.world_mut()
+        .get_mut::<GuildFlag>(actor)
+        .unwrap()
+        .guild_id = 42;
+    app.update();
+    app.world_mut().write_message(GuildIngress {
+        generation: ZoneSessionGeneration(1),
+        payload: GuildIngressPayload::EmblemData {
+            guild_id: 42,
+            emblem_id: 7,
+            data: crate::domain::guild::emblems::test_emblem_bmp(24, 24),
+        },
+    });
+    app.update();
+    app.update();
+    assert_eq!(
+        app.world().get::<Visibility>(mesh),
+        Some(&Visibility::Inherited)
+    );
+}
+
+#[test]
 #[should_panic(expected = "has no idle animation")]
 fn missing_required_idle_animation_fails_loudly() {
     let mut app = app();
