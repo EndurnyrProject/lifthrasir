@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.15.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.2...v0.15.0) (2026-11-18)
+
+
+### Features
+
+* Add hallucination screen effect ([7b3c3b8](https://github.com/EndurnyrProject/lifthrasir/commit/7b3c3b8a3eb1e485ffaf2e43ffceb36e1f0a3b42))
+* **chat-rooms:** add NPC and player chat rooms with signs, join card, room window and rebindable key ([00b7cd8](https://github.com/EndurnyrProject/lifthrasir/commit/00b7cd84d9bf7f9ffda4ab7a32d20982c3b8360c))
+* **editor:** mcp call contract, coordinates and dispatch ([e997b22](https://github.com/EndurnyrProject/lifthrasir/commit/e997b228216a4fcc3a6c80a91101126e71751c4e))
+* **editor:** serve the editor over mcp behind --mcp ([cc21a47](https://github.com/EndurnyrProject/lifthrasir/commit/cc21a477f5e6f97945e444ca8a7823a00e55d5a3))
+* **effects:** add monster skill effects with one-shot sprite playback ([32d861d](https://github.com/EndurnyrProject/lifthrasir/commit/32d861d33330343ab39f5cf05d7dc8f09076e94e))
+* **effects:** add potion use special effects with drink sound ([8c8a5c9](https://github.com/EndurnyrProject/lifthrasir/commit/8c8a5c9460572d5b6206b677561c33275346f398))
+* **hud-ui:** Compact one-row hotbar clear of the chat, add show all names setting and hotkey ([9ff4e05](https://github.com/EndurnyrProject/lifthrasir/commit/9ff4e05bb0bfb2c6ba827e8905e1744e98dce5db))
+* **hud-ui:** Make hotbar, chat, minimap, status bar and status effects draggable with persisted positions ([50c26ee](https://github.com/EndurnyrProject/lifthrasir/commit/50c26ee5e7db52b6830994bc2b5801373b1f0cd5))
+* Render Ragnarok map portals with EF_WARPZONE2 ([8d71855](https://github.com/EndurnyrProject/lifthrasir/commit/8d71855f23b4f0d2f4333bb0b893f8c52e561122))
+* RO-style nameplate with 24x24 guild emblem beside name and guild ([4c4ced0](https://github.com/EndurnyrProject/lifthrasir/commit/4c4ced0df2d09daa30459ae5d4f42a7012b3a61f))
+* **runtime:** play EF_TORCH map effects as looping sprites ([825810b](https://github.com/EndurnyrProject/lifthrasir/commit/825810b511361e36c70adb234e698dd387c14a64))
+* **tooling:** retune map point lights against retail lightmaps ([32ff59e](https://github.com/EndurnyrProject/lifthrasir/commit/32ff59e225affb396e4782b03b8f6a81c684b54c))
+
+
+### Bug Fixes
+
+* apply ACT layer color to effect sprites (fixes opaque torch halo) ([6755d67](https://github.com/EndurnyrProject/lifthrasir/commit/6755d674a6a68f0a95f53f67f3211782e746a84c))
+* Fixes the guild flag emblem smudge ([75f874b](https://github.com/EndurnyrProject/lifthrasir/commit/75f874baa7baf0f8d006b75647392116fed81337))
+* **ui:** crop button art so small buttons keep their shadow inset ([ad775cc](https://github.com/EndurnyrProject/lifthrasir/commit/ad775ccd093646402ae450287455acd44fb03e8b))
+
 ## [0.14.2](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.1...v0.14.2) (2026-11-05)
 
 
