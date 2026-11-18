@@ -1,6 +1,5 @@
 pub mod ambient;
 pub mod impact;
-pub mod portal;
 pub mod skill_fx;
 
 use bevy::prelude::*;

@@ -19,7 +19,7 @@ For `bevy_feathers` BSN/widget authoring patterns specifically, see the `bevy-fe
 | `leafwing-input-manager` | 0.22 | action→binding input maps | `lifthrasir-client`, `lifthrasir-client-ui` |
 | `bevy_kira_audio` | 0.27 (`mp3`,`wav`,`ogg`) | audio backend, incl. spatial | `lifthrasir-client`, `lifthrasir-runtime`, `lifthrasir-editor` |
 | `bevy_feathers` | 0.20.0 | Bevy UI widget/theme toolkit | `lifthrasir-ui`, `lifthrasir-client-ui` |
-| `bevy_hanabi` | git pin, `3d` only | GPU particle VFX | `lifthrasir-runtime` (plugin registered, no effects authored) |
+| `bevy_hanabi` | git pin, `3d` only | GPU particle VFX | `lifthrasir-runtime` |
 | `bevy::settings` | `bevy_settings` feature | persisted settings groups | `apps/lifthrasir`, `lifthrasir-client` |
 | `moonshine-kind` / `-tag` / `-behavior` | 0.6 | entity kinds / runtime tags / validated state machines | runtime + client + assets |
 | `bevy_framepace` | git pin (`bevy0p20` branch) | frame-rate limiter | `lifthrasir-client`, `apps/lifthrasir` |
@@ -252,11 +252,11 @@ override_cursor.0 = Some(EntityCursor::Custom(CustomCursor::Image(/* ... */)));
 
 Custom cursor images require Bevy's own `custom_cursor` feature. That feature is on `bevy` (enabled in the root `Cargo.toml`); `bevy_feathers` 0.20 has **no** `custom_cursor` feature. See `crates/lifthrasir-client-ui/src/cursor.rs`.
 
-### bevy_hanabi (git pin, `3d` only) — plugin registered, no effects authored yet
+### bevy_hanabi (git pin, `3d` only)
 
 `EffectsPlaybackPlugin` (`crates/lifthrasir-runtime/src/effects/plugin.rs`) owns `HanabiPlugin` when a renderer is available. **Add it in exactly one place**; the client's VFX plugin owns gameplay bridges, not Hanabi. The shared CPU subset deliberately omits GPU initialization.
 
-No `EffectAsset`/`ParticleEffect` exists in the repo yet — the portal effect uses a hand-written `Material` + shader, not Hanabi particles. Adding particles (sparks, dust, spell trails) is greenfield: author an `EffectAsset` with `ExprWriter` and spawn `ParticleEffect` under the existing `VfxSystems` ordering. Note the crate is built **without 2D support** on purpose.
+See `crates/lifthrasir-runtime/src/effects/procedural/ambient.rs` for `EffectAsset` and `ParticleEffect` examples. Map warp NPCs render Ragnarok's built-in `EF_WARPZONE2` effect, not an NPC sprite.
 
 ### bevy_framepace (git pin, `bevy0p20` branch)
 

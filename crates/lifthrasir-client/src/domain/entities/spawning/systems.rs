@@ -143,9 +143,13 @@ pub fn spawn_network_entity_system(
 ) {
     for unit in spawn_events.read() {
         let event = SpawnFields::from(unit);
+        let is_warp = event.object_type == crate::domain::entities::types::ObjectType::Npc
+            && u32::from(event.job) == WARP_JOB_ID;
         let resource_name = job_registry
             .as_ref()
-            .filter(|_| event.object_type != crate::domain::entities::types::ObjectType::Pc)
+            .filter(|_| {
+                !is_warp && event.object_type != crate::domain::entities::types::ObjectType::Pc
+            })
             .and_then(|registry| registry.get_sprite_name(event.job as u32));
         let model = resource_name
             .filter(|name| {
@@ -191,11 +195,6 @@ pub fn spawn_network_entity_system(
             }
             continue;
         }
-
-        let is_warp = matches!(
-            event.object_type,
-            crate::domain::entities::types::ObjectType::Npc
-        ) && event.job as u32 == WARP_JOB_ID;
 
         let char_data = CharacterData {
             name: event.name.clone(),
@@ -316,9 +315,6 @@ pub fn spawn_network_entity_system(
             }
             crate::domain::entities::types::ObjectType::Npc => {
                 entity_cmd.insert(Npc);
-                if is_warp {
-                    entity_cmd.insert(WarpPortal);
-                }
                 debug!("Spawned NPC: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Mob => {
@@ -380,8 +376,8 @@ pub fn spawn_network_entity_system(
 
         entity_registry.register_entity(event.gid, entity_id);
 
-        // Warp portals render as a 3D VFX (WarpPortal -> PortalVfx), not a sprite.
         if is_warp {
+            entity_cmd.insert(WarpZone);
             continue;
         }
 

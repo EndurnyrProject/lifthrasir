@@ -15,10 +15,9 @@ pub struct RemotePlayer;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Npc;
 
-/// Marker for warp-portal NPCs (job 45). The presentation layer reacts to this
-/// to attach the portal VFX in place of the classic sprite.
+/// A map warp NPC rendered with Ragnarok's EF_WARPZONE2 effect.
 #[derive(Component, Debug, Clone, Copy)]
-pub struct WarpPortal;
+pub struct WarpZone;
 
 /// Marker for Monster/mob entities
 #[derive(Component, Debug, Clone, Copy)]

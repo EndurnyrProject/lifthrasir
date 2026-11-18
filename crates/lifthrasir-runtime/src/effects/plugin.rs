@@ -6,8 +6,7 @@ use super::overlays::{
 };
 use super::playback::*;
 use super::procedural::{
-    VfxSystems, ambient::MapAmbientVfxPlugin, impact::ImpactVfxPlugin, portal::PortalVfxPlugin,
-    skill_fx::SkillFxPlugin,
+    VfxSystems, ambient::MapAmbientVfxPlugin, impact::ImpactVfxPlugin, skill_fx::SkillFxPlugin,
 };
 use super::sprites::{
     EffectSpriteAssets, despawn_unplayed_one_shot_sprites, spawn_effect_sprites,
@@ -35,7 +34,6 @@ impl Plugin for EffectsPlaybackPlugin {
         }
         app.add_plugins((
             MaterialPlugin::<EffectMaterial>::default(),
-            PortalVfxPlugin,
             ImpactVfxPlugin,
             SkillFxPlugin,
             MapAmbientVfxPlugin,

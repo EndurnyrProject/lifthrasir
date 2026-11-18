@@ -12,7 +12,7 @@ use {
 };
 
 #[derive(Resource, Default)]
-struct SpriteRequests(usize);
+struct SpriteRequests(Vec<RequestSpriteSpawn>);
 
 #[test]
 fn model_scene_is_a_single_owned_child_and_is_replaced_when_the_model_changes() {
@@ -125,7 +125,9 @@ fn spawn_app() -> App {
         .add_message::<UnitEntered>()
         .add_systems(Update, spawn_network_entity_system)
         .add_observer(
-            |_: On<RequestSpriteSpawn>, mut requests: ResMut<SpriteRequests>| requests.0 += 1,
+            |request: On<RequestSpriteSpawn>, mut requests: ResMut<SpriteRequests>| {
+                requests.0.push(request.event().clone());
+            },
         );
     app
 }
@@ -176,30 +178,35 @@ fn reentry_refreshes_model_owner_and_facing_without_moving_the_entity() {
         app.world().get::<Gr2Actor>(actor).unwrap().model,
         "ro://models/3dmob/aguardian90_8.glb"
     );
-    assert_eq!(app.world().resource::<SpriteRequests>().0, 0);
+    assert!(app.world().resource::<SpriteRequests>().0.is_empty());
 }
 
 #[test]
-fn ordinary_sprites_and_warp_portals_keep_their_existing_paths() {
+fn ordinary_actors_use_sprites_but_map_warps_do_not() {
     let mut app = spawn_app();
     for (gid, job, kind) in [(1, 1002, 5), (2, 46, 1), (3, 45, 1), (4, 0, 0)] {
         app.world_mut().write_message(unit(gid, job, kind));
     }
     app.update();
-    assert_eq!(app.world().resource::<SpriteRequests>().0, 3);
+    let portal = app
+        .world()
+        .resource::<EntityRegistry>()
+        .get_entity(3)
+        .unwrap();
+    let requests = &app.world().resource::<SpriteRequests>().0;
+    assert!(
+        app.world()
+            .get::<crate::domain::entities::markers::WarpZone>(portal)
+            .is_some()
+    );
+    assert!(requests.iter().all(|request| request.entity != portal));
+    assert_eq!(requests.len(), 3);
     assert_eq!(
         app.world_mut()
             .query::<&Gr2Actor>()
             .iter(app.world())
             .count(),
         0
-    );
-    assert_eq!(
-        app.world_mut()
-            .query::<&crate::domain::entities::markers::WarpPortal>()
-            .iter(app.world())
-            .count(),
-        1
     );
 }
 
@@ -216,7 +223,7 @@ fn gr2_npcs_mobs_and_companions_bypass_sprite_requests() {
         app.world_mut().write_message(unit(gid, job, kind));
     }
     app.update();
-    assert_eq!(app.world().resource::<SpriteRequests>().0, 0);
+    assert!(app.world().resource::<SpriteRequests>().0.is_empty());
     assert_eq!(
         app.world_mut()
             .query::<&Gr2Actor>()

@@ -3,10 +3,7 @@ use lifthrasir_assets::{
     ContentAssetsPlugin,
     catalogs::shader_fx::{ShaderFxCatalog, ShaderFxEntry},
 };
-use lifthrasir_runtime::effects::procedural::{
-    impact::FactorRamp,
-    portal::{PortalMaterial, PortalVfx},
-};
+use lifthrasir_runtime::effects::procedural::impact::FactorRamp;
 use lifthrasir_runtime::effects::{MapAmbientVfx, events::PlayProceduralVfx};
 use lifthrasir_runtime::{EffectsPlaybackPlugin, RuntimeCorePlugin};
 use std::collections::BTreeMap;
@@ -41,10 +38,6 @@ fn generic_procedural_requests_update_without_gameplay_resources() {
     )])));
     app.finish();
     app.cleanup();
-    let portal = app
-        .world_mut()
-        .spawn((PortalVfx::default(), Transform::default()))
-        .id();
     let smoke = app
         .world_mut()
         .spawn(MapAmbientVfx {
@@ -68,11 +61,6 @@ fn generic_procedural_requests_update_without_gameplay_resources() {
             .iter(app.world())
             .count(),
         1
-    );
-    assert!(
-        app.world()
-            .get::<MeshMaterial3d<PortalMaterial>>(portal)
-            .is_some()
     );
     assert!(
         app.world()

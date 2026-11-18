@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use super::player_jobs::{get_player_job_sprite_mapping, is_player_job};
 
-/// JT_WARPNPC. The official jobname.lub maps this to a placeholder ("1_ETC_01");
-/// the real client special-cases it to the animated portal sprite instead.
+/// JT_WARPNPC. The client renders map warps as EF_WARPZONE2 rather than using
+/// the placeholder sprite in the official jobname.lub.
 pub const WARP_JOB_ID: u32 = 45;
 const WARP_SPRITE_NAME: &str = "portal";
 
