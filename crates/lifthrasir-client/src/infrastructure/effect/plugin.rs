@@ -14,7 +14,8 @@ pub struct EffectsPlugin;
 
 impl Plugin for EffectsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PendingAilments>()
+        app.add_plugins(crate::domain::effects::hallucination::HallucinationPlugin)
+            .init_resource::<PendingAilments>()
             .init_resource::<PendingBodyStates>()
             .init_resource::<PendingEffectStates>()
             .init_resource::<PendingVirtues>()

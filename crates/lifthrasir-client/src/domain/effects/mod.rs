@@ -1,4 +1,5 @@
 pub mod ailment_visuals;
+pub mod hallucination;
 pub mod map_effects;
 pub mod performance;
 pub mod spirit_spheres;
