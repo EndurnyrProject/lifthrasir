@@ -72,17 +72,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let source = setup_composite_source_from_config(&config)?;
     let mut app = App::new();
     register_ro_asset_source(&mut app, Arc::new(RwLock::new(source)));
-    app.add_plugins(
-        DefaultPlugins
-            .set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: format!("Content viewer: {kind} {path}"),
-                    ..default()
-                }),
-                ..default()
-            })
-            .disable::<bevy::audio::AudioPlugin>(),
-    )
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: format!("Content viewer: {kind} {path}"),
+            ..default()
+        }),
+        ..default()
+    }))
     .add_plugins((
         ContentAssetsPlugin,
         ContentCatalogPlugin,
