@@ -30,6 +30,7 @@ impl Plugin for EffectsPlugin {
                     on_skill_damage,
                     on_ground_skill,
                     on_special_effect,
+                    crate::domain::effects::level_up::on_level_up,
                 ),
             )
             .add_systems(
