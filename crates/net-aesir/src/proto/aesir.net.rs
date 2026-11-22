@@ -4387,6 +4387,9 @@ pub struct HomunculusPrivateState {
     pub cooldowns: ::prost::alloc::vec::Vec<HomunculusCooldown>,
     #[prost(message, optional, tag = "27")]
     pub ai_config: ::core::option::Option<HomunculusAiConfig>,
+    /// Permanent owner-side loss. Only durable_id is set beside this flag.
+    #[prost(bool, tag = "28")]
+    pub removed: bool,
 }
 /// Server -> owner, correlated outcome and immediate authoritative post-state.
 /// State is absent only when no companion exists or confirmed deletion succeeds.

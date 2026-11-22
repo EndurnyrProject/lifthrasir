@@ -5,7 +5,8 @@ use net_contract::commands::{
     ConnectCharServer, ConnectLogin, ConnectZone, LeaveZone, LocalMapLoaded, LocalPlayerReady,
     Logout, RespawnRequested,
 };
-use net_contract::events::{LoginRefused, MapChangeRequested, ZoneDisconnected};
+use net_contract::events::{HomunculusReady, LoginRefused, MapChangeRequested, ZoneDisconnected};
+use net_contract::state::ZoneSessionGeneration;
 
 use crate::channels::{CONTROL, GAMEPLAY};
 use crate::character::{self, CharPhase, PendingAuth, QuicCharState};
@@ -132,12 +133,13 @@ pub fn handle_connect_zone(
 /// relogged merchant's cart never rendering). The player spawn is purely
 /// client-driven (spawn cell comes from `EnterAck`), so nothing here waits on
 /// the server.
-#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
+#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update, config(after = reset_handshake_on_warp))]
 pub fn advance_zone_handshake(
     mut map_loaded: MessageReader<LocalMapLoaded>,
     mut player_ready: MessageReader<LocalPlayerReady>,
     mut client: ResMut<QuinnetClient>,
     mut state: ResMut<QuicZoneState>,
+    mut homunculus_ready: MessageWriter<HomunculusReady>,
 ) {
     if !map_loaded.is_empty() {
         map_loaded.clear();
@@ -165,6 +167,9 @@ pub fn advance_zone_handshake(
         && let Some(next) = player_ready_next(state.phase)
     {
         state.phase = next;
+        homunculus_ready.write(HomunculusReady {
+            generation: ZoneSessionGeneration(state.connection_epoch),
+        });
     }
 }
 
@@ -204,7 +209,7 @@ pub fn handle_logout(
 /// handshake must replay: reset to `Entering` and clear the latched map signal so
 /// the next `LocalMapLoaded` re-sends `MapLoaded`. The player entity survives a
 /// warp, so `player_ready_signal` is intentionally kept.
-#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update)]
+#[auto_add_system(plugin = crate::AesirNetPlugin, schedule = Update, config(after = crate::zone::flow::warp::zone_drain_warp))]
 pub fn reset_handshake_on_warp(
     mut events: MessageReader<MapChangeRequested>,
     mut state: ResMut<QuicZoneState>,
