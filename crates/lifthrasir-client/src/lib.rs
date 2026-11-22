@@ -37,6 +37,7 @@ pub use crate::infrastructure::diagnostics::RoDiagnosticsPlugin;
 pub use crate::infrastructure::effect::EffectsPlugin;
 pub use crate::presentation::rendering::{MapPlugin, VfxPlugin};
 
+use crate::domain::homunculus::HomunculusPlugin;
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;
 
@@ -69,6 +70,7 @@ impl PluginGroup for ClientPlugins {
             .add(EmotePlugin)
             .add(PartyPlugin)
             .add(ChatRoomPlugin)
+            .add(HomunculusPlugin)
             .add(GuildPlugin)
             .add(ItemDropPlugin)
             .add(EquipmentPlugin)
