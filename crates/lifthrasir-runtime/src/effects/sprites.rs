@@ -117,27 +117,32 @@ pub(super) fn apply_animation_part(
         material.base_color = color;
     }
 
+    let current = *transform;
+    transform.set_if_neq(animation_part_transform(part, current));
+    visibility.set_if_neq(Visibility::Inherited);
+}
+
+/// Places one ACT layer quad: RO centres the sprite on the ACT position, and the
+/// authored y offset (already Y-up after extraction) lifts it off the cell. The
+/// quad keeps its own depth and rotation.
+pub(crate) fn animation_part_transform(part: &FramePart, current: Transform) -> Transform {
     let scale_x = part.scale.x
         * part.texture_size.x
         * SPRITE_WORLD_SCALE
         * if part.mirror { -1.0 } else { 1.0 };
-    let current = *transform;
-    transform.set_if_neq(Transform {
+    Transform {
         scale: Vec3::new(
             scale_x,
             part.scale.y * part.texture_size.y * SPRITE_WORLD_SCALE,
             1.0,
         ),
-        // RO centres the sprite on the ACT position; the authored y offset
-        // (already Y-up after extraction) lifts the sprite off the cell.
         translation: Vec3::new(
             part.position.x * SPRITE_WORLD_SCALE,
             part.position.y * SPRITE_WORLD_SCALE,
             current.translation.z,
         ),
         ..current
-    });
-    visibility.set_if_neq(Visibility::Inherited);
+    }
 }
 
 /// Channel-wise sRGBA multiply, alpha included.

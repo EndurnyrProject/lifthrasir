@@ -3,13 +3,14 @@ use bevy_auto_plugin::prelude::*;
 
 use crate::actors::ActionType;
 use crate::actors::sprites::components::{
-    BodyAttachPoint, HeadLayer, MobSprite, PlayerAppearance, PlayerSprite, RenderLayer,
-    RoSpriteGeneric,
+    BodyAttachPoint, HeadLayer, HomunculusPartLayer, HomunculusSprite, MobSprite, PlayerAppearance,
+    PlayerSprite, RenderLayer, RoSpriteGeneric,
 };
 use crate::actors::sprites::layout::ActionLayout;
 use crate::actors::sprites::systems::set_layer_texture;
 use crate::audio::events::PlayMobSfx;
 use crate::effects::AnimationPaused;
+use crate::effects::sprites::animation_part_transform;
 use crate::rendering::SpriteRenderingSystems;
 use crate::rendering::constants::SPRITE_WORLD_SCALE;
 use lifthrasir_assets::animation::asset::RoAnimationAsset;
@@ -219,6 +220,89 @@ pub fn sync_mob_body_layer(
         None,
         Some(&mut sfx_writer),
     );
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::TransformUpdate)
+)]
+pub fn sync_homunculus_body_layer(
+    time: Res<Time>,
+    animations: Res<Assets<RoAnimationAsset>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    parent_query: Query<(
+        &HomunculusSprite,
+        Option<&AnimationPaused>,
+        Option<&PlayerAppearance>,
+    )>,
+    mut layer_query: BodyLayerQuery,
+    mut sfx_writer: MessageWriter<PlayMobSfx>,
+) {
+    let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
+    sync_body_layer_impl(
+        game_time_ms,
+        &animations,
+        &mut materials,
+        &parent_query,
+        &mut layer_query,
+        None,
+        Some(&mut sfx_writer),
+    );
+}
+
+type HomunculusPartQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static HomunculusPartLayer,
+        &'static RenderLayer,
+        &'static ChildOf,
+        &'static MeshMaterial3d<StandardMaterial>,
+        &'static mut Transform,
+        &'static mut Visibility,
+    ),
+>;
+
+/// Draws the Homunculus ACT layers beyond the first on their own quads, on the
+/// body's frame (paused bodies hold it). A part the current frame lacks hides
+/// instead of keeping stale geometry.
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::TransformUpdate)
+)]
+pub fn sync_homunculus_part_layers(
+    time: Res<Time>,
+    animations: Res<Assets<RoAnimationAsset>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    parents: Query<(&HomunculusSprite, Option<&AnimationPaused>)>,
+    mut parts: HomunculusPartQuery,
+) {
+    let game_time_ms = (time.elapsed_secs() * 1000.0) as u32;
+    for (layer, render_layer, child_of, material, mut transform, mut visibility) in &mut parts {
+        let Ok((sprite, paused)) = parents.get(child_of.parent()) else {
+            continue;
+        };
+        let Some(animation) = animations.get(&render_layer.animation) else {
+            continue;
+        };
+        let effective_time = paused.map_or(game_time_ms, |p| p.at_ms);
+        let Some(part) = sprite
+            .get_frame(animation, effective_time)
+            .and_then(|frame| frame.parts.get(layer.part))
+        else {
+            visibility.set_if_neq(Visibility::Hidden);
+            continue;
+        };
+
+        if let Some(texture) = animation.textures.get(part.texture_index) {
+            set_layer_texture(&mut materials, &material.0, texture);
+        }
+        let current = *transform;
+        transform.set_if_neq(animation_part_transform(part, current));
+        visibility.set_if_neq(Visibility::Inherited);
+    }
 }
 
 #[cfg(test)]

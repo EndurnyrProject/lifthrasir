@@ -5,8 +5,10 @@ use crate::actors::ActorAnimationInput;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::*;
 
-use crate::actors::sprites::components::{MobSprite, PlayerSprite, RoSpriteGeneric};
-use crate::actors::sprites::layout::{ActionLayout, MobLayout, PlayerLayout};
+use crate::actors::sprites::components::{
+    HomunculusSprite, MobSprite, PlayerSprite, RoSpriteGeneric,
+};
+use crate::actors::sprites::layout::{ActionLayout, HomunculusLayout, MobLayout, PlayerLayout};
 use crate::actors::{ActionType, CharacterDirection, CombatMotion, Direction};
 use crate::effects::AnimationPaused;
 use crate::rendering::SpriteRenderingSystems;
@@ -130,6 +132,34 @@ pub fn sync_mob_sprite_action(time: Res<Time>, mut query: SpriteActionQuery<MobL
 pub fn sync_mob_sprite_direction(
     camera_query: Query<&Transform, (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
     mut query: Query<(&CharacterDirection, &mut MobSprite)>,
+) {
+    let octant = camera_query
+        .single()
+        .map(|t| camera_view_octant(*t.forward()))
+        .unwrap_or(0);
+    sync_sprite_direction_impl(octant, &mut query);
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationSync)
+)]
+pub fn sync_homunculus_sprite_action(
+    time: Res<Time>,
+    mut query: SpriteActionQuery<HomunculusLayout>,
+) {
+    sync_sprite_action_impl(&time, &mut query);
+}
+
+#[auto_add_system(
+    plugin = crate::actors::ActorRenderPlugin,
+    schedule = Update,
+    config(in_set = SpriteRenderingSystems::AnimationSync, after = sync_homunculus_sprite_action)
+)]
+pub fn sync_homunculus_sprite_direction(
+    camera_query: Query<&Transform, (With<Camera3d>, Without<EquipmentPreviewCamera>)>,
+    mut query: Query<(&CharacterDirection, &mut HomunculusSprite)>,
 ) {
     let octant = camera_query
         .single()

@@ -7,7 +7,7 @@ pub mod types;
 pub use crate::rendering::Direction;
 pub use sprites::ActorRenderPlugin;
 pub use sprites::components::{
-    EntitySpriteData, EntitySpriteInfo, MobSprite, PlayerAppearance, PlayerSprite,
+    EntitySpriteData, EntitySpriteInfo, HomunculusSprite, MobSprite, PlayerAppearance, PlayerSprite,
 };
 pub use sprites::events::{RequestSpriteSpawn, SpawnSpriteEvent};
 

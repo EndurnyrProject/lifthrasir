@@ -120,6 +120,7 @@ fn spawn_app() -> App {
     }
     let mut app = App::new();
     app.init_resource::<EntityRegistry>()
+        .init_resource::<lifthrasir_assets::animation::processing::PendingAnimations>()
         .init_resource::<SpriteRequests>()
         .insert_resource(JobSpriteRegistry::from_job_data(data))
         .add_message::<UnitEntered>()

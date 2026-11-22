@@ -1,6 +1,7 @@
 use super::super::components::{
-    BodyAttachPoint, EntitySpriteData, HeadAttachPoint, HeadAttachment, HeadLayer, MobSprite,
-    PendingRenderLayers, PlayerAppearance, PlayerSprite, RenderLayer, SpriteHierarchyConfig,
+    BodyAttachPoint, EntitySpriteData, HeadAttachPoint, HeadAttachment, HeadLayer,
+    HomunculusPartLayer, HomunculusSprite, MobSprite, PendingRenderLayers, PlayerAppearance,
+    PlayerSprite, RenderLayer, SpriteHierarchyConfig,
 };
 use super::super::events::{RequestSpriteSpawn, SpawnSpriteEvent};
 use crate::rendering::SpriteRenderingSystems;
@@ -67,6 +68,14 @@ pub fn spawn_sprite_hierarchy(
             }
             EntitySpriteData::Mob { sprite_name } => {
                 spawn_mob_components(
+                    &mut entity_commands,
+                    sprite_name,
+                    &asset_server,
+                    &mut pending_animations,
+                );
+            }
+            EntitySpriteData::Homunculus { sprite_name } => {
+                spawn_homunculus_components(
                     &mut entity_commands,
                     sprite_name,
                     &asset_server,
@@ -221,6 +230,29 @@ fn spawn_mob_components(
     );
 }
 
+fn spawn_homunculus_components(
+    entity_commands: &mut EntityCommands,
+    sprite_name: &str,
+    asset_server: &AssetServer,
+    pending_animations: &mut PendingAnimations,
+) {
+    let entity = entity_commands.id();
+    let spr = asset_server.load(paths::homunculus_sprite_path(sprite_name));
+    let act = asset_server.load(paths::homunculus_action_path(sprite_name));
+    pending_animations.request(spr, act, None, LAYER_BODY, Some(entity));
+
+    entity_commands.insert((
+        HomunculusSprite::default(),
+        PendingRenderLayers,
+        crate::actors::sprites::kinds::SpriteRoot,
+    ));
+
+    debug!(
+        "spawn_homunculus_components: Requested animation for entity {:?} ({})",
+        entity, sprite_name
+    );
+}
+
 fn spawn_npc_components(
     entity_commands: &mut EntityCommands,
     sprite_name: &str,
@@ -290,6 +322,7 @@ type PendingRenderLayerQuery<'w, 's> = Query<
         Option<&'static mut PlayerAppearance>,
         Option<&'static mut PlayerSprite>,
         Option<&'static mut MobSprite>,
+        Option<&'static mut HomunculusSprite>,
     ),
     With<PendingRenderLayers>,
 >;
@@ -342,7 +375,7 @@ pub fn finalize_render_layers(
             callback_entity
         );
 
-        let Ok((entity, maybe_appearance, maybe_player, maybe_mob)) =
+        let Ok((entity, maybe_appearance, maybe_player, maybe_mob, maybe_homunculus)) =
             pending_entities.get_mut(callback_entity)
         else {
             // Alive but no `PendingRenderLayers` yet -> its components haven't flushed;
@@ -366,6 +399,7 @@ pub fn finalize_render_layers(
             continue;
         };
 
+        let homunculus_body = maybe_homunculus.is_some() && pending.layer_tag == LAYER_BODY;
         if let Some(mut appearance) = maybe_appearance {
             if pending.layer_tag == LAYER_BODY {
                 appearance.body = animation_handle.clone();
@@ -377,6 +411,8 @@ pub fn finalize_render_layers(
             }
         } else if let Some(mut mob) = maybe_mob {
             mob.animation = animation_handle.clone();
+        } else if let Some(mut homunculus) = maybe_homunculus {
+            homunculus.animation = animation_handle.clone();
         }
 
         let z_offset = layer_z_offset(pending.layer_tag, &config);
@@ -403,7 +439,7 @@ pub fn finalize_render_layers(
         let _layer_entity = spawn_render_layer_child(
             &mut commands,
             entity,
-            animation_handle,
+            animation_handle.clone(),
             pending.layer_tag,
             z_offset,
             first_texture,
@@ -411,6 +447,17 @@ pub fn finalize_render_layers(
             &shared_quad,
             &mut materials,
         );
+        if homunculus_body {
+            spawn_homunculus_part_layers(
+                &mut commands,
+                entity,
+                &animation_handle,
+                animation,
+                z_offset,
+                &shared_quad,
+                &mut materials,
+            );
+        }
 
         debug!(
             "finalize_render_layers: Spawned render layer child for entity {:?}, layer {:?}",
@@ -425,7 +472,7 @@ pub fn finalize_render_layers(
     // Only clear the pending marker once there's no outstanding work, so an entity
     // with a re-queued completion keeps `PendingRenderLayers` until it's finalized.
     if !pending_animations.has_pending() && !has_deferred {
-        for (entity, _, _, _) in pending_entities.iter() {
+        for (entity, _, _, _, _) in pending_entities.iter() {
             commands.entity(entity).remove::<PendingRenderLayers>();
         }
     }
@@ -508,6 +555,53 @@ fn spawn_render_layer_child(
     );
 
     sprite_entity
+}
+
+/// Spawns one hidden quad per Homunculus ACT layer beyond the first, which the
+/// body layer draws. Later parts stack on top through a small z and depth-bias
+/// step, the same ordering the cart and falcon parts use.
+fn spawn_homunculus_part_layers(
+    commands: &mut Commands,
+    parent: Entity,
+    animation_handle: &Handle<RoAnimationAsset>,
+    animation: &RoAnimationAsset,
+    z_offset: f32,
+    shared_quad: &SharedSpriteQuad,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    let parts = animation
+        .actions
+        .iter()
+        .flat_map(|action| &action.frames)
+        .map(|frame| frame.parts.len())
+        .max()
+        .unwrap_or(0);
+
+    for part in 1..parts {
+        let material = materials.add(StandardMaterial {
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            cull_mode: None,
+            depth_bias: layer_depth_bias(LAYER_BODY) + part as f32 * 0.01,
+            ..default()
+        });
+        commands.spawn((
+            Mesh3d(shared_quad.mesh.clone()),
+            MeshMaterial3d(material),
+            Billboard,
+            RenderLayer::body(animation_handle.clone(), LAYER_BODY, Vec::new()),
+            HomunculusPartLayer { part },
+            Transform::from_translation(Vec3::new(
+                0.0,
+                SPRITE_BASE_Y_OFFSET,
+                z_offset + part as f32 * 0.001,
+            )),
+            Visibility::Hidden,
+            Pickable::default(),
+            crate::actors::ActorVisualRoot(parent),
+            ChildOf(parent),
+        ));
+    }
 }
 
 type UnlinkedHeadQuery<'w, 's> =

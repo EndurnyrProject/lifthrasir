@@ -28,6 +28,16 @@ pub struct FalconLayer {
     pub part: usize,
 }
 
+/// One extra ACT-layer quad of a Homunculus body.
+///
+/// The body layer renders part 0; native Homunculus ACT frames compose several
+/// layers, so each further part gets its own quad. `part` indexes the frame's
+/// parts and the quad hides on frames with fewer parts.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct HomunculusPartLayer {
+    pub part: usize,
+}
+
 /// Body publishes its attach point, frame index, and layer position each frame for head to read.
 /// Head uses the same frame index to get its attach point for synchronized positioning.
 #[derive(Component, Default, PartialEq)]

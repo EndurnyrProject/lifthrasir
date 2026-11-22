@@ -30,18 +30,22 @@ use {
     },
     lifthrasir_assets::{
         Gender,
+        animation::processing::PendingAnimations,
         catalogs::job::registry::{JobSpriteRegistry, WARP_JOB_ID},
     },
     lifthrasir_runtime::{
         actors::{
             ActorEmblem, Gr2Actor,
             sprites::{
-                components::{EntitySpriteData, EntitySpriteInfo},
+                components::{
+                    EntitySpriteData, EntitySpriteInfo, HomunculusSprite, PendingRenderLayers,
+                    RenderLayer,
+                },
                 events::RequestSpriteSpawn,
                 legacy::{CharacterDirection, CharacterSprite, Direction},
             },
         },
-        rendering::coordinates::spawn_coords_to_world_position,
+        rendering::{coordinates::spawn_coords_to_world_position, layers::LAYER_BODY},
     },
 };
 
@@ -117,6 +121,12 @@ impl From<&UnitEntered> for SpawnFields {
     }
 }
 
+/// Job ids of the sixteen native Homunculus appearances under `sprite/homun/`.
+const HOMUNCULUS_JOB_IDS: std::ops::RangeInclusive<u32> = 6001..=6016;
+
+type HomunculusVisuals<'w, 's> =
+    Query<'w, 's, (Option<&'static EntitySpriteInfo>, Option<&'static Children>), With<Homunculus>>;
+
 fn unit_display_scale(size: u32) -> Vec3 {
     match size {
         1 => Vec3::splat(0.5),
@@ -134,14 +144,26 @@ fn unit_display_scale(size: u32) -> Vec3 {
         run_if = in_state(GameState::InGame)
     )
 )]
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_network_entity_system(
     mut commands: Commands,
     mut spawn_events: MessageReader<UnitEntered>,
     mut entity_registry: ResMut<EntityRegistry>,
     job_registry: Option<Res<JobSpriteRegistry>>,
     mut unit_transforms: Query<&mut Transform, With<NetworkEntity>>,
+    homunculus_visuals: HomunculusVisuals,
+    body_layers: Query<(), With<RenderLayer>>,
+    mut pending_animations: ResMut<PendingAnimations>,
 ) {
-    for unit in spawn_events.read() {
+    let units: Vec<&UnitEntered> = spawn_events.read().collect();
+    let final_homunculus = final_homunculus_entries(&units);
+    for (index, unit) in units.into_iter().enumerate() {
+        if final_homunculus
+            .get(&unit.gid)
+            .is_some_and(|last| *last != index && is_homunculus(unit))
+        {
+            continue;
+        }
         let event = SpawnFields::from(unit);
         let is_warp = event.object_type == crate::domain::entities::types::ObjectType::Npc
             && u32::from(event.job) == WARP_JOB_ID;
@@ -160,6 +182,8 @@ pub fn spawn_network_entity_system(
                 lifthrasir_data::gr2::model_asset_path(name)
                     .unwrap_or_else(|| panic!("invalid GR2 actor resource name '{name}'"))
             });
+        let homunculus_sprite = resource_name
+            .filter(|_| model.is_none() && HOMUNCULUS_JOB_IDS.contains(&u32::from(event.job)));
 
         // Check if entity already exists (e.g., spawned from character selection or re-entering view)
         if let Some(existing_entity) = entity_registry.get_entity(event.gid) {
@@ -167,6 +191,18 @@ pub fn spawn_network_entity_system(
             // by snapshot interpolation, so we no longer forward a per-step destination here.
             if let Ok(mut transform) = unit_transforms.get_mut(existing_entity) {
                 transform.scale = unit_display_scale(event.display_size);
+            }
+            if let Ok((rendered, children)) = homunculus_visuals.get(existing_entity) {
+                refresh_homunculus(
+                    &mut commands,
+                    existing_entity,
+                    &event,
+                    homunculus_sprite,
+                    rendered,
+                    children,
+                    &body_layers,
+                    &mut pending_animations,
+                );
             }
             let mut entity = commands.entity(existing_entity);
             entity.remove::<PendingDespawn>();
@@ -335,7 +371,7 @@ pub fn spawn_network_entity_system(
                 debug!("Spawned mob: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Homunculus => {
-                entity_cmd.insert(Homunculus);
+                entity_cmd.insert((Homunculus, SpatialAudioEmitter::default()));
                 debug!("Spawned homunculus: {} (AID: {})", event.name, event.aid);
             }
             crate::domain::entities::types::ObjectType::Mercenary => {
@@ -408,9 +444,26 @@ pub fn spawn_network_entity_system(
                     sprite_info,
                 });
             }
+            crate::domain::entities::types::ObjectType::Homunculus => {
+                let Some(sprite_name) = homunculus_sprite else {
+                    warn!(
+                        "Homunculus {} (GID {}) has unknown appearance job {}; leaving it unrendered",
+                        event.name, event.gid, event.job
+                    );
+                    continue;
+                };
+                commands.trigger(RequestSpriteSpawn {
+                    entity: entity_id,
+                    position: world_pos,
+                    sprite_info: EntitySpriteInfo {
+                        sprite_data: EntitySpriteData::Homunculus {
+                            sprite_name: sprite_name.to_string(),
+                        },
+                    },
+                });
+            }
             crate::domain::entities::types::ObjectType::Mob
             | crate::domain::entities::types::ObjectType::Npc
-            | crate::domain::entities::types::ObjectType::Homunculus
             | crate::domain::entities::types::ObjectType::Mercenary
             | crate::domain::entities::types::ObjectType::Elemental => {
                 let sprite_name = if job_registry.is_some() {
@@ -422,7 +475,6 @@ pub fn spawn_network_entity_system(
 
                 let sprite_data = match event.object_type {
                     crate::domain::entities::types::ObjectType::Mob
-                    | crate::domain::entities::types::ObjectType::Homunculus
                     | crate::domain::entities::types::ObjectType::Mercenary
                     | crate::domain::entities::types::ObjectType::Elemental => {
                         EntitySpriteData::Mob { sprite_name }
@@ -454,6 +506,83 @@ pub fn spawn_network_entity_system(
             event.name, event.object_type, event.position.0, event.position.1, entity_id
         );
     }
+}
+
+fn is_homunculus(unit: &UnitEntered) -> bool {
+    crate::domain::entities::types::ObjectType::from(unit.object_type as u8)
+        == crate::domain::entities::types::ObjectType::Homunculus
+}
+
+/// Index of the last Homunculus entry per gid in one batch. Earlier entries are
+/// superseded: their root or refresh commands are not applied yet, so processing
+/// them would drop the newer appearance or queue several bodies.
+fn final_homunculus_entries(units: &[&UnitEntered]) -> std::collections::HashMap<u32, usize> {
+    units
+        .iter()
+        .enumerate()
+        .filter(|(_, unit)| is_homunculus(unit))
+        .map(|(index, unit)| (unit.gid, index))
+        .collect()
+}
+
+/// Re-entering view with the same gid refreshes the Homunculus name and, only
+/// when its appearance changed, swaps the body for the new native sprite. An
+/// unknown appearance drops the old body and leaves the root unrendered.
+#[allow(clippy::too_many_arguments)]
+fn refresh_homunculus(
+    commands: &mut Commands,
+    root: Entity,
+    event: &SpawnFields,
+    sprite_name: Option<&str>,
+    rendered: Option<&EntitySpriteInfo>,
+    children: Option<&Children>,
+    body_layers: &Query<(), With<RenderLayer>>,
+    pending_animations: &mut PendingAnimations,
+) {
+    if !event.name.is_empty() {
+        commands.entity(root).insert((
+            Name::new(format!(
+                "{} ({:?}:{})",
+                event.name, event.object_type, event.aid
+            )),
+            EntityName::new(event.name.clone()),
+        ));
+    }
+
+    let current = rendered.and_then(|info| match &info.sprite_data {
+        EntitySpriteData::Homunculus { sprite_name } => Some(sprite_name.as_str()),
+        _ => None,
+    });
+    if current == sprite_name {
+        return;
+    }
+
+    for child in children.into_iter().flatten() {
+        if body_layers.contains(*child) {
+            commands.entity(*child).despawn();
+        }
+    }
+    pending_animations.discard_for(root, LAYER_BODY);
+    commands
+        .entity(root)
+        .remove::<(EntitySpriteInfo, HomunculusSprite, PendingRenderLayers)>();
+
+    let Some(sprite_name) = sprite_name else {
+        warn!(
+            "Homunculus GID {} changed to unknown appearance job {}; leaving it unrendered",
+            event.gid, event.job
+        );
+        return;
+    };
+    commands.trigger(RequestSpriteSpawn {
+        entity: root,
+        position: spawn_coords_to_world_position(event.position.0, event.position.1),
+        sprite_info: EntitySpriteInfo {
+            sprite_data: EntitySpriteData::Homunculus {
+                sprite_name: sprite_name.to_string(),
+            },
+        },
+    });
 }
 
 /// Model actors retain the network root; only their visual and optional flag owner differ.
@@ -803,6 +932,7 @@ mod tests {
         app.add_message::<UnitEntered>()
             .add_message::<EntityNamed>()
             .init_resource::<EntityRegistry>()
+            .init_resource::<PendingAnimations>()
             .add_systems(
                 Update,
                 (
@@ -938,6 +1068,162 @@ mod tests {
         assert_eq!(identity.guild_id, 42);
         assert_eq!(identity.guild_name, "Knights of Midgard");
         assert_eq!(identity.emblem_id, 9);
+    }
+
+    #[derive(Resource, Default)]
+    struct SpriteRequests(Vec<EntitySpriteData>);
+
+    fn homunculus_app() -> App {
+        let mut app = app();
+        let mut jobs = lifthrasir_data::JobData::default();
+        jobs.npc_sprites.insert(6001, "LIF".into());
+        jobs.npc_sprites.insert(6009, "LIF_H".into());
+        jobs.npc_sprites.insert(6017, "여활용병".into());
+        app.insert_resource(JobSpriteRegistry::from_job_data(jobs))
+            .init_resource::<SpriteRequests>()
+            .add_observer(
+                |request: On<RequestSpriteSpawn>, mut requests: ResMut<SpriteRequests>| {
+                    requests.0.push(request.sprite_info.sprite_data.clone());
+                },
+            );
+        app
+    }
+
+    fn homunculus(job: u32, name: &str) -> UnitEntered {
+        let mut unit = unit(0, "", 0);
+        unit.object_type = 6;
+        unit.job = job;
+        unit.name = name.into();
+        unit
+    }
+
+    fn requested_homunculus(app: &App) -> Vec<Option<String>> {
+        app.world()
+            .resource::<SpriteRequests>()
+            .0
+            .iter()
+            .map(|data| match data {
+                EntitySpriteData::Homunculus { sprite_name } => Some(sprite_name.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Stands in for the runtime sprite spawn: records the rendered appearance
+    /// and attaches a body layer child.
+    fn render_homunculus(app: &mut App, root: Entity, sprite_name: &str) -> Entity {
+        app.world_mut().entity_mut(root).insert(EntitySpriteInfo {
+            sprite_data: EntitySpriteData::Homunculus {
+                sprite_name: sprite_name.into(),
+            },
+        });
+        app.world_mut()
+            .spawn((
+                lifthrasir_runtime::actors::RenderLayer::body(
+                    Handle::default(),
+                    lifthrasir_runtime::rendering::layers::LAYER_BODY,
+                    Vec::new(),
+                ),
+                ChildOf(root),
+            ))
+            .id()
+    }
+
+    fn network_roots(app: &mut App) -> Vec<Entity> {
+        app.world_mut()
+            .query_filtered::<Entity, With<NetworkEntity>>()
+            .iter(app.world())
+            .collect()
+    }
+
+    #[test]
+    fn same_gid_refresh_replaces_homunculus_visual() {
+        let mut app = homunculus_app();
+        app.world_mut().write_message(homunculus(6001, "Lif"));
+        app.update();
+
+        let roots = network_roots(&mut app);
+        assert_eq!(roots.len(), 1);
+        let root = roots[0];
+        assert!(app.world().get::<Homunculus>(root).is_some());
+        assert!(app.world().get::<UnitHealth>(root).is_none());
+        assert_eq!(requested_homunculus(&app), vec![Some("LIF".to_string())]);
+
+        let first_body = render_homunculus(&mut app, root, "LIF");
+        app.world_mut().write_message(homunculus(6001, "Lif"));
+        app.update();
+        assert!(app.world().get_entity(first_body).is_ok());
+        assert_eq!(requested_homunculus(&app).len(), 1);
+
+        app.world_mut().write_message(homunculus(6009, "Vanilla"));
+        app.update();
+
+        assert_eq!(network_roots(&mut app), vec![root]);
+        assert!(app.world().get_entity(first_body).is_err());
+        assert_eq!(
+            requested_homunculus(&app),
+            vec![Some("LIF".to_string()), Some("LIF_H".to_string())]
+        );
+        assert_eq!(app.world().get::<EntityName>(root).unwrap().name, "Vanilla");
+        assert!(
+            app.world()
+                .get::<Name>(root)
+                .unwrap()
+                .as_str()
+                .starts_with("Vanilla ")
+        );
+    }
+
+    #[test]
+    fn same_batch_homunculus_entries_render_only_the_final_appearance() {
+        let mut app = homunculus_app();
+        app.world_mut().write_message(homunculus(6001, "Lif"));
+        app.world_mut().write_message(homunculus(6009, "Vanilla"));
+        app.update();
+
+        let roots = network_roots(&mut app);
+        assert_eq!(roots.len(), 1);
+        let root = roots[0];
+        assert_eq!(requested_homunculus(&app), vec![Some("LIF_H".to_string())]);
+        assert_eq!(app.world().get::<EntityName>(root).unwrap().name, "Vanilla");
+        assert!(app.world().get::<SpatialAudioEmitter>(root).is_some());
+
+        let body = render_homunculus(&mut app, root, "LIF_H");
+        app.world_mut().write_message(homunculus(6001, "Lif"));
+        app.world_mut().write_message(homunculus(6002, "Lif"));
+        app.world_mut().write_message(homunculus(6001, "Amistr"));
+        app.update();
+
+        assert_eq!(network_roots(&mut app), vec![root]);
+        assert!(app.world().get_entity(body).is_err());
+        assert_eq!(
+            requested_homunculus(&app),
+            vec![Some("LIF_H".to_string()), Some("LIF".to_string())]
+        );
+        assert_eq!(app.world().get::<EntityName>(root).unwrap().name, "Amistr");
+    }
+
+    #[test]
+    fn unknown_homunculus_appearance_leaves_an_unrendered_root() {
+        let mut app = homunculus_app();
+        app.world_mut().write_message(homunculus(6017, "Odd"));
+        app.update();
+        assert_eq!(network_roots(&mut app).len(), 1);
+        assert!(app.world().resource::<SpriteRequests>().0.is_empty());
+
+        let mut app = homunculus_app();
+        app.world_mut().write_message(homunculus(6001, "Lif"));
+        app.update();
+        let root = network_roots(&mut app)[0];
+        let body = render_homunculus(&mut app, root, "LIF");
+
+        app.world_mut().write_message(homunculus(6999, "Lif"));
+        app.update();
+
+        assert_eq!(network_roots(&mut app), vec![root]);
+        assert!(app.world().get_entity(body).is_err());
+        assert!(app.world().get::<EntitySpriteInfo>(root).is_none());
+        assert_eq!(app.world().resource::<SpriteRequests>().0.len(), 1);
     }
 
     fn vanish_app() -> App {

@@ -3,8 +3,9 @@ mod ro_sprite;
 
 pub use layers::{
     BodyAttachPoint, CartLayer, FalconLayer, HeadAttachPoint, HeadAttachment, HeadLayer,
+    HomunculusPartLayer,
 };
-pub use ro_sprite::{MobSprite, PlayerSprite, RoSpriteGeneric};
+pub use ro_sprite::{HomunculusSprite, MobSprite, PlayerSprite, RoSpriteGeneric};
 
 use std::collections::HashMap;
 
@@ -86,6 +87,10 @@ pub enum EntitySpriteData {
         riding: bool,
     },
     Mob {
+        sprite_name: String,
+    },
+    /// Native Homunculus SPR/ACT under `sprite/homun/`, not the monster folder.
+    Homunculus {
         sprite_name: String,
     },
     Npc {

@@ -168,10 +168,11 @@ impl<T: ActionLayout> RoSpriteGeneric<T> {
 }
 
 // Type aliases
-use crate::actors::sprites::layout::{MobLayout, PlayerLayout};
+use crate::actors::sprites::layout::{HomunculusLayout, MobLayout, PlayerLayout};
 
 pub type PlayerSprite = RoSpriteGeneric<PlayerLayout>;
 pub type MobSprite = RoSpriteGeneric<MobLayout>;
+pub type HomunculusSprite = RoSpriteGeneric<HomunculusLayout>;
 
 #[cfg(test)]
 mod tests {

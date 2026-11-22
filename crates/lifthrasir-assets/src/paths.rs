@@ -55,6 +55,16 @@ pub fn mob_action_path(sprite_name: &str) -> String {
     format!("ro://data/sprite/몬스터/{}.act", sprite_name.to_lowercase())
 }
 
+/// Generate Homunculus sprite path
+pub fn homunculus_sprite_path(sprite_name: &str) -> String {
+    format!("ro://data/sprite/homun/{}.spr", sprite_name.to_lowercase())
+}
+
+/// Generate Homunculus action path
+pub fn homunculus_action_path(sprite_name: &str) -> String {
+    format!("ro://data/sprite/homun/{}.act", sprite_name.to_lowercase())
+}
+
 /// Generate NPC sprite path
 pub fn npc_sprite_path(sprite_name: &str) -> String {
     format!("ro://data/sprite/npc/{}.spr", sprite_name.to_lowercase())
