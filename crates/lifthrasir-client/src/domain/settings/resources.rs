@@ -626,6 +626,7 @@ pub struct Keybinds {
     pub emote: ActionBinds,
     pub names: ActionBinds,
     pub chat_room: ActionBinds,
+    pub homunculus: ActionBinds,
     pub hotbar: [ActionBinds; 12],
 }
 
@@ -680,6 +681,10 @@ impl Default for Keybinds {
                 primary: KeyBind::modified(Modifier::Alt, "KeyC"),
                 secondary: KeyBind::UNBOUND,
             },
+            homunculus: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "KeyR"),
+                secondary: KeyBind::UNBOUND,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -703,6 +708,8 @@ impl Keybinds {
         self.emote.insert_into(&mut map, PlayerAction::Emote);
         self.names.insert_into(&mut map, PlayerAction::Names);
         self.chat_room.insert_into(&mut map, PlayerAction::ChatRoom);
+        self.homunculus
+            .insert_into(&mut map, PlayerAction::Homunculus);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }

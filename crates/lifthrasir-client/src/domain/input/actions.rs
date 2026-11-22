@@ -30,6 +30,8 @@ pub enum PlayerAction {
     Names,
     /// Toggle the New Chat Room dialog.
     ChatRoom,
+    /// Toggle the owner Homunculus window.
+    Homunculus,
     /// Activate hotbar slot 1 (default F1).
     Slot1,
     /// Activate hotbar slot 2 (default F2).
@@ -136,6 +138,10 @@ impl PlayerAction {
             .with(
                 Self::ChatRoom,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyC),
+            )
+            .with(
+                Self::Homunculus,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyR),
             );
         for (action, key) in HOTBAR_ACTIONS.into_iter().zip(HOTBAR_KEYS) {
             map.insert(action, key);

@@ -18,6 +18,7 @@ pub mod death_dialog;
 pub mod emote;
 pub mod escape_menu;
 pub mod guild_window;
+pub mod homunculus_window;
 pub mod hotbar;
 pub mod hud_layout;
 pub mod info_modal;
@@ -66,6 +67,7 @@ impl Plugin for InGameHudPlugin {
             storage_window::StorageWindowPlugin,
         ));
         app.add_plugins(inventory_window::InventoryWindowPlugin);
+        app.add_plugins(homunculus_window::HomunculusWindowPlugin);
         app.add_plugins(hud_layout::HudLayoutPlugin);
         app.add_plugins(skills_window::SkillsWindowPlugin);
         app.add_plugins(trade_window::TradeWindowPlugin);
@@ -102,6 +104,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     emote::spawn_emote_picker(&mut commands, root);
     guild_window::spawn_guild_window(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root);
+    homunculus_window::spawn_window(&mut commands, root);
     inventory_window::scene::build(&mut commands, root);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     navigation::panel::spawn_navigation_panel(
