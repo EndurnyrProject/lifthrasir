@@ -63,7 +63,7 @@ fn status_page() -> impl Scene {
             Children [ @button("Refresh", CareButton::Inspect) -- @button("Follow", CareButton::Follow) -- @button("Standby", CareButton::Standby) -- @button("Move", CareButton::Move) -- @button("Attack", CareButton::Attack) -- @button("Feed", CareButton::Feed) -- @button("Rest", CareButton::Rest) ]
             --
             Node { flex_direction: FlexDirection::Row, column_gap: px(5) }
-            Children [ @FeathersTextInput { @visible_width: {Some(168.0)}, @max_characters: {Some(23)} } NameField -- @button("Rename", CareButton::Rename) -- @button("Delete…", CareButton::Delete) ]
+            Children [ @FeathersTextInput { @visible_width: {Some(18.0)}, @max_characters: {Some(23)} } NameField -- @button("Rename", CareButton::Rename) -- @button("Delete…", CareButton::Delete) ]
             --
             ConfirmPanel Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(5) }
             Children [ ConfirmText @chrome_text(String::new(), 13.0, ro_dark::TITLE) -- Node { flex_direction: FlexDirection::Row, column_gap: px(5) } Children [ @button("Confirm", CareButton::Confirm) -- @button("Cancel", CareButton::Cancel) ] ]

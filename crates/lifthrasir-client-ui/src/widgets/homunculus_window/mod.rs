@@ -333,10 +333,10 @@ fn update_window(
         } else {
             Display::None
         };
-        if let (Some(prompt), Ok(mut text)) = (prompt, nodes.prompt.single_mut()) {
-            if text.0 != prompt {
-                text.0 = prompt;
-            }
+        if let (Some(prompt), Ok(mut text)) = (prompt, nodes.prompt.single_mut())
+            && text.0 != prompt
+        {
+            text.0 = prompt;
         }
     }
 }

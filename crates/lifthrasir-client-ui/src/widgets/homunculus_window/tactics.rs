@@ -113,7 +113,7 @@ fn field(field: Field, label: &'static str) -> impl Scene {
     bsn! {
         Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, column_gap: px(4) }
         Children [ @chrome_text(label.into(), 12.0, ro_dark::TITLE)
-            -- @FeathersTextInput { @visible_width: {Some(140.0)} } field ]
+            -- @FeathersTextInput { @visible_width: {Some(16.0)} } field ]
     }
 }
 

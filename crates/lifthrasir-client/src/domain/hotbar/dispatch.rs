@@ -58,11 +58,13 @@ pub fn dispatch_hotbar_activation(
     mut activations: MessageReader<HotbarSlotActivated>,
     hotbar: Res<Hotbar>,
     inventory: Res<Inventory>,
-    mut cast: MessageWriter<SkillCastRequested>,
+    (mut cast, mut companion): (
+        MessageWriter<SkillCastRequested>,
+        Option<ResMut<Messages<HomunculusCastIntent>>>,
+    ),
     mut vending: MessageWriter<VendingIntent>,
     mut use_item: MessageWriter<UseItemRequested>,
     mut chat: MessageWriter<ChatNotice>,
-    mut companion: Option<ResMut<Messages<HomunculusCastIntent>>>,
 ) {
     for activation in activations.read() {
         let Some(slot) = hotbar.get(activation.index) else {
