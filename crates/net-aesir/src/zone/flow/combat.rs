@@ -112,7 +112,11 @@ mod tests {
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
         for (channel, body) in bodies {
-            incoming.write(IncomingMessage { channel, body });
+            incoming.write(IncomingMessage {
+                channel,
+                sequence: 0,
+                body,
+            });
         }
         app.update();
         app

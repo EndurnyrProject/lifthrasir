@@ -22,6 +22,7 @@ use super::envelope::Body;
 #[auto_add_message(plugin = crate::AesirNetPlugin)]
 pub struct IncomingMessage {
     pub channel: u8,
+    pub sequence: u32,
     pub body: Body,
 }
 
@@ -35,7 +36,5 @@ pub struct IncomingMessage {
     config(run_if = client_connected)
 )]
 pub fn drain_incoming(mut client: ResMut<QuinnetClient>, mut out: MessageWriter<IncomingMessage>) {
-    for (channel, body) in QuicConnection::drain(client.connection_mut()) {
-        out.write(IncomingMessage { channel, body });
-    }
+    out.write_batch(QuicConnection::drain(client.connection_mut()));
 }

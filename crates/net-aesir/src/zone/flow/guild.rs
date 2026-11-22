@@ -142,6 +142,7 @@ mod tests {
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
         for body in bodies {
             incoming.write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body,
             });
@@ -215,6 +216,7 @@ mod tests {
             ),
         ] {
             app.world_mut().write_message(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body,
             });
@@ -257,6 +259,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::GuildMemberUpdate(crate::proto::aesir::net::GuildMemberUpdate {
                     guild_id: 7,
@@ -297,6 +300,7 @@ mod tests {
             ),
         ] {
             app.world_mut().write_message(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body,
             });
@@ -324,6 +328,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::GuildInviteNotify(crate::proto::aesir::net::GuildInviteNotify {
                     guild_id: 7,
@@ -345,6 +350,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::GuildInviteNotify(crate::proto::aesir::net::GuildInviteNotify {
                     guild_id: 8,
@@ -365,6 +371,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::GuildInviteNotify(crate::proto::aesir::net::GuildInviteNotify {
                     guild_id: 9,
@@ -454,6 +461,7 @@ mod tests {
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
         for body in bodies {
             incoming.write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body,
             });

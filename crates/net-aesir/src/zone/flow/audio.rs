@@ -42,6 +42,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::SoundEffect(net::SoundEffect {
                     name: "effect\\door.wav".into(),

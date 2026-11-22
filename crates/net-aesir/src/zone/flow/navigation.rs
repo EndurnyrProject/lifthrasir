@@ -62,6 +62,7 @@ mod tests {
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
         incoming.write(IncomingMessage {
+            sequence: 0,
             channel: GAMEPLAY,
             body: Body::NavigateTo(net::NavigateTo {
                 map: "ignored".into(),
@@ -86,12 +87,14 @@ mod tests {
             }),
         });
         incoming.write(IncomingMessage {
+            sequence: 0,
             channel: GAMEPLAY,
             body: Body::NavigationFailed(net::NavigationFailed {
                 reason: net::NavigationFailureReason::Unreachable as i32,
             }),
         });
         incoming.write(IncomingMessage {
+            sequence: 0,
             channel: GAMEPLAY,
             body: Body::NavigationEnded(net::NavigationEnded {
                 reason: net::NavigationEndReason::Cancelled as i32,
@@ -131,6 +134,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::SoundEffect(net::SoundEffect {
                     name: "effect\\door.wav".into(),

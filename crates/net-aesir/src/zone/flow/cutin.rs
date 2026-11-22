@@ -59,6 +59,7 @@ mod tests {
             cutin_message("second", 4),
         ] {
             incoming.write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body,
             });

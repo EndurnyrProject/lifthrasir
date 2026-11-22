@@ -3,6 +3,7 @@ use bevy_quinnet::client::{ClientSendError, connection::ClientSideConnection};
 
 use super::{
     channels,
+    dispatch::IncomingMessage,
     envelope::{self, Body},
 };
 
@@ -32,7 +33,7 @@ impl QuicConnection {
         conn.send_payload_on(channel, payload)
     }
 
-    pub fn drain(conn: &mut ClientSideConnection) -> Vec<(u8, Body)> {
+    pub fn drain(conn: &mut ClientSideConnection) -> Vec<IncomingMessage> {
         let all_channels = [
             channels::CONTROL,
             channels::GAMEPLAY,
@@ -44,11 +45,9 @@ impl QuicConnection {
         for ch in all_channels {
             loop {
                 match conn.receive_payload(ch) {
-                    Ok(Some(bytes)) => match envelope::decode(&bytes) {
-                        Ok(env) => match env.body {
-                            Some(body) => out.push((ch, body)),
-                            None => warn!("received envelope with no body on channel {ch}"),
-                        },
+                    Ok(Some(bytes)) => match decode_payload(ch, &bytes) {
+                        Ok(Some(message)) => out.push(message),
+                        Ok(None) => warn!("received envelope with no body on channel {ch}"),
                         Err(e) => warn!("failed to decode envelope on channel {ch}: {e}"),
                     },
                     Ok(None) => break,
@@ -63,6 +62,18 @@ impl QuicConnection {
     }
 }
 
+fn decode_payload(
+    channel: u8,
+    bytes: &[u8],
+) -> Result<Option<IncomingMessage>, prost::DecodeError> {
+    let envelope = envelope::decode(bytes)?;
+    Ok(envelope.body.map(|body| IncomingMessage {
+        channel,
+        sequence: envelope.seq,
+        body,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,6 +81,30 @@ mod tests {
         envelope,
         proto::aesir::net::{Hello, LoginRequest},
     };
+
+    #[test]
+    fn decoded_ingress_preserves_sequence_zero_and_nonzero_across_channels() {
+        let gameplay = Body::Hello(Hello {
+            protocol_version: 1,
+            build: "gameplay".into(),
+        });
+        let bulk = Body::Hello(Hello {
+            protocol_version: 1,
+            build: "bulk".into(),
+        });
+        for (channel, sequence, body) in [
+            (channels::GAMEPLAY, 21, gameplay),
+            (channels::BULK, 0, bulk),
+        ] {
+            let msg = decode_payload(channel, &envelope::encode(sequence, body.clone()))
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                (msg.channel, msg.sequence, msg.body),
+                (channel, sequence, body)
+            );
+        }
+    }
 
     #[test]
     fn seq_increments_across_frames() {

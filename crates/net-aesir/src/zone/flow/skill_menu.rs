@@ -59,6 +59,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body: Body::SkillTextInputRequest(net::SkillTextInputRequest {
                     request_id: 42,
@@ -84,6 +85,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body,
             });

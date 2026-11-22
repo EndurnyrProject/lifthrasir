@@ -56,6 +56,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::StatusChange(net::StatusChange {
                     unit_id: 1,
@@ -85,6 +86,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::UnitStateChange(net::UnitStateChange {
                     unit_id: 150001,
@@ -118,6 +120,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::SpiritSphereUpdate(net::SpiritSphereUpdate {
                     unit_id: 150001,

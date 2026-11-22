@@ -59,7 +59,11 @@ mod tests {
 
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
         for (channel, body) in bodies {
-            incoming.write(IncomingMessage { channel, body });
+            incoming.write(IncomingMessage {
+                channel,
+                sequence: 0,
+                body,
+            });
         }
         app.update();
         app
@@ -120,6 +124,7 @@ mod tests {
             }),
         ] {
             app.world_mut().write_message(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body,
             });
@@ -149,6 +154,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body: Body::ProgressBar(net::ProgressBar {
                     seconds: 2,

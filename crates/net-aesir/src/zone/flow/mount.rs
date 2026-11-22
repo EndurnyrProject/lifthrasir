@@ -40,6 +40,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::MountResult(net::MountResult {
                     result: net::MountResultCode::MountSkillNotLearned as i32,

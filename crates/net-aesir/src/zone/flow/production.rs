@@ -39,6 +39,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body: Body::ProductionResult(net::ProductionResult {
                     success: true,
@@ -64,6 +65,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Messages<IncomingMessage>>()
             .write(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body: Body::MountResult(net::MountResult { result: 0 }),
             });

@@ -62,6 +62,7 @@ mod tests {
             .add_systems(Update, zone_drain_trade);
         for body in bodies {
             app.world_mut().write_message(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body,
             });

@@ -62,8 +62,11 @@ mod tests {
             .add_systems(Update, zone_drain_storage);
 
         for (channel, body) in bodies {
-            app.world_mut()
-                .write_message(IncomingMessage { channel, body });
+            app.world_mut().write_message(IncomingMessage {
+                channel,
+                sequence: 0,
+                body,
+            });
         }
         app.update();
         app

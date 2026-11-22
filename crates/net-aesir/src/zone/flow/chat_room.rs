@@ -55,6 +55,7 @@ mod tests {
         let mut incoming = app.world_mut().resource_mut::<Messages<IncomingMessage>>();
         for body in bodies {
             incoming.write(IncomingMessage {
+                sequence: 0,
                 channel: WORLD,
                 body,
             });

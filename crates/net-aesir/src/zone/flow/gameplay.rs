@@ -54,6 +54,7 @@ mod tests {
             .add_message::<GameplayNoticeReceived>()
             .add_systems(Update, zone_drain_gameplay);
         app.world_mut().write_message(IncomingMessage {
+            sequence: 0,
             channel: GAMEPLAY,
             body: Body::SystemNotice(net::SystemNotice {
                 id: net::SystemNoticeId::CantGetItemBecauseCount as i32,
@@ -81,6 +82,7 @@ mod tests {
             .add_message::<GameplayNoticeReceived>()
             .add_systems(Update, zone_drain_gameplay);
         app.world_mut().write_message(IncomingMessage {
+            sequence: 0,
             channel: GAMEPLAY,
             body: Body::ItemSkillReady(net::ItemSkillReady {
                 skill_id: 28,
@@ -110,12 +112,14 @@ mod tests {
             .add_systems(Update, zone_drain_gameplay);
         for result in [0, 1, 2, 3, 4, 5, 6, 7, -17] {
             app.world_mut().write_message(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::ItemAddFailed(net::ItemAddFailed { result }),
             });
         }
         for id in [0, 1, 2, 3, 4, 5, 6, -23] {
             app.world_mut().write_message(IncomingMessage {
+                sequence: 0,
                 channel: GAMEPLAY,
                 body: Body::SystemNotice(net::SystemNotice { id }),
             });
