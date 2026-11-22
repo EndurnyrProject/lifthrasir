@@ -18,6 +18,9 @@ use crate::domain::{
     system_sets::EntityLifecycleSystems,
 };
 
+mod skills;
+pub use skills::{HomunculusCastIntent, HomunculusSkillSpec, homunculus_skill_spec};
+
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct HomunculusPlugin;
@@ -26,6 +29,14 @@ impl Plugin for HomunculusPlugin {
         app.init_resource::<HomunculusState>()
             .add_message::<HomunculusIntent>()
             .add_message::<HomunculusFeedback>()
+            .add_message::<HomunculusCastIntent>()
+            .add_systems(
+                Update,
+                skills::resolve_cast
+                    .run_if(resource_exists::<crate::domain::input::TargetingMode>)
+                    .after(resolve_actor)
+                    .before(dispatch),
+            )
             .add_systems(
                 Update,
                 (receive, resolve_actor, dispatch)

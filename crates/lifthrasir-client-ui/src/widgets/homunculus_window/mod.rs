@@ -19,6 +19,7 @@ use net_contract::dto::{
 
 mod portrait;
 mod scene;
+mod skills;
 
 pub struct HomunculusWindowPlugin;
 impl Plugin for HomunculusWindowPlugin {
@@ -30,6 +31,8 @@ impl Plugin for HomunculusWindowPlugin {
                     toggle_key.run_if(ui_unfocused),
                     update_window,
                     portrait::update,
+                    sync_tabs,
+                    skills::update,
                 )
                     .chain()
                     .run_if(in_state(GameState::InGame)),
@@ -77,8 +80,30 @@ struct Confirmation {
     delete: bool,
 }
 
+#[derive(Component, Default, Clone, Copy, PartialEq, Eq)]
+enum HomunculusTab {
+    #[default]
+    Status,
+    Skills,
+}
+
+fn sync_tabs(ui: Res<OwnerUi>, mut pages: Query<(&HomunculusTab, &mut Node)>) {
+    for (page, mut node) in &mut pages {
+        let display = if *page == ui.tab {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if node.display != display {
+            node.display = display;
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 struct OwnerUi {
+    tab: HomunculusTab,
+    skill_ranks: std::collections::HashMap<u32, u32>,
     open: bool,
     was_open: bool,
     confirmation: Option<Confirmation>,

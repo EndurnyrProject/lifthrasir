@@ -51,6 +51,14 @@ fn toast_label(targeting: &TargetingMode, catalog: Option<&SkillCatalog>) -> Opt
     let (skill_id, level) = match targeting {
         TargetingMode::Idle => return None,
         TargetingMode::HomunculusMove { .. } => return Some("Move Homunculus".into()),
+        TargetingMode::HomunculusUnit {
+            action:
+                lifthrasir_client::domain::input::targeting::HomunculusUnitTargetAction::CastSkill {
+                    skill_id,
+                    level,
+                },
+            ..
+        } => (*skill_id, *level),
         TargetingMode::HomunculusUnit { .. } => return Some("Homunculus target".into()),
         TargetingMode::AwaitingEntity { skill_id, level }
         | TargetingMode::AwaitingGround { skill_id, level } => (*skill_id, *level),

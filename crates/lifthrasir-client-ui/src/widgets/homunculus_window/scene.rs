@@ -29,6 +29,29 @@ pub(super) fn window() -> impl Scene {
             Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center }
             Children [ @title_text("Homunculus", 18.0) -- @button("Close", CareButton::Close) ]
             --
+            Node { flex_direction: FlexDirection::Row, column_gap: px(5) }
+            Children [ @tab("Status", super::HomunculusTab::Status) -- @tab("Skills", super::HomunculusTab::Skills) ]
+            -- @status_page()
+            -- @super::skills::page()
+        ]
+    }
+}
+
+fn tab(label: &'static str, page: super::HomunculusTab) -> impl Scene {
+    let pick = move |_: On<Activate>, mut ui: ResMut<super::OwnerUi>| {
+        ui.tab = page;
+    };
+    bsn! {
+        @FeathersButton { @caption: bsn! { @chrome_text(label.into(), 13.0, ro_dark::BUTTON_LABEL) } }
+        on(pick)
+    }
+}
+
+fn status_page() -> impl Scene {
+    bsn! {
+        super::HomunculusTab::Status
+        Node { flex_direction: FlexDirection::Column, row_gap: px(8) }
+        Children [
             Node { flex_direction: FlexDirection::Row, column_gap: px(10), align_items: AlignItems::Start }
             Children [
                 Portrait ImageNode Node { width: px(90), height: px(90), display: Display::None }

@@ -186,6 +186,13 @@ pub fn on_sprite_click(
                 HomunculusUnitTargetAction::Attack => {
                     HomunculusAction::Attack { target_id: net.gid }
                 }
+                HomunculusUnitTargetAction::CastSkill { skill_id, level } => {
+                    HomunculusAction::CastSkill {
+                        skill_id,
+                        level,
+                        target: net_contract::dto::HomunculusTarget::Unit(net.gid),
+                    }
+                }
             };
             out.write(HomunculusIntent::Act { durable_id, action });
             *targeting = TargetingMode::Idle;

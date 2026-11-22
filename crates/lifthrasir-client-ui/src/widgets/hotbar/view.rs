@@ -66,7 +66,10 @@ pub(super) struct Filled {
 
 impl Filled {
     pub(super) fn is_skill(&self) -> bool {
-        matches!(self.slot, HotbarSlot::Skill(_))
+        matches!(
+            self.slot,
+            HotbarSlot::Skill(_) | HotbarSlot::HomunculusSkill(_)
+        )
     }
 
     /// Whether using it now would do nothing: none left, not learned or too little SP.
@@ -98,7 +101,29 @@ pub(super) fn slot_view(
 pub(super) fn filled(slot: HotbarSlot, facts: &Facts, live: Live) -> Filled {
     match slot {
         HotbarSlot::Skill(id) => skill(id, facts, live),
+        HotbarSlot::HomunculusSkill(id) => companion_skill(id, facts.catalog, None, None),
         HotbarSlot::Item(id) => item(id, facts),
+    }
+}
+
+pub(super) fn companion_skill(
+    id: u32,
+    catalog: Option<&SkillCatalog>,
+    level: Option<u32>,
+    cooldown: Option<f32>,
+) -> Filled {
+    Filled {
+        slot: HotbarSlot::HomunculusSkill(id),
+        name: format!("{} (Homunculus)", skill_name(id, catalog)),
+        icon: catalog.and_then(|catalog| catalog.icon_path(id)),
+        count: None,
+        level,
+        sp: None,
+        lacks_sp: false,
+        timing: None,
+        cooldown: cooldown.map(cooldown_text),
+        buff: None,
+        casting: false,
     }
 }
 
@@ -286,6 +311,7 @@ pub(super) fn tip(view: &SlotView, locked: bool) -> Option<TipView> {
     let tag = match filled.slot {
         HotbarSlot::Skill(_) if active => "ACTIVE",
         HotbarSlot::Skill(_) => "SKILL",
+        HotbarSlot::HomunculusSkill(_) => "HOMUNCULUS",
         HotbarSlot::Item(_) => "ITEM",
     };
     let press = if view.key.is_empty() {

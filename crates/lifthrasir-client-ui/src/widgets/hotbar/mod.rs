@@ -273,6 +273,8 @@ struct Sources<'w, 's> {
     statuses: Res<'w, LocalStatuses>,
     keybinds: Option<Res<'w, Keybinds>>,
     time: Res<'w, Time>,
+    real_time: Option<Res<'w, Time<Real>>>,
+    companion: Option<Res<'w, lifthrasir_client::domain::homunculus::HomunculusState>>,
     hero: Query<'w, 's, (&'static CharacterStatus, &'static CharacterData), With<LocalPlayer>>,
 }
 
@@ -326,6 +328,12 @@ impl Sources<'_, '_> {
 
     fn slot(&self, hotbar: &Hotbar, cell: HotbarSlotUi, casting: Option<u32>) -> SlotView {
         let slot = hotbar.get(hotbar.index(cell.row, cell.col));
+        if let Some(HotbarSlot::HomunculusSkill(id)) = slot {
+            return SlotView {
+                key: self.key(cell.row, cell.col),
+                filled: Some(self.filled(HotbarSlot::HomunculusSkill(id))),
+            };
+        }
         view::slot_view(
             slot,
             self.key(cell.row, cell.col),
@@ -336,6 +344,36 @@ impl Sources<'_, '_> {
 
     /// The skill or item as a slot shows it at rest.
     fn filled(&self, slot: HotbarSlot) -> Filled {
+        if let HotbarSlot::HomunculusSkill(id) = slot {
+            let live = self
+                .companion
+                .as_deref()
+                .filter(|s| s.controlled_gid().is_some());
+            let level = live
+                .and_then(|s| {
+                    s.snapshot()?
+                        .skills
+                        .iter()
+                        .find(|skill| skill.skill_id == id && skill.level > 0)
+                })
+                .map(|s| s.level);
+            let cooldown = live
+                .and_then(|s| {
+                    s.snapshot()?
+                        .cooldowns
+                        .iter()
+                        .find(|c| c.skill_id == id)
+                        .map(|c| {
+                            s.remaining(
+                                c.remaining_ms,
+                                self.real_time.as_ref().map_or_default(|t| t.elapsed()),
+                            )
+                        })
+                })
+                .filter(|ms| *ms > 0)
+                .map(|ms| ms as f32 / 1000.0);
+            return view::companion_skill(id, self.catalog.as_deref(), level, cooldown);
+        }
         view::filled(slot, &self.facts(), Live::default())
     }
 

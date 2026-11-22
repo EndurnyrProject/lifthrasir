@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum HotbarSlot {
     Skill(u32),
     Item(u32),
+    HomunculusSkill(u32),
 }
 
 /// Slots on one page of the bar.

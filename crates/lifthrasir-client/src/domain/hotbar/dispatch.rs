@@ -4,6 +4,7 @@ use leafwing_input_manager::prelude::ActionState;
 
 use crate::core::state::GameState;
 use crate::domain::entities::markers::LocalPlayer;
+use crate::domain::homunculus::HomunculusCastIntent;
 use crate::domain::hotbar::model::{Hotbar, HotbarSlot};
 use crate::domain::input::{HOTBAR_ACTIONS, PlayerAction, ui_unfocused};
 use crate::domain::inventory::{Inventory, UseItemRequested};
@@ -61,6 +62,7 @@ pub fn dispatch_hotbar_activation(
     mut vending: MessageWriter<VendingIntent>,
     mut use_item: MessageWriter<UseItemRequested>,
     mut chat: MessageWriter<ChatNotice>,
+    mut companion: Option<ResMut<Messages<HomunculusCastIntent>>>,
 ) {
     for activation in activations.read() {
         let Some(slot) = hotbar.get(activation.index) else {
@@ -72,6 +74,14 @@ pub fn dispatch_hotbar_activation(
             }
             HotbarSlot::Skill(id) => {
                 cast.write(SkillCastRequested { skill_id: id });
+            }
+            HotbarSlot::HomunculusSkill(skill_id) => {
+                if let Some(out) = companion.as_deref_mut() {
+                    out.write(HomunculusCastIntent {
+                        skill_id,
+                        level: None,
+                    });
+                }
             }
             HotbarSlot::Item(item_id) => match inventory.iter().find(|it| it.item_id == item_id) {
                 Some(item) => {
@@ -137,6 +147,36 @@ mod tests {
             .iter_current_update_messages()
             .cloned()
             .collect()
+    }
+
+    #[test]
+    fn legacy_hotbar_loads_and_companion_slot_dispatches_only_companion_cast() {
+        let mut app = dispatch_app();
+        app.add_message::<HomunculusCastIntent>();
+        let legacy: HotbarSlot = ron::from_str("Skill(8009)").unwrap();
+        let companion = HotbarSlot::HomunculusSkill(8009);
+        assert_eq!(legacy, HotbarSlot::Skill(8009));
+        assert_eq!(
+            ron::from_str::<HotbarSlot>(&ron::to_string(&companion).unwrap()).unwrap(),
+            companion
+        );
+        app.world_mut()
+            .resource_mut::<Hotbar>()
+            .assign(0, companion);
+        activate(&mut app, 0);
+        assert!(casts(&app).is_empty());
+        let messages = app
+            .world()
+            .resource::<Messages<HomunculusCastIntent>>()
+            .iter_current_update_messages()
+            .collect::<Vec<_>>();
+        assert!(matches!(
+            messages.as_slice(),
+            [HomunculusCastIntent {
+                skill_id: 8009,
+                level: None
+            }]
+        ));
     }
 
     #[test]

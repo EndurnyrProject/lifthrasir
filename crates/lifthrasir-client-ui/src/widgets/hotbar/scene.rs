@@ -286,7 +286,9 @@ fn marks(view: &SlotView) -> Vec<Box<dyn Scene>> {
             @ignore_picking()
         }));
     }
-    if let (Some(left), HotbarSlot::Skill(id)) = (filled.cooldown.clone(), filled.slot) {
+    if let (Some(left), HotbarSlot::Skill(id) | HotbarSlot::HomunculusSkill(id)) =
+        (filled.cooldown.clone(), filled.slot)
+    {
         marks.push(Box::new(cooldown(id, left)));
     }
     if filled.casting {

@@ -44,6 +44,7 @@ pub enum TargetingMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HomunculusUnitTargetAction {
     Attack,
+    CastSkill { skill_id: u32, level: u32 },
 }
 
 impl TargetingMode {
