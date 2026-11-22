@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -783,6 +783,33 @@ pub mod envelope {
         /// s2c zone world
         #[prost(message, tag = "233")]
         ChatNotice(super::ChatNotice),
+        /// c2s zone
+        #[prost(message, tag = "234")]
+        PetRequest(super::PetRequest),
+        /// s2c zone gameplay
+        #[prost(message, tag = "235")]
+        PetResult(super::PetResult),
+        /// s2c zone gameplay
+        #[prost(message, tag = "236")]
+        PetCatchStart(super::PetCatchStart),
+        /// s2c zone gameplay
+        #[prost(message, tag = "237")]
+        PetCatchResult(super::PetCatchResult),
+        /// s2c zone gameplay
+        #[prost(message, tag = "238")]
+        PetEggList(super::PetEggList),
+        /// s2c zone bulk
+        #[prost(message, tag = "239")]
+        PetPrivateState(super::PetPrivateState),
+        /// s2c zone world
+        #[prost(message, tag = "240")]
+        PetStateChange(super::PetStateChange),
+        /// s2c zone world
+        #[prost(message, tag = "241")]
+        PetEmotion(super::PetEmotion),
+        /// s2c zone gameplay
+        #[prost(message, tag = "242")]
+        PetFoodResult(super::PetFoodResult),
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -4539,6 +4566,179 @@ pub struct WaitingRoomChat {
     #[prost(string, tag = "4")]
     pub message: ::prost::alloc::string::String,
 }
+/// A correlated pet command from the owner.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetRequest {
+    /// Correlates the response with this request.
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(oneof = "pet_request::Command", tags = "2, 3, 4, 5, 6, 7, 8, 9")]
+    pub command: ::core::option::Option<pet_request::Command>,
+}
+/// Nested message and enum types in `PetRequest`.
+pub mod pet_request {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Command {
+        /// Attempt to capture a mob.
+        #[prost(message, tag = "2")]
+        CatchTarget(super::PetCatchTargetCommand),
+        /// Hatch an inventory egg.
+        #[prost(message, tag = "3")]
+        SelectEgg(super::PetSelectEggCommand),
+        /// Invoke a pet menu action.
+        #[prost(message, tag = "4")]
+        Menu(super::PetMenuCommand),
+        /// Rename the pet.
+        #[prost(message, tag = "5")]
+        Rename(super::PetRenameCommand),
+        /// Equip an inventory accessory.
+        #[prost(message, tag = "6")]
+        EquipAccessory(super::PetEquipAccessoryCommand),
+        /// Request a pet emotion.
+        #[prost(message, tag = "7")]
+        Emotion(super::PetEmotionCommand),
+        /// Change automatic feeding.
+        #[prost(message, tag = "8")]
+        SetAutofeed(super::PetSetAutofeedCommand),
+        /// Evolve the pet.
+        #[prost(message, tag = "9")]
+        Evolve(super::PetEvolveCommand),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetCatchTargetCommand {
+    #[prost(uint32, tag = "1")]
+    pub target_id: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetSelectEggCommand {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetMenuCommand {
+    #[prost(enumeration = "PetMenuAction", tag = "1")]
+    pub action: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetRenameCommand {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetEquipAccessoryCommand {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetEmotionCommand {
+    #[prost(uint32, tag = "1")]
+    pub data: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetSetAutofeedCommand {
+    #[prost(bool, tag = "1")]
+    pub enabled: bool,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetEvolveCommand {
+    #[prost(uint32, tag = "1")]
+    pub egg_item_id: u32,
+}
+/// Response to a pet command.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetResult {
+    /// Request being answered.
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    /// Whether the command succeeded.
+    #[prost(bool, tag = "2")]
+    pub success: bool,
+    /// Failure or evolution result.
+    #[prost(enumeration = "PetError", tag = "3")]
+    pub error: i32,
+    /// Optional owner-only pet state.
+    #[prost(message, optional, tag = "4")]
+    pub state: ::core::option::Option<PetPrivateState>,
+}
+/// Begins target selection for taming.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetCatchStart {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetCatchResult {
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetEggList {
+    #[prost(uint32, repeated, tag = "1")]
+    pub indexes: ::prost::alloc::vec::Vec<u32>,
+}
+/// Owner-only pet details.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetPrivateState {
+    /// Pet world identifier.
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    /// Pet name.
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    /// Whether the pet is considered renamed.
+    #[prost(bool, tag = "3")]
+    pub renamed: bool,
+    /// Pet level.
+    #[prost(uint32, tag = "4")]
+    pub level: u32,
+    /// Current hunger.
+    #[prost(uint32, tag = "5")]
+    pub hunger: u32,
+    /// Current intimacy.
+    #[prost(uint32, tag = "6")]
+    pub intimacy: u32,
+    /// Equipped accessory item ID.
+    #[prost(uint32, tag = "7")]
+    pub accessory_item_id: u32,
+    /// Pet class ID.
+    #[prost(uint32, tag = "8")]
+    pub class_id: u32,
+    /// Whether automatic feeding is enabled.
+    #[prost(bool, tag = "9")]
+    pub autofeed_enabled: bool,
+    /// Whether automatic feeding is available.
+    #[prost(bool, tag = "10")]
+    pub autofeed_available: bool,
+}
+/// Incremental pet state update.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetStateChange {
+    /// Pet world identifier.
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    /// Kind of change.
+    #[prost(enumeration = "PetStateChangeType", tag = "2")]
+    pub r#type: i32,
+    /// Value interpreted according to type.
+    #[prost(int32, tag = "3")]
+    pub value: i32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetEmotion {
+    /// Pet world identifier.
+    #[prost(uint32, tag = "1")]
+    pub gid: u32,
+    /// Emotion data.
+    #[prost(uint32, tag = "2")]
+    pub data: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PetFoodResult {
+    /// Whether feeding succeeded.
+    #[prost(bool, tag = "1")]
+    pub success: bool,
+    /// Food item ID.
+    #[prost(uint32, tag = "2")]
+    pub food_item_id: u32,
+}
 /// Production rankings available to any authenticated player.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -4864,6 +5064,8 @@ pub enum SystemNoticeId {
     MapCantMemo = 5,
     /// NOTIFY_MAPINFO_CANT_USE_SKILL: the skill cannot be used on this map.
     MapCantUseSkill = 6,
+    /// MSI_CANT_GET_ITEM_BECAUSE_COUNT, shown red: no free inventory slot for the item.
+    CantGetItemBecauseCount = 7,
 }
 impl SystemNoticeId {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4879,6 +5081,9 @@ impl SystemNoticeId {
             Self::MapCantTeleport => "SYSTEM_NOTICE_ID_MAP_CANT_TELEPORT",
             Self::MapCantMemo => "SYSTEM_NOTICE_ID_MAP_CANT_MEMO",
             Self::MapCantUseSkill => "SYSTEM_NOTICE_ID_MAP_CANT_USE_SKILL",
+            Self::CantGetItemBecauseCount => {
+                "SYSTEM_NOTICE_ID_CANT_GET_ITEM_BECAUSE_COUNT"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4891,6 +5096,9 @@ impl SystemNoticeId {
             "SYSTEM_NOTICE_ID_MAP_CANT_TELEPORT" => Some(Self::MapCantTeleport),
             "SYSTEM_NOTICE_ID_MAP_CANT_MEMO" => Some(Self::MapCantMemo),
             "SYSTEM_NOTICE_ID_MAP_CANT_USE_SKILL" => Some(Self::MapCantUseSkill),
+            "SYSTEM_NOTICE_ID_CANT_GET_ITEM_BECAUSE_COUNT" => {
+                Some(Self::CantGetItemBecauseCount)
+            }
             _ => None,
         }
     }
@@ -6328,6 +6536,136 @@ impl HomunculusIntimacyGrade {
             "HOMUNCULUS_INTIMACY_GRADE_NEUTRAL" => Some(Self::Neutral),
             "HOMUNCULUS_INTIMACY_GRADE_CORDIAL" => Some(Self::Cordial),
             "HOMUNCULUS_INTIMACY_GRADE_LOYAL" => Some(Self::Loyal),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PetMenuAction {
+    PetMenuStatus = 0,
+    PetMenuFeed = 1,
+    PetMenuPerformance = 2,
+    PetMenuReturnToEgg = 3,
+    PetMenuUnequip = 4,
+}
+impl PetMenuAction {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::PetMenuStatus => "PET_MENU_STATUS",
+            Self::PetMenuFeed => "PET_MENU_FEED",
+            Self::PetMenuPerformance => "PET_MENU_PERFORMANCE",
+            Self::PetMenuReturnToEgg => "PET_MENU_RETURN_TO_EGG",
+            Self::PetMenuUnequip => "PET_MENU_UNEQUIP",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PET_MENU_STATUS" => Some(Self::PetMenuStatus),
+            "PET_MENU_FEED" => Some(Self::PetMenuFeed),
+            "PET_MENU_PERFORMANCE" => Some(Self::PetMenuPerformance),
+            "PET_MENU_RETURN_TO_EGG" => Some(Self::PetMenuReturnToEgg),
+            "PET_MENU_UNEQUIP" => Some(Self::PetMenuUnequip),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PetError {
+    None = 0,
+    WrongChannel = 1,
+    NoPet = 2,
+    InvalidRequest = 3,
+    EvolutionFailUnknown = 4,
+    EvolutionFailNotexistCallpet = 5,
+    EvolutionFailNotPetegg = 6,
+    EvolutionFailRecipe = 7,
+    EvolutionFailMaterial = 8,
+    EvolutionFailRgFamiliar = 9,
+    EvolutionSuccess = 10,
+}
+impl PetError {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::None => "PET_ERROR_NONE",
+            Self::WrongChannel => "PET_ERROR_WRONG_CHANNEL",
+            Self::NoPet => "PET_ERROR_NO_PET",
+            Self::InvalidRequest => "PET_ERROR_INVALID_REQUEST",
+            Self::EvolutionFailUnknown => "PET_ERROR_EVOLUTION_FAIL_UNKNOWN",
+            Self::EvolutionFailNotexistCallpet => {
+                "PET_ERROR_EVOLUTION_FAIL_NOTEXIST_CALLPET"
+            }
+            Self::EvolutionFailNotPetegg => "PET_ERROR_EVOLUTION_FAIL_NOT_PETEGG",
+            Self::EvolutionFailRecipe => "PET_ERROR_EVOLUTION_FAIL_RECIPE",
+            Self::EvolutionFailMaterial => "PET_ERROR_EVOLUTION_FAIL_MATERIAL",
+            Self::EvolutionFailRgFamiliar => "PET_ERROR_EVOLUTION_FAIL_RG_FAMILIAR",
+            Self::EvolutionSuccess => "PET_ERROR_EVOLUTION_SUCCESS",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PET_ERROR_NONE" => Some(Self::None),
+            "PET_ERROR_WRONG_CHANNEL" => Some(Self::WrongChannel),
+            "PET_ERROR_NO_PET" => Some(Self::NoPet),
+            "PET_ERROR_INVALID_REQUEST" => Some(Self::InvalidRequest),
+            "PET_ERROR_EVOLUTION_FAIL_UNKNOWN" => Some(Self::EvolutionFailUnknown),
+            "PET_ERROR_EVOLUTION_FAIL_NOTEXIST_CALLPET" => {
+                Some(Self::EvolutionFailNotexistCallpet)
+            }
+            "PET_ERROR_EVOLUTION_FAIL_NOT_PETEGG" => Some(Self::EvolutionFailNotPetegg),
+            "PET_ERROR_EVOLUTION_FAIL_RECIPE" => Some(Self::EvolutionFailRecipe),
+            "PET_ERROR_EVOLUTION_FAIL_MATERIAL" => Some(Self::EvolutionFailMaterial),
+            "PET_ERROR_EVOLUTION_FAIL_RG_FAMILIAR" => Some(Self::EvolutionFailRgFamiliar),
+            "PET_ERROR_EVOLUTION_SUCCESS" => Some(Self::EvolutionSuccess),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PetStateChangeType {
+    PetStateInit = 0,
+    PetStateIntimacy = 1,
+    PetStateHunger = 2,
+    PetStateAccessory = 3,
+    PetStatePerformance = 4,
+    PetStateUpdateEgg = 6,
+}
+impl PetStateChangeType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::PetStateInit => "PET_STATE_INIT",
+            Self::PetStateIntimacy => "PET_STATE_INTIMACY",
+            Self::PetStateHunger => "PET_STATE_HUNGER",
+            Self::PetStateAccessory => "PET_STATE_ACCESSORY",
+            Self::PetStatePerformance => "PET_STATE_PERFORMANCE",
+            Self::PetStateUpdateEgg => "PET_STATE_UPDATE_EGG",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PET_STATE_INIT" => Some(Self::PetStateInit),
+            "PET_STATE_INTIMACY" => Some(Self::PetStateIntimacy),
+            "PET_STATE_HUNGER" => Some(Self::PetStateHunger),
+            "PET_STATE_ACCESSORY" => Some(Self::PetStateAccessory),
+            "PET_STATE_PERFORMANCE" => Some(Self::PetStatePerformance),
+            "PET_STATE_UPDATE_EGG" => Some(Self::PetStateUpdateEgg),
             _ => None,
         }
     }
