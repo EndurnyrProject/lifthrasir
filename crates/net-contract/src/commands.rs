@@ -1,11 +1,21 @@
 //! Outbound command Messages (client to server).
 
 use crate::dto::{
-    BuyEntry, ChatRoomSettings, NavigationTarget, NpcResponse, SellEntry, StorageKind,
-    VendingBuyLine, VendingCloseTarget, VendingOffer,
+    BuyEntry, ChatRoomSettings, HomunculusAction, NavigationTarget, NpcResponse, SellEntry,
+    StorageKind, VendingBuyLine, VendingCloseTarget, VendingOffer,
 };
+use crate::state::ZoneSessionGeneration;
 use bevy::prelude::*;
 use bevy_auto_plugin::prelude::auto_add_message;
+
+/// Action for the authenticated character's sole Homunculus.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub struct HomunculusCommand {
+    pub generation: ZoneSessionGeneration,
+    pub request_id: u64,
+    pub action: HomunculusAction,
+}
 
 /// What the local player asks of chat rooms. Kick, owner change and settings only
 /// work for the owner of the room the player is in.
