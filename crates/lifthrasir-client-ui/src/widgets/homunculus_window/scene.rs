@@ -30,9 +30,10 @@ pub(super) fn window() -> impl Scene {
             Children [ @title_text("Homunculus", 18.0) -- @button("Close", CareButton::Close) ]
             --
             Node { flex_direction: FlexDirection::Row, column_gap: px(5) }
-            Children [ @tab("Status", super::HomunculusTab::Status) -- @tab("Skills", super::HomunculusTab::Skills) ]
+            Children [ @tab("Status", super::HomunculusTab::Status) -- @tab("Skills", super::HomunculusTab::Skills) -- @tab("Tactics", super::HomunculusTab::Tactics) ]
             -- @status_page()
             -- @super::skills::page()
+            -- @super::tactics::page()
         ]
     }
 }
