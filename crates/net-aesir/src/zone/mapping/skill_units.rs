@@ -1,7 +1,7 @@
 use crate::proto::aesir::net;
 use net_contract::dto::{
     SkillUnitCellFlags, SkillUnitCellState, SkillUnitDespawnReason, SkillUnitGroupState,
-    SkillUnitPhase, SkillUnitUpdateReason,
+    SkillUnitOwnerType, SkillUnitPhase, SkillUnitUpdateReason,
 };
 use net_contract::events::{
     SkillUnitDespawned, SkillUnitMoved, SkillUnitSnapshotReceived, SkillUnitSpawned,
@@ -34,6 +34,13 @@ fn skill_unit_group(g: net::SkillUnitGroupState) -> SkillUnitGroupState {
         group_id: g.group_id,
         skill_id: g.skill_id,
         skill_level: g.skill_level,
+        owner_type: match net::SkillUnitOwnerType::try_from(g.owner_type) {
+            Ok(net::SkillUnitOwnerType::Unspecified) => SkillUnitOwnerType::Unspecified,
+            Ok(net::SkillUnitOwnerType::Player) => SkillUnitOwnerType::Player,
+            Ok(net::SkillUnitOwnerType::Mob) => SkillUnitOwnerType::Mob,
+            Ok(net::SkillUnitOwnerType::Npc) => SkillUnitOwnerType::Npc,
+            Err(_) => SkillUnitOwnerType::Unknown(g.owner_type),
+        },
         owner_id: g.owner_id,
         center_x: g.center_x,
         center_y: g.center_y,
@@ -41,6 +48,7 @@ fn skill_unit_group(g: net::SkillUnitGroupState) -> SkillUnitGroupState {
         created_tick: g.created_tick,
         expires_tick: g.expires_tick,
         message: g.message,
+        unit_variant: g.unit_variant,
         cells: g.cells.into_iter().map(skill_unit_cell).collect(),
     }
 }
@@ -245,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn group_state_drops_owner_type_and_maps_tick_fields() {
+    fn group_state_maps_identity_and_tick_fields() {
         let mapped = skill_unit_group(sample_group(1, vec![]));
 
         assert_eq!(mapped.group_id, 1);

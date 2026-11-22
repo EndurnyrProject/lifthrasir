@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use lifthrasir_data::GroundAnchor;
-use net_contract::dto::{SkillUnitCellState, SkillUnitGroupState};
+use net_contract::dto::{SkillUnitCellState, SkillUnitGroupState, SkillUnitPhase};
 use net_contract::events::{SkillUnitSnapshotReceived, SkillUnitSpawned};
 
 use crate::domain::entities::character::components::core::Grounded;
@@ -18,7 +18,9 @@ use crate::domain::entities::picking::{on_sprite_click, on_sprite_out, on_sprite
 use crate::domain::entities::registry::EntityRegistry;
 use crate::domain::entities::types::ObjectType;
 use crate::domain::skill_units::components::{ScribbleMessage, SkillUnitCell, SkillUnitGroup};
-use crate::domain::skill_units::visuals::spawn_effect_child;
+use crate::domain::skill_units::visuals::{
+    ground_drift_sprite, spawn_effect_child, spawn_sprite_child,
+};
 use crate::domain::world::map_scoped::MapScoped;
 use lifthrasir_assets::catalogs::effect::EffectCatalog;
 use lifthrasir_runtime::rendering::coordinates::spawn_coords_to_world_position;
@@ -27,6 +29,7 @@ use lifthrasir_runtime::rendering::coordinates::spawn_coords_to_world_position;
 /// `RO_UNITS_PER_CELL` grid step (`utils::coordinates`) so one collider covers
 /// exactly one cell.
 const CELL_COLLIDER_HALF_SIZE: f32 = 2.5;
+const GROUND_DRIFT: u32 = 521;
 
 /// RO grid coordinates are non-negative; a negative wire value is malformed.
 /// Reject it (the caller warns and skips) rather than wrapping it into a bogus
@@ -149,7 +152,9 @@ fn spawn_group(
                 group_id: group.group_id,
                 skill_id: group.skill_id,
                 level: group.skill_level,
+                owner_type: group.owner_type,
                 owner_id: group.owner_id,
+                unit_variant: group.unit_variant,
                 phase: group.phase,
                 created_tick: group.created_tick,
                 expires_tick: group.expires_tick,
@@ -215,6 +220,20 @@ fn spawn_group(
         cell_entities.push((cell_entity, cell));
     }
     live_groups.insert(group.group_id, live_group);
+
+    if group.skill_id == GROUND_DRIFT {
+        if group.phase == SkillUnitPhase::Active
+            && let Some(path) = ground_drift_sprite(group.unit_variant)
+        {
+            for (entity, _) in cell_entities
+                .into_iter()
+                .filter(|(_, cell)| cell.flags.visible)
+            {
+                spawn_sprite_child(commands, path, Color::WHITE, entity);
+            }
+        }
+        return;
+    }
 
     // Skill-unit entities own persistent visuals only; `skill_unit` yields
     // none for a skill whose only entry is a one-shot cast.
@@ -310,7 +329,9 @@ mod scribble_tests {
             group_id,
             skill_id: 220,
             skill_level: 1,
+            owner_type: Default::default(),
             owner_id: 42,
+            unit_variant: 0,
             center_x: 10,
             center_y: 20,
             phase: SkillUnitPhase::Active,

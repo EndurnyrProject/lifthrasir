@@ -81,6 +81,57 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_and_spawn_preserve_variant_and_owner_type() {
+        use net_contract::dto::SkillUnitOwnerType as Owner;
+
+        let mut app = app_with_drain();
+        let group = |unit_variant, owner_type| net::SkillUnitGroupState {
+            skill_id: 521,
+            unit_variant,
+            owner_type,
+            ..Default::default()
+        };
+        write_incoming(
+            &mut app,
+            Body::SkillUnitSnapshot(net::SkillUnitSnapshot {
+                server_tick: 100,
+                groups: vec![group(3, net::SkillUnitOwnerType::Mob as i32)],
+            }),
+        );
+        write_incoming(
+            &mut app,
+            Body::SkillUnitSpawn(net::SkillUnitSpawn {
+                group: Some(group(42, -1)),
+            }),
+        );
+        app.update();
+
+        let snapshot = app
+            .world()
+            .resource::<Messages<SkillUnitSnapshotReceived>>()
+            .iter_current_update_messages()
+            .next()
+            .unwrap();
+        assert_eq!(
+            (
+                snapshot.groups[0].unit_variant,
+                snapshot.groups[0].owner_type
+            ),
+            (3, Owner::Mob)
+        );
+        let spawn = app
+            .world()
+            .resource::<Messages<SkillUnitSpawned>>()
+            .iter_current_update_messages()
+            .next()
+            .unwrap();
+        assert_eq!(
+            (spawn.group.unit_variant, spawn.group.owner_type),
+            (42, Owner::Unknown(-1))
+        );
+    }
+
+    #[test]
     fn snapshot_drains_to_event() {
         let mut app = app_with_drain();
         write_incoming(

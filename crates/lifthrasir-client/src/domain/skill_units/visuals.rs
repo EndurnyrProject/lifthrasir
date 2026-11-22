@@ -38,6 +38,30 @@ const CRYSTAL_SHARD_SCALE: f32 = 0.55;
 const CRYSTAL_SHARD_OFFSET: f32 = 9.0;
 const CRYSTAL_SHARD_TILT: f32 = 0.28;
 
+/// Ground Drift's placement variant selects the native sphere ACT, including its tint.
+pub(super) fn ground_drift_sprite(variant: u32) -> Option<&'static str> {
+    match variant {
+        0 => Some("이팩트/라이트닝스피어"), // Wind
+        1 => Some("이팩트/블라인드스피어"), // Dark
+        2 => Some("이팩트/포이즌스피어"),   // Poison
+        3 => Some("이팩트/프리징스피어"),   // Water
+        4 => Some("이팩트/플레어스피어"),   // Fire
+        _ => None,
+    }
+}
+
+pub(super) fn spawn_sprite_child(commands: &mut Commands, path: &str, tint: Color, parent: Entity) {
+    commands.spawn((
+        EffectSprite {
+            path: path.into(),
+            tint,
+        },
+        Transform::default(),
+        Visibility::default(),
+        ChildOf(parent),
+    ));
+}
+
 /// Spawn the descriptor's persistent visual as a child of `parent` (root or
 /// cell), at the parent's origin. Preference order:
 ///   1. a converted glTF prop for a `Model` layer, only while its skill unit is
@@ -86,15 +110,7 @@ pub(super) fn spawn_effect_child(
     }
 
     if let Some(stem) = descriptor.sprite_stem() {
-        commands.spawn((
-            EffectSprite {
-                path: stem.to_string(),
-                tint: descriptor_tint(descriptor),
-            },
-            Transform::default(),
-            Visibility::default(),
-            ChildOf(parent),
-        ));
+        spawn_sprite_child(commands, stem, descriptor_tint(descriptor), parent);
         return;
     }
 

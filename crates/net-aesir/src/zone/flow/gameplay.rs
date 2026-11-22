@@ -46,6 +46,33 @@ mod tests {
     use net_contract::dto::ItemSkillTargetKind;
 
     #[test]
+    fn inventory_slot_notice_drains_to_a_dedicated_reason() {
+        let mut app = App::new();
+        app.add_message::<IncomingMessage>()
+            .add_message::<ItemSkillOffered>()
+            .add_message::<InventoryAddRejected>()
+            .add_message::<GameplayNoticeReceived>()
+            .add_systems(Update, zone_drain_gameplay);
+        app.world_mut().write_message(IncomingMessage {
+            channel: GAMEPLAY,
+            body: Body::SystemNotice(net::SystemNotice {
+                id: net::SystemNoticeId::CantGetItemBecauseCount as i32,
+            }),
+        });
+        app.update();
+        let kinds: Vec<_> = app
+            .world()
+            .resource::<Messages<GameplayNoticeReceived>>()
+            .iter_current_update_messages()
+            .map(|notice| notice.kind)
+            .collect();
+        assert_eq!(
+            kinds,
+            [net_contract::dto::GameplayNoticeKind::NoFreeInventorySlot]
+        );
+    }
+
+    #[test]
     fn item_skill_offer_preserves_target_level_and_identity() {
         let mut app = App::new();
         app.add_message::<IncomingMessage>()

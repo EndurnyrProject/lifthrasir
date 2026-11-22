@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use net_contract::dto::{SkillUnitCellFlags, SkillUnitPhase};
+use net_contract::dto::{SkillUnitCellFlags, SkillUnitOwnerType, SkillUnitPhase};
 
 /// Root entity of a server-authoritative ground-skill unit group (one Storm Gust
 /// cast, one Ice Wall, ...). Its `Transform` sits at the group center; cells are
@@ -10,7 +10,9 @@ pub struct SkillUnitGroup {
     pub group_id: u64,
     pub skill_id: u32,
     pub level: u32,
+    pub owner_type: SkillUnitOwnerType,
     pub owner_id: u32,
+    pub unit_variant: u32,
     pub phase: SkillUnitPhase,
     /// Carried but unread, plumbed so a later timed fade needs no second contract change.
     pub created_tick: u64,

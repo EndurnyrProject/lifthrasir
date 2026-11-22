@@ -61,7 +61,8 @@ pub fn gameplay_notice(notice: net::SystemNotice) -> Option<GameplayNoticeReceiv
         Ok(Wire::MapCantTeleport) => GameplayNoticeKind::MapCannotTeleport,
         Ok(Wire::MapCantMemo) => GameplayNoticeKind::MapCannotMemo,
         Ok(Wire::MapCantUseSkill) => GameplayNoticeKind::MapCannotUseSkill,
-        Ok(Wire::CantGetItemBecauseCount) | Err(_) => GameplayNoticeKind::Unknown(notice.id),
+        Ok(Wire::CantGetItemBecauseCount) => GameplayNoticeKind::NoFreeInventorySlot,
+        Err(_) => GameplayNoticeKind::Unknown(notice.id),
     };
     Some(GameplayNoticeReceived { kind })
 }

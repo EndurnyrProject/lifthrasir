@@ -155,6 +155,9 @@ pub fn report_gameplay_feedback(
             Notice::MapCannotTeleport => "Teleporting is not allowed on this map.".into(),
             Notice::MapCannotMemo => "You cannot memorize a location on this map.".into(),
             Notice::MapCannotUseSkill => "This skill cannot be used on this map.".into(),
+            Notice::NoFreeInventorySlot => {
+                "^FF0000No free inventory slot for this item.^000000".into()
+            }
             Notice::Unknown(code) => format!("Server notice (code {code})."),
         };
         chat.write(ChatNotice {
@@ -210,6 +213,29 @@ mod tests {
         );
         assert!(lines.iter().any(|line| line.contains("-23")));
         assert!(lines.iter().any(|line| line.contains("weight")));
+    }
+
+    #[test]
+    fn inventory_slot_notice_explains_the_failure_in_red() {
+        use net_contract::events::{GameplayNoticeReceived, InventoryAddRejected};
+
+        let mut app = App::new();
+        app.add_message::<GameplayNoticeReceived>()
+            .add_message::<InventoryAddRejected>()
+            .add_message::<ChatNotice>()
+            .add_systems(Update, report_gameplay_feedback);
+        app.world_mut().write_message(GameplayNoticeReceived {
+            kind: net_contract::dto::GameplayNoticeKind::NoFreeInventorySlot,
+        });
+        app.update();
+
+        let chat = app.world().resource::<Messages<ChatNotice>>();
+        let lines: Vec<_> = chat.iter_current_update_messages().collect();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(
+            lines[0].message,
+            "^FF0000No free inventory slot for this item.^000000"
+        );
     }
 
     fn production_chat(result: ProductionResult, item_db: Option<ItemDb>) -> Vec<ChatNotice> {

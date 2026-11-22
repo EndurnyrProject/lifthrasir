@@ -27,5 +27,6 @@ pub enum GameplayNoticeKind {
     MapCannotTeleport,
     MapCannotMemo,
     MapCannotUseSkill,
+    NoFreeInventorySlot,
     Unknown(i32),
 }

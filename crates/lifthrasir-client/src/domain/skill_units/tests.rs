@@ -180,7 +180,9 @@ fn group(group_id: u64, skill_id: u32, cells: Vec<SkillUnitCellState>) -> SkillU
         group_id,
         skill_id,
         skill_level: 10,
+        owner_type: Default::default(),
         owner_id: 42,
+        unit_variant: 0,
         center_x: 40,
         center_y: 50,
         phase: SkillUnitPhase::Active,
@@ -271,6 +273,66 @@ fn armed_trap_reaches_the_shared_prop_scene_renderer() {
             .no_shade_tint,
         tint
     );
+}
+
+#[test]
+fn ground_drift_spawn_and_snapshot_select_the_five_sphere_visuals() {
+    let mut app = test_app(seeded_catalog());
+    let variants = [
+        (0, "이팩트/라이트닝스피어"),
+        (1, "이팩트/블라인드스피어"),
+        (2, "이팩트/포이즌스피어"),
+        (3, "이팩트/프리징스피어"),
+        (4, "이팩트/플레어스피어"),
+    ];
+    let grenade = |variant| {
+        let id = u64::from(variant) + 1;
+        SkillUnitGroupState {
+            unit_variant: variant,
+            owner_type: net_contract::dto::SkillUnitOwnerType::Player,
+            ..group(id, 521, vec![cell(100 + variant, 40, 50, true)])
+        }
+    };
+
+    app.world_mut()
+        .write_message(SkillUnitSpawned { group: grenade(0) });
+    app.update();
+    let mut sprites = app.world_mut().query::<(&EffectSprite, &ChildOf)>();
+    assert_eq!(sprites.single(app.world()).unwrap().0.path, variants[0].1);
+
+    let mut inactive = grenade(5);
+    inactive.unit_variant = 4;
+    inactive.phase = SkillUnitPhase::Used;
+    let mut hidden = grenade(6);
+    hidden.unit_variant = 0;
+    hidden.cells[0].flags.visible = false;
+    app.world_mut().write_message(SkillUnitSnapshotReceived {
+        server_tick: 7,
+        groups: variants
+            .into_iter()
+            .map(|(variant, _)| grenade(variant))
+            .chain([inactive, hidden, grenade(99)])
+            .collect(),
+    });
+    app.update();
+
+    let mut actual: Vec<_> = sprites
+        .iter(app.world())
+        .map(|(sprite, parent)| {
+            let cell = app.world().get::<SkillUnitCell>(parent.parent()).unwrap();
+            let parent = app.world().get::<ChildOf>(parent.parent()).unwrap();
+            let root = app.world().get::<SkillUnitGroup>(parent.parent()).unwrap();
+            assert_eq!(
+                root.owner_type,
+                net_contract::dto::SkillUnitOwnerType::Player
+            );
+            assert_eq!(cell.cell_id, 100 + root.unit_variant);
+            (root.unit_variant, sprite.path.as_str())
+        })
+        .collect();
+    actual.sort_unstable();
+    assert_eq!(actual, variants);
+    assert_eq!(roots(&mut app), 8);
 }
 
 #[test]

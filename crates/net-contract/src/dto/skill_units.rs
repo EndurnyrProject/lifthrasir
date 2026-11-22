@@ -34,12 +34,24 @@ pub enum SkillUnitPhase {
     Opening,
 }
 
+/// Kind of actor that placed a skill unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SkillUnitOwnerType {
+    #[default]
+    Unspecified,
+    Player,
+    Mob,
+    Npc,
+    Unknown(i32),
+}
+
 /// A server-authoritative skill-unit group (e.g. one Storm Gust cast, one Ice Wall).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillUnitGroupState {
     pub group_id: u64,
     pub skill_id: u32,
     pub skill_level: u32,
+    pub owner_type: SkillUnitOwnerType,
     pub owner_id: u32,
     pub center_x: i32,
     pub center_y: i32,
@@ -48,6 +60,8 @@ pub struct SkillUnitGroupState {
     pub expires_tick: u64,
     /// Raw Scribble text as sent by the server.
     pub message: Vec<u8>,
+    /// Skill-specific visual variant; zero can select a valid visual.
+    pub unit_variant: u32,
     pub cells: Vec<SkillUnitCellState>,
 }
 
@@ -129,6 +143,7 @@ mod tests {
             group_id: 1,
             skill_id: 89,
             skill_level: 10,
+            owner_type: SkillUnitOwnerType::Player,
             owner_id: 42,
             center_x: 150,
             center_y: 150,
@@ -136,6 +151,7 @@ mod tests {
             created_tick: 1_000,
             expires_tick: 9_000,
             message: vec![],
+            unit_variant: 0,
             cells: vec![SkillUnitCellState {
                 cell_id: 100,
                 x: 150,
@@ -160,6 +176,7 @@ mod tests {
             group_id: u64::from(u32::MAX) + 1,
             skill_id: 89,
             skill_level: 10,
+            owner_type: SkillUnitOwnerType::Player,
             owner_id: 42,
             center_x: -1,
             center_y: -1,
@@ -167,6 +184,7 @@ mod tests {
             created_tick: 1_000,
             expires_tick: 9_000,
             message: vec![],
+            unit_variant: 0,
             cells: vec![],
         };
 
