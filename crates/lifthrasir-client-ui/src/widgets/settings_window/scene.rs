@@ -5,7 +5,6 @@
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::scene::EntityScene;
-use bevy::ui::RelativeCursorPosition;
 use bevy::ui_widgets::{Button, ControlOrientation, ScrollArea};
 use bevy_feathers::controls::FeathersScrollbar;
 use lifthrasir_client::domain::input::PlayerAction;
@@ -13,8 +12,8 @@ use lifthrasir_client::domain::settings::AudioConfig;
 use lifthrasir_ui::theme::ro_dark;
 use lifthrasir_ui::widgets::chrome::{chrome_text, drag_window, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::primitives::{
-    ButtonArt, HoverColors, WINDOW_SHADOW, close_button, diamond, display_text, inset, segment,
-    tab_text, window_title_bar, window_titled,
+    ButtonArt, HoverColors, WINDOW_SHADOW, close_button, display_text, inset, window_title_bar,
+    window_titled,
 };
 
 use super::view::{
@@ -22,11 +21,12 @@ use super::view::{
 };
 use super::{
     AudioChannel, BindSlot, Preset, Setting, SettingsAction, SettingsHost, SettingsSearchField,
-    SettingsTitlebar, SettingsWindowRoot, SliderOf, SliderPart, SliderRail, on_settings_button,
-    on_settings_click, on_slider_drag, on_slider_press,
+    SettingsTitlebar, SettingsWindowRoot, on_settings_button, on_settings_click, on_slider_drag,
+    on_slider_press,
 };
 use crate::screens::shared::{
-    chip, cycle_box, glow, link, overline, row_button, search_field, usable, wide_button,
+    SliderOf, SliderPart, chip, cycle_box, even_segment, glow, link, overline, row_button,
+    search_field, slider, switch, usable, wide_button,
 };
 
 const WINDOW_LEFT: f32 = 120.0;
@@ -307,26 +307,9 @@ fn row_scene(row: Row, audio: &AudioConfig) -> Box<dyn Scene> {
     }
 }
 
-/// A segment sharing its row evenly with the others.
-fn segment_frame(label: &'static str, active: bool) -> impl Scene {
-    let (ink, _) = tab_text(active);
-    bsn! {
-        @segment(active)
-        Node {
-            flex_grow: 1.0,
-            flex_basis: px(0),
-            min_width: px(0),
-            height: px(28),
-            padding: {UiRect::all(px(0))},
-            justify_content: JustifyContent::Center,
-        }
-        Children [ @chrome_text(label.into(), 12.0, ink) ]
-    }
-}
-
 fn option_segment(label: &'static str, active: bool, action: SettingsAction) -> impl Scene {
     bsn! {
-        @segment_frame(label, active)
+        @even_segment(label, active)
         action
         on(on_settings_click)
     }
@@ -346,7 +329,7 @@ fn presets(current: Option<Preset>) -> impl Scene {
             )) as Box<dyn Scene>
         })
         .collect();
-    segments.push(Box::new(segment_frame("Custom", current.is_none())));
+    segments.push(Box::new(even_segment("Custom", current.is_none())));
     let note = if current.is_some() {
         "All quality settings match this preset"
     } else {
@@ -469,11 +452,7 @@ fn control(setting: Setting, control: ControlView, audio: &AudioConfig) -> Box<d
 
 /// A switch with its state in words. A click anywhere on it flips it.
 fn toggle(setting: Setting, enabled: bool) -> impl Scene {
-    let (fill, stroke, left, word) = if enabled {
-        (ro_dark::PRIMARY, ro_dark::PRIMARY_STROKE, 20.0, "On")
-    } else {
-        (ro_dark::BAR_TROUGH, ro_dark::MUTED_BRONZE, 2.0, "Off")
-    };
+    let word = if enabled { "On" } else { "Off" };
     let action = SettingsAction::Toggle(setting);
     bsn! {
         action
@@ -483,28 +462,7 @@ fn toggle(setting: Setting, enabled: bool) -> impl Scene {
         Children [
             @chrome_text(word.into(), 12.0, ro_dark::MUTED)
             --
-            Node {
-                width: px(40),
-                height: px(22),
-                border: px(1),
-                border_radius: BorderRadius::MAX,
-                position_type: PositionType::Relative,
-            }
-            BackgroundColor(fill)
-            BorderColor::all(stroke)
-            @ignore_picking()
-            Children [
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(left),
-                    top: px(2),
-                    width: px(16),
-                    height: px(16),
-                    border_radius: BorderRadius::MAX,
-                }
-                BackgroundColor(ro_dark::BRONZE_LIGHT)
-                @ignore_picking()
-            ]
+            @switch(enabled)
         ]
     }
 }
@@ -532,6 +490,8 @@ fn volume_control(channel: AudioChannel, volume: f32, muted: bool) -> impl Scene
         hover: (fill, ro_dark::BUTTON_STROKE),
     };
     let action = SettingsAction::Mute(channel);
+    let readout_of = SliderOf(channel);
+    let at = if muted { 0.0 } else { volume };
     bsn! {
         Node { width: percent(100), align_items: AlignItems::Center, column_gap: px(8) }
         @ignore_picking()
@@ -555,72 +515,19 @@ fn volume_control(channel: AudioChannel, volume: f32, muted: bool) -> impl Scene
             on(on_settings_button)
             Children [ @glyph_icon(icon, 14.0, icon_ink) ]
             --
-            @slider(channel, volume, muted)
+            // A press or a drag anywhere on the rail sets the volume from the pointer;
+            // `sync_sliders` moves the fill and the knob.
+            @slider(channel, at, !muted)
+            on(on_slider_press)
+            on(on_slider_drag)
             --
             Node { width: px(48), flex_shrink: 0.0, justify_content: JustifyContent::FlexEnd }
             @ignore_picking()
             Children [
                 SliderPart::Readout
-                SliderOf(channel)
+                readout_of
                 @chrome_text(percent_label(volume, muted), 12.0, readout_ink)
             ]
-        ]
-    }
-}
-
-/// The volume slider: a press or a drag anywhere on it sets the volume from the
-/// pointer. [`sync_sliders`](super::sync_sliders) moves the fill and the knob. A muted
-/// channel's slider is dimmed and inert.
-fn slider(channel: AudioChannel, volume: f32, muted: bool) -> impl Scene {
-    let at = Val::Percent(if muted { 0.0 } else { volume * 100.0 });
-    let strength = if muted { 0.4 } else { 1.0 };
-    bsn! {
-        SliderRail(channel)
-        RelativeCursorPosition
-        Node {
-            flex_grow: 1.0,
-            min_width: px(60),
-            height: px(16),
-            align_items: AlignItems::Center,
-            position_type: PositionType::Relative,
-        }
-        Pickable { should_block_lower: {!muted}, is_hoverable: {!muted} }
-        on(on_slider_press)
-        on(on_slider_drag)
-        Children [
-            Node {
-                width: percent(100),
-                height: px(6),
-                border: px(1),
-                border_radius: BorderRadius::all(px(3)),
-            }
-            BackgroundColor(ro_dark::BAR_TROUGH)
-            BorderColor::all(ro_dark::INSET_RULE)
-            @ignore_picking()
-            Children [
-                SliderPart::Fill
-                SliderOf(channel)
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: px(0),
-                    top: px(0),
-                    bottom: px(0),
-                    width: {at},
-                    border_radius: BorderRadius::all(px(3)),
-                }
-                BackgroundColor({ro_dark::SP.with_alpha(strength)})
-                @ignore_picking()
-            ]
-            --
-            SliderPart::Knob
-            SliderOf(channel)
-            @diamond(11.0, ro_dark::FROST.with_alpha(strength), ro_dark::BRONZE_SHADOW)
-            Node {
-                position_type: PositionType::Absolute,
-                left: {at},
-                top: px(2.5),
-                margin: {UiRect::left(px(-5.5))},
-            }
         ]
     }
 }

@@ -627,6 +627,10 @@ pub struct Keybinds {
     pub names: ActionBinds,
     pub chat_room: ActionBinds,
     pub homunculus: ActionBinds,
+    pub homunculus_follow: ActionBinds,
+    pub homunculus_attack: ActionBinds,
+    pub homunculus_standby: ActionBinds,
+    pub homunculus_feed: ActionBinds,
     pub hotbar: [ActionBinds; 12],
 }
 
@@ -634,7 +638,7 @@ impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
     /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q,
     /// Cart = Alt+W, Party = P, Guild = Alt+G, Emote = Alt+M, Names = Alt+N,
-    /// ChatRoom = Alt+C.
+    /// ChatRoom = Alt+C, the Homunculus orders = Alt+1 to Alt+4.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -685,6 +689,22 @@ impl Default for Keybinds {
                 primary: KeyBind::modified(Modifier::Alt, "KeyR"),
                 secondary: KeyBind::UNBOUND,
             },
+            homunculus_follow: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "Digit1"),
+                secondary: KeyBind::UNBOUND,
+            },
+            homunculus_attack: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "Digit2"),
+                secondary: KeyBind::UNBOUND,
+            },
+            homunculus_standby: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "Digit3"),
+                secondary: KeyBind::UNBOUND,
+            },
+            homunculus_feed: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "Digit4"),
+                secondary: KeyBind::UNBOUND,
+            },
             hotbar: default_hotbar_binds(),
         }
     }
@@ -710,6 +730,14 @@ impl Keybinds {
         self.chat_room.insert_into(&mut map, PlayerAction::ChatRoom);
         self.homunculus
             .insert_into(&mut map, PlayerAction::Homunculus);
+        self.homunculus_follow
+            .insert_into(&mut map, PlayerAction::HomunculusFollow);
+        self.homunculus_attack
+            .insert_into(&mut map, PlayerAction::HomunculusAttack);
+        self.homunculus_standby
+            .insert_into(&mut map, PlayerAction::HomunculusStandby);
+        self.homunculus_feed
+            .insert_into(&mut map, PlayerAction::HomunculusFeed);
         for (binds, action) in self.hotbar.iter().zip(HOTBAR_ACTIONS) {
             binds.insert_into(&mut map, action);
         }

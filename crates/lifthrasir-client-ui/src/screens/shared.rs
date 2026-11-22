@@ -11,7 +11,7 @@ use bevy::scene::EntityScene;
 use bevy::text::{
     EditableText, EditableTextFilter, FontSize, FontSourceTemplate, LetterSpacing, TextEdit,
 };
-use bevy::ui::ShadowStyle;
+use bevy::ui::{RelativeCursorPosition, ShadowStyle};
 use bevy::ui_widgets::{Button, TextInput};
 use lifthrasir_client::domain::settings::{KeyBind, Modifier};
 use lifthrasir_ui::theme::{self, ro_dark};
@@ -19,7 +19,7 @@ use lifthrasir_ui::widgets::chrome::{chrome_text, glyph_icon, ignore_picking};
 use lifthrasir_ui::widgets::placeholder::Placeholder;
 use lifthrasir_ui::widgets::primitives::{
     BUTTON_SHADOW, ButtonArt, HoverColors, INPUT_SHADOW, PRIMITIVES_DIR, button, button_with,
-    input_frame,
+    diamond, input_frame, segment, tab_text,
 };
 
 /// Art tint of a button that cannot be used.
@@ -694,6 +694,155 @@ fn tier_mark(at: f32) -> impl Scene {
         }
         BackgroundColor({ro_dark::TITLE.with_alpha(0.55)})
         @ignore_picking()
+    }
+}
+
+/// A [`segment`] sharing its row evenly with the others. The caller adds its marker
+/// and the click observer.
+pub fn even_segment(label: impl Into<String>, active: bool) -> impl Scene {
+    let (ink, _) = tab_text(active);
+    let label = label.into();
+    bsn! {
+        @segment(active)
+        Node {
+            flex_grow: 1.0,
+            flex_basis: px(0),
+            min_width: px(0),
+            height: px(28),
+            padding: {UiRect::all(px(0))},
+            justify_content: JustifyContent::Center,
+        }
+        Children [ @chrome_text(label, 12.0, ink) ]
+    }
+}
+
+/// The track and knob of an on/off switch. The caller puts it in what takes the click.
+pub fn switch(enabled: bool) -> impl Scene {
+    let (fill, stroke, left) = if enabled {
+        (ro_dark::PRIMARY, ro_dark::PRIMARY_STROKE, 20.0)
+    } else {
+        (ro_dark::BAR_TROUGH, ro_dark::MUTED_BRONZE, 2.0)
+    };
+    bsn! {
+        Node {
+            width: px(40),
+            height: px(22),
+            flex_shrink: 0.0,
+            border: px(1),
+            border_radius: BorderRadius::MAX,
+            position_type: PositionType::Relative,
+        }
+        BackgroundColor(fill)
+        BorderColor::all(stroke)
+        @ignore_picking()
+        Children [
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(left),
+                top: px(2),
+                width: px(16),
+                height: px(16),
+                border_radius: BorderRadius::MAX,
+            }
+            BackgroundColor(ro_dark::BRONZE_LIGHT)
+            @ignore_picking()
+        ]
+    }
+}
+
+/// The rail of a [`slider`]: a press or a drag on it sets the value `K` names.
+#[derive(Component, Clone, Copy, Default)]
+pub struct SliderRail<K: Send + Sync + 'static>(pub K);
+
+/// A part of a slider its owner writes in place, so a held slider is never redrawn.
+#[derive(Component, Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub enum SliderPart {
+    #[default]
+    Fill,
+    Knob,
+    /// The value in words beside the rail. The owner spawns and writes it.
+    Readout,
+}
+
+/// Which value a [`SliderPart`] shows.
+#[derive(Component, Clone, Copy, Default)]
+pub struct SliderOf<K: Send + Sync + 'static>(pub K);
+
+/// A slider for the value `key` names, filled to `at` (0 to 1). The caller attaches
+/// the press and drag observers and moves the parts with [`place_slider`]. A slider
+/// that is not `live` is dimmed and inert.
+pub fn slider<K>(key: K, at: f32, live: bool) -> impl Scene
+where
+    K: Clone + Unpin + Send + Sync + 'static,
+{
+    let rail = SliderRail(key.clone());
+    let fill_of = SliderOf(key.clone());
+    let knob_of = SliderOf(key);
+    let at = Val::Percent(at * 100.0);
+    let strength = if live { 1.0 } else { 0.4 };
+    bsn! {
+        rail
+        RelativeCursorPosition
+        Node {
+            flex_grow: 1.0,
+            min_width: px(60),
+            height: px(16),
+            align_items: AlignItems::Center,
+            position_type: PositionType::Relative,
+        }
+        Pickable { should_block_lower: {live}, is_hoverable: {live} }
+        Children [
+            Node {
+                width: percent(100),
+                height: px(6),
+                border: px(1),
+                border_radius: BorderRadius::all(px(3)),
+            }
+            BackgroundColor(ro_dark::BAR_TROUGH)
+            BorderColor::all(ro_dark::INSET_RULE)
+            @ignore_picking()
+            Children [
+                SliderPart::Fill
+                fill_of
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0),
+                    top: px(0),
+                    bottom: px(0),
+                    width: {at},
+                    border_radius: BorderRadius::all(px(3)),
+                }
+                BackgroundColor({ro_dark::SP.with_alpha(strength)})
+                @ignore_picking()
+            ]
+            --
+            SliderPart::Knob
+            knob_of
+            @diamond(11.0, ro_dark::FROST.with_alpha(strength), ro_dark::BRONZE_SHADOW)
+            Node {
+                position_type: PositionType::Absolute,
+                left: {at},
+                top: px(2.5),
+                margin: {UiRect::left(px(-5.5))},
+            }
+        ]
+    }
+}
+
+/// Where the pointer is along a slider's rail: 0 at its left end, 1 at its right.
+pub fn slider_at(cursor: &RelativeCursorPosition) -> Option<f32> {
+    // `normalized` is centred on the node: -0.5 at its left edge, 0.5 at its right.
+    cursor.normalized.map(|at| (at.x + 0.5).clamp(0.0, 1.0))
+}
+
+/// Moves a slider's fill or knob to `at` (0 to 1). It takes the `Mut` so a part that
+/// is already in place is not marked changed.
+pub fn place_slider(part: SliderPart, mut node: Mut<Node>, at: f32) {
+    let at = Val::Percent(at * 100.0);
+    match part {
+        SliderPart::Fill if node.width != at => node.width = at,
+        SliderPart::Knob if node.left != at => node.left = at,
+        _ => {}
     }
 }
 

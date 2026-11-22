@@ -52,6 +52,8 @@ const TIP_LEAD: f32 = 24.0;
 pub(crate) struct HudSettings {
     /// Whether the status bar is minified.
     pub(crate) character_info_minimal: bool,
+    /// Whether the Homunculus plate shows only the portrait.
+    pub(crate) homunculus_minimal: bool,
 }
 
 /// The bar's corner of the HUD.

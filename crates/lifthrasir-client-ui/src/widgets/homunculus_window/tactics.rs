@@ -1,445 +1,348 @@
-//! Edits an entire server-owned tactics configuration, including untouched rules.
-use bevy::{prelude::*, text::EditableText, ui_widgets::Activate};
-use bevy_feathers::controls::{FeathersButton, FeathersTextInput};
-use lifthrasir_client::domain::homunculus::{
-    HomunculusIntent, HomunculusSkillSpec, HomunculusState, homunculus_skill_spec,
-};
-use lifthrasir_ui::{theme::ro_dark, widgets::chrome::chrome_text};
+//! The draft of a companion's tactics. The server owns the configuration and takes it
+//! whole, so every edit changes one field of a full copy and leaves the rest as it was
+//! received, including the rules the window does not show.
+
+use lifthrasir_client::domain::homunculus::{HomunculusSkillSpec, homunculus_skill_spec};
 use net_contract::dto::{
-    HomunculusAction, HomunculusAiConfig, HomunculusAiSkillConfig, HomunculusAiSkillMode as Mode,
+    HomunculusAiConfig as Config, HomunculusAiSkillConfig as Rule, HomunculusAiSkillMode as Mode,
     HomunculusAiStance as Stance, HomunculusHpRange,
 };
 
-use super::{HomunculusTab, OwnerUi};
-
-#[derive(Component, Default, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Field {
+/// An on/off rule of the configuration.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Flag {
     #[default]
-    Stance,
-    Leash,
     Join,
     Retaliate,
     AvoidBoss,
     AutoFeed,
-    FeedAt,
-    Allow,
-    Deny,
-    SpReserve,
-    Mode,
-    Priority,
-    SelfHp,
-    OwnerHp,
-    TargetHp,
 }
-#[derive(Component, Default, Clone)]
-pub(super) struct TacticsStatus;
-#[derive(Component, Default, Clone, Copy)]
-pub(super) enum Group {
+
+impl Flag {
+    pub(super) fn read(self, config: &Config) -> bool {
+        match self {
+            Flag::Join => config.join_owner_target,
+            Flag::Retaliate => config.retaliate,
+            Flag::AvoidBoss => config.avoid_bosses,
+            Flag::AutoFeed => config.auto_feed,
+        }
+    }
+
+    fn flip(self, config: &mut Config) {
+        let flag = match self {
+            Flag::Join => &mut config.join_owner_target,
+            Flag::Retaliate => &mut config.retaliate,
+            Flag::AvoidBoss => &mut config.avoid_bosses,
+            Flag::AutoFeed => &mut config.auto_feed,
+        };
+        *flag = !*flag;
+    }
+}
+
+/// A list of monster class ids the companion is held to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum MobList {
+    /// When not empty, the only monsters it attacks.
     #[default]
-    Advanced,
-    Skill,
-    TargetHp,
+    Only,
+    Never,
+}
+
+impl MobList {
+    fn ids(self, config: &mut Config) -> &mut Vec<u32> {
+        match self {
+            MobList::Only => &mut config.allowed_mob_class_ids,
+            MobList::Never => &mut config.denied_mob_class_ids,
+        }
+    }
+}
+
+/// A number of the configuration, set with a slider. The HP dials carry their rule's
+/// skill id and are off at 0.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Dial {
+    #[default]
+    Leash,
+    FeedAt,
+    SpReserve,
+    SelfHp(u32),
+    OwnerHp(u32),
+    /// The upper end of the target's HP range. The lower end stays as received.
+    TargetHp(u32),
+}
+
+impl Dial {
+    /// The lowest and highest value the server takes, and the slider's step.
+    fn span(self) -> (u32, u32, u32) {
+        match self {
+            Dial::Leash => (2, 14, 1),
+            Dial::FeedAt => (1, 75, 1),
+            Dial::SpReserve | Dial::SelfHp(_) | Dial::OwnerHp(_) | Dial::TargetHp(_) => (0, 100, 5),
+        }
+    }
+
+    pub(super) fn read(self, config: &Config) -> u32 {
+        let rule = |id| config.skills.iter().find(|rule| rule.skill_id == id);
+        match self {
+            Dial::Leash => config.leash_distance,
+            Dial::FeedAt => config.auto_feed_threshold,
+            Dial::SpReserve => config.auto_cast_sp_reserve_percent,
+            Dial::SelfHp(id) => rule(id)
+                .and_then(|rule| rule.self_hp_threshold)
+                .unwrap_or(0),
+            Dial::OwnerHp(id) => rule(id)
+                .and_then(|rule| rule.owner_hp_threshold)
+                .unwrap_or(0),
+            Dial::TargetHp(id) => rule(id)
+                .and_then(|rule| rule.target_hp_range)
+                .map_or(0, |range| range.max_percent),
+        }
+    }
+
+    fn write(self, config: &mut Config, value: u32) {
+        let set = (value > 0).then_some(value);
+        let (Dial::SelfHp(id) | Dial::OwnerHp(id) | Dial::TargetHp(id)) = self else {
+            match self {
+                Dial::Leash => config.leash_distance = value,
+                Dial::FeedAt => config.auto_feed_threshold = value,
+                _ => config.auto_cast_sp_reserve_percent = value,
+            }
+            return;
+        };
+        let Some(rule) = config.skills.iter_mut().find(|rule| rule.skill_id == id) else {
+            return;
+        };
+        match self {
+            Dial::SelfHp(_) => rule.self_hp_threshold = set,
+            Dial::OwnerHp(_) => rule.owner_hp_threshold = set,
+            _ => {
+                let low = rule.target_hp_range.map_or(0, |range| range.min_percent);
+                rule.target_hp_range = set.map(|max_percent| HomunculusHpRange {
+                    min_percent: low.min(max_percent),
+                    max_percent,
+                });
+            }
+        }
+    }
+
+    /// How far along its slider the dial is, from 0 to 1.
+    pub(super) fn fraction(self, config: &Config) -> f32 {
+        let (low, high, _) = self.span();
+        (self.read(config).clamp(low, high) - low) as f32 / (high - low) as f32
+    }
+
+    /// The value at `fraction` of the slider, on a step.
+    fn at(self, fraction: f32) -> u32 {
+        let (low, high, step) = self.span();
+        let steps = (fraction.clamp(0.0, 1.0) * (high - low) as f32 / step as f32).round() as u32;
+        (low + steps * step).min(high)
+    }
+
+    pub(super) fn readout(self, config: &Config) -> String {
+        let value = self.read(config);
+        match self {
+            Dial::Leash => format!("{value} cells"),
+            Dial::FeedAt => value.to_string(),
+            Dial::SpReserve => format!("{value}%"),
+            _ if value == 0 => "Off".into(),
+            _ => format!("{value}%"),
+        }
+    }
+}
+
+/// Whether the window can edit this rule. Passive skills are never cast.
+pub(super) fn editable(rule: &Rule) -> bool {
+    matches!(
+        homunculus_skill_spec(rule.skill_id),
+        Some(HomunculusSkillSpec::Enemy | HomunculusSkillSpec::SelfTarget)
+    )
+}
+
+/// Whether every value of the configuration is one the client knows.
+pub(super) fn known(config: &Config) -> bool {
+    matches!(
+        config.stance,
+        Stance::Passive | Stance::Assist | Stance::Aggressive
+    ) && config.skills.iter().all(|rule| {
+        homunculus_skill_spec(rule.skill_id).is_some()
+            && matches!(rule.mode, Mode::Manual | Mode::Auto)
+    })
+}
+
+/// The rules the window shows, in the order the server runs them: highest priority
+/// first, then lowest skill id.
+pub(super) fn rules(config: &Config) -> Vec<&Rule> {
+    let mut rules: Vec<_> = config.skills.iter().filter(|rule| editable(rule)).collect();
+    rules.sort_by_key(|rule| (std::cmp::Reverse(rule.priority), rule.skill_id));
+    rules
+}
+
+/// The HP conditions the server accepts on an automatic rule.
+pub(super) fn dials(rule: &Rule) -> Vec<Dial> {
+    let id = rule.skill_id;
+    let mut dials = vec![Dial::SelfHp(id), Dial::OwnerHp(id)];
+    if homunculus_skill_spec(id) == Some(HomunculusSkillSpec::Enemy) {
+        dials.push(Dial::TargetHp(id));
+    }
+    dials
 }
 
 #[derive(Default)]
 pub(super) struct Editor {
     companion: u64,
-    base: Option<HomunculusAiConfig>,
-    draft: Option<HomunculusAiConfig>,
-    submitted: Option<HomunculusAiConfig>,
-    sync: bool,
-    advanced: bool,
-    row: usize,
-    error: Option<&'static str>,
+    /// The server's configuration the draft started from.
+    base: Option<Config>,
+    draft: Option<Config>,
+    /// The draft last sent, until the server answers with it.
+    submitted: Option<Config>,
 }
 
 impl Editor {
-    fn reset(&mut self, id: u64, config: &HomunculusAiConfig) {
+    pub(super) fn reset(&mut self, id: u64, config: &Config) {
         self.companion = id;
         self.base = Some(config.clone());
         self.draft = Some(config.clone());
         self.submitted = None;
-        self.row = 0;
-        self.sync = true;
-        self.error = None;
     }
-    fn stale(&self, config: &HomunculusAiConfig) -> bool {
+
+    /// Whether the server's configuration is no longer the one the draft started from.
+    pub(super) fn stale(&self, config: &Config) -> bool {
         self.base.as_ref() != Some(config)
     }
-}
 
-pub(super) fn page() -> impl Scene {
-    bsn! {
-        HomunculusTab::Tactics
-        Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(3) }
-        Children [
-            @field(Field::Stance, "Stance (passive / assist / aggressive)")
-            -- @field(Field::Leash, "Leash (2–14)")
-            -- @field(Field::Join, "Join your target (yes/no)")
-            -- @field(Field::Retaliate, "Retaliate (yes/no)")
-            -- @field(Field::AvoidBoss, "Avoid bosses (yes/no)")
-            -- @field(Field::AutoFeed, "Auto-feed (yes/no)")
-            -- @field(Field::FeedAt, "Feed at hunger (1–75)")
-            -- @advanced()
-            -- Node { flex_direction: FlexDirection::Row, column_gap: px(4) }
-               Children [ @action("Advanced", Control::Advanced) -- @action("Reset draft", Control::Reset) -- @action("Apply", Control::Apply) ]
-            -- TacticsStatus @chrome_text(String::new(), 12.0, ro_dark::TITLE)
-        ]
+    pub(super) fn dirty(&self) -> bool {
+        self.draft != self.base
     }
-}
 
-fn advanced() -> impl Scene {
-    bsn! {
-        Group::Advanced Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(3) }
-        Children [
-            @field(Field::Allow, "Allowed mob IDs (comma-separated)")
-            -- @field(Field::Deny, "Denied mob IDs (comma-separated)")
-            -- @field(Field::SpReserve, "Auto-cast SP reserve (0–100%)")
-            -- @action("Next skill rule", Control::Next)
-            -- Group::Skill Node { display: Display::None, flex_direction: FlexDirection::Column, row_gap: px(3) }
-               Children [
-                   @field(Field::Mode, "Skill mode (manual / auto)")
-                   -- @field(Field::Priority, "Priority (1–100)")
-                   -- @field(Field::SelfHp, "Companion HP at or below (%)")
-                   -- @field(Field::OwnerHp, "Owner HP at or below (%)")
-                   -- Group::TargetHp Node { display: Display::None, flex_direction: FlexDirection::Column }
-                      Children [ @field(Field::TargetHp, "Target HP range (min-max)") ]
-               ]
-        ]
+    pub(super) fn draft(&self) -> Option<&Config> {
+        self.draft.as_ref()
     }
-}
 
-fn field(field: Field, label: &'static str) -> impl Scene {
-    bsn! {
-        Node { flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, column_gap: px(4) }
-        Children [ @chrome_text(label.into(), 12.0, ro_dark::TITLE)
-            -- @FeathersTextInput { @visible_width: {Some(16.0)} } field ]
+    /// Whether a draft was sent and the server has not answered with it yet.
+    pub(super) fn sent(&self) -> bool {
+        self.submitted.is_some()
     }
-}
 
-#[derive(Component, Default, Clone, Copy)]
-enum Control {
-    #[default]
-    Apply,
-    Reset,
-    Advanced,
-    Next,
-}
-
-fn action(label: &'static str, control: Control) -> impl Scene {
-    bsn! {
-        @FeathersButton { @caption: bsn! { @chrome_text(label.into(), 12.0, ro_dark::BUTTON_LABEL) } }
-        control on(activate)
+    /// Takes the server's configuration unless that would throw an edit away: for
+    /// another companion, once the sent draft lands, or while nothing was changed.
+    pub(super) fn follow(&mut self, id: u64, config: &Config) {
+        let landed = self.submitted.as_ref() == Some(config);
+        if self.companion != id || landed || !self.dirty() && self.stale(config) {
+            self.reset(id, config);
+        }
     }
-}
 
-fn read_field(fields: &Query<(&Field, &EditableText)>, field: Field) -> String {
-    fields
-        .iter()
-        .find(|(kind, _)| **kind == field)
-        .map_or_else(String::new, |(_, value)| value.value().to_string())
-}
+    fn edit(&mut self, change: impl FnOnce(&mut Config)) {
+        if let Some(draft) = &mut self.draft {
+            change(draft);
+        }
+    }
 
-fn read_draft(
-    editor: &Editor,
-    fields: &Query<(&Field, &EditableText)>,
-) -> Option<HomunculusAiConfig> {
-    let mut result = editor.draft.clone()?;
-    let field = |kind| read_field(fields, kind);
-    result.stance = match field(Field::Stance).trim().to_ascii_lowercase().as_str() {
-        "passive" => Stance::Passive,
-        "assist" => Stance::Assist,
-        "aggressive" => Stance::Aggressive,
-        _ => return None,
-    };
-    result.leash_distance = number(&field(Field::Leash), 2..=14)?;
-    result.join_owner_target = boolean(&field(Field::Join))?;
-    result.retaliate = boolean(&field(Field::Retaliate))?;
-    result.avoid_bosses = boolean(&field(Field::AvoidBoss))?;
-    result.auto_feed = boolean(&field(Field::AutoFeed))?;
-    result.auto_feed_threshold = number(&field(Field::FeedAt), 1..=75)?;
-    result.auto_cast_sp_reserve_percent = number(&field(Field::SpReserve), 0..=100)?;
-    result.allowed_mob_class_ids = ids(&field(Field::Allow))?;
-    result.denied_mob_class_ids = ids(&field(Field::Deny))?;
-    if let Some(skill) = result.skills.get_mut(editor.row)
-        && editable_skill(skill)
-    {
-        skill.mode = match field(Field::Mode).trim().to_ascii_lowercase().as_str() {
-            "manual" => Mode::Manual,
-            "auto" => Mode::Auto,
-            _ => return None,
-        };
-        skill.priority = number(&field(Field::Priority), 1..=100)?;
-        if skill.mode == Mode::Manual {
-            skill.self_hp_threshold = None;
-            skill.owner_hp_threshold = None;
-            skill.target_hp_range = None;
-        } else {
-            skill.self_hp_threshold = optional_hp(&field(Field::SelfHp))?;
-            skill.owner_hp_threshold = optional_hp(&field(Field::OwnerHp))?;
-            if homunculus_skill_spec(skill.skill_id) == Some(HomunculusSkillSpec::Enemy) {
-                let range = field(Field::TargetHp);
-                skill.target_hp_range = if range.trim().is_empty() {
-                    None
-                } else {
-                    let (min, max) = range.split_once('-')?;
-                    let min_percent = number(min, 0..=100)?;
-                    let max_percent = number(max, min_percent..=100)?;
-                    Some(HomunculusHpRange {
-                        min_percent,
-                        max_percent,
-                    })
-                };
+    pub(super) fn set_stance(&mut self, stance: Stance) {
+        self.edit(|draft| draft.stance = stance);
+    }
+
+    pub(super) fn flip(&mut self, flag: Flag) {
+        self.edit(|draft| flag.flip(draft));
+    }
+
+    pub(super) fn set_dial(&mut self, dial: Dial, fraction: f32) {
+        self.edit(|draft| dial.write(draft, dial.at(fraction)));
+    }
+
+    /// Sets how a skill is cast. The server takes no HP condition on a manual rule.
+    pub(super) fn set_mode(&mut self, skill_id: u32, mode: Mode) {
+        self.edit(|draft| {
+            let Some(rule) = draft
+                .skills
+                .iter_mut()
+                .find(|rule| rule.skill_id == skill_id)
+            else {
+                return;
+            };
+            rule.mode = mode;
+            if mode == Mode::Manual {
+                rule.self_hp_threshold = None;
+                rule.owner_hp_threshold = None;
+                rule.target_hp_range = None;
             }
-        }
-    }
-    Some(result)
-}
-
-fn number(s: &str, range: std::ops::RangeInclusive<u32>) -> Option<u32> {
-    s.trim().parse::<u32>().ok().filter(|n| range.contains(n))
-}
-fn boolean(s: &str) -> Option<bool> {
-    match s.trim().to_ascii_lowercase().as_str() {
-        "yes" => Some(true),
-        "no" => Some(false),
-        _ => None,
-    }
-}
-fn optional_hp(s: &str) -> Option<Option<u32>> {
-    if s.trim().is_empty() {
-        Some(None)
-    } else {
-        number(s, 1..=100).map(Some)
-    }
-}
-fn ids(s: &str) -> Option<Vec<u32>> {
-    if s.trim().is_empty() {
-        return Some(Vec::new());
-    }
-    let mut ids = s
-        .split(',')
-        .map(|id| number(id, 1..=u32::MAX))
-        .collect::<Option<Vec<_>>>()?;
-    ids.sort_unstable();
-    ids.windows(2).all(|pair| pair[0] != pair[1]).then_some(ids)
-}
-fn editable_skill(skill: &HomunculusAiSkillConfig) -> bool {
-    matches!(
-        homunculus_skill_spec(skill.skill_id),
-        Some(HomunculusSkillSpec::Enemy | HomunculusSkillSpec::SelfTarget)
-    )
-}
-fn known(config: &HomunculusAiConfig) -> bool {
-    matches!(
-        config.stance,
-        Stance::Passive | Stance::Assist | Stance::Aggressive
-    ) && config.skills.iter().all(|s| {
-        homunculus_skill_spec(s.skill_id).is_some() && matches!(s.mode, Mode::Manual | Mode::Auto)
-    })
-}
-
-fn activate(
-    event: On<Activate>,
-    buttons: Query<&Control>,
-    fields: Query<(&Field, &EditableText)>,
-    state: Res<HomunculusState>,
-    mut ui: ResMut<OwnerUi>,
-    mut out: MessageWriter<HomunculusIntent>,
-) {
-    let Ok(&button) = buttons.get(event.entity) else {
-        return;
-    };
-    let Some((id, config)) = state
-        .snapshot()
-        .and_then(|s| Some((s.durable_id, s.ai_config.as_ref()?)))
-    else {
-        return;
-    };
-    if !ui.open || ui.tab != HomunculusTab::Tactics {
-        return;
-    }
-    let editor = &mut ui.tactics;
-    match button {
-        Control::Advanced => {
-            editor.advanced = !editor.advanced;
-            return;
-        }
-        Control::Reset => {
-            editor.reset(id, config);
-            return;
-        }
-        _ => {}
-    }
-    if editor.companion != id || !known(config) || editor.stale(config) || editor.sync {
-        return;
-    }
-    let Some(draft) = read_draft(editor, &fields) else {
-        editor.error = Some("Check the field values. Leave unused HP thresholds blank.");
-        return;
-    };
-    editor.error = None;
-    if matches!(button, Control::Next) {
-        editor.row = (editor.row + 1) % draft.skills.len().max(1);
-        editor.draft = Some(draft);
-        editor.sync = true;
-    } else if state.can_mutate() && draft != *config {
-        editor.submitted = Some(draft.clone());
-        editor.draft = Some(draft.clone());
-        out.write(HomunculusIntent::Act {
-            durable_id: id,
-            action: HomunculusAction::ReplaceAi { config: draft },
         });
     }
-}
 
-pub(super) fn update(
-    mut ui: ResMut<OwnerUi>,
-    state: Res<HomunculusState>,
-    mut fields: Query<(&Field, &mut EditableText)>,
-    mut status: Query<&mut Text, With<TacticsStatus>>,
-    mut groups: Query<(&Group, &mut Node)>,
-) {
-    if !ui.open {
-        ui.tactics = Editor::default();
-        return;
-    }
-    if ui.tab != HomunculusTab::Tactics {
-        return;
-    }
-    let editor = &mut ui.tactics;
-    let mut detail = "Tactics are unavailable without a companion.".to_owned();
-    if let Some((id, config)) = state
-        .snapshot()
-        .and_then(|s| Some((s.durable_id, s.ai_config.as_ref()?)))
-    {
-        if editor.companion != id
-            || editor.base.is_none()
-            || editor.submitted.as_ref() == Some(config)
-        {
-            editor.reset(id, config);
-        }
-        let current = editor
-            .draft
-            .as_ref()
-            .and_then(|draft| draft.skills.get(editor.row));
-        for (&group, mut node) in &mut groups {
-            let shown = match group {
-                Group::Advanced => editor.advanced,
-                Group::Skill => current.is_some_and(editable_skill),
-                Group::TargetHp => current.is_some_and(|s| {
-                    homunculus_skill_spec(s.skill_id) == Some(HomunculusSkillSpec::Enemy)
-                }),
+    /// Moves a rule one place up. The shown rules are renumbered from the new order,
+    /// which also settles ties between equal priorities.
+    pub(super) fn raise(&mut self, skill_id: u32) {
+        self.edit(|draft| {
+            let mut order: Vec<u32> = rules(draft).iter().map(|rule| rule.skill_id).collect();
+            let Some(place) = order.iter().position(|id| *id == skill_id) else {
+                return;
             };
-            node.display = if shown { Display::Flex } else { Display::None };
-        }
-        if editor.sync
-            && let Some(draft) = &editor.draft
-        {
-            for (&field, mut input) in &mut fields {
-                input
-                    .editor_mut()
-                    .set_text(&field_text(draft, current, field));
+            if place == 0 {
+                return;
             }
-            editor.sync = false;
-        }
-        detail = if !known(config) {
-            "This configuration contains rules the client cannot edit.".into()
-        } else if editor.stale(config) {
-            "Tactics changed on the server. Reset the draft to reload.".into()
-        } else if let Some(error) = editor.error {
-            error.into()
-        } else if state.pending_mutation().is_some() {
-            "Waiting for the server…".into()
-        } else if editor.submitted.is_some()
-            && let Some(super::HomunculusFeedbackKind::Rejected(error)) = state.last_feedback()
-        {
-            super::error_text(*error).into()
-        } else if let Some(skill) = current {
-            format!(
-                "Skill #{} · rule {}/{}",
-                skill.skill_id,
-                editor.row + 1,
-                config.skills.len()
-            )
-        } else {
-            "No learned skills have tactics rules.".into()
-        };
-    } else {
-        *editor = Editor::default();
-        for (_, mut node) in &mut groups {
-            node.display = Display::None;
-        }
+            order.swap(place - 1, place);
+            for rule in &mut draft.skills {
+                if let Some(place) = order.iter().position(|id| *id == rule.skill_id) {
+                    rule.priority = (order.len() - place) as u32;
+                }
+            }
+        });
     }
-    if let Ok(mut text) = status.single_mut()
-        && text.0 != detail
-    {
-        text.0 = detail;
-    }
-}
 
-fn field_text(
-    cfg: &HomunculusAiConfig,
-    skill: Option<&HomunculusAiSkillConfig>,
-    field: Field,
-) -> String {
-    let boolean = |yes| {
-        if yes {
-            "yes".to_string()
-        } else {
-            "no".to_string()
+    /// Adds a monster class id to a list, which stays sorted and free of repeats.
+    pub(super) fn add_mob(&mut self, list: MobList, id: u32) {
+        if id == 0 {
+            return;
         }
-    };
-    let ids = |values: &[u32]| {
-        values
-            .iter()
-            .map(u32::to_string)
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    match field {
-        Field::Stance => format!("{:?}", cfg.stance).to_lowercase(),
-        Field::Leash => cfg.leash_distance.to_string(),
-        Field::Join => boolean(cfg.join_owner_target),
-        Field::Retaliate => boolean(cfg.retaliate),
-        Field::AvoidBoss => boolean(cfg.avoid_bosses),
-        Field::AutoFeed => boolean(cfg.auto_feed),
-        Field::FeedAt => cfg.auto_feed_threshold.to_string(),
-        Field::Allow => ids(&cfg.allowed_mob_class_ids),
-        Field::Deny => ids(&cfg.denied_mob_class_ids),
-        Field::SpReserve => cfg.auto_cast_sp_reserve_percent.to_string(),
-        Field::Mode => skill.map_or_else(String::new, |s| format!("{:?}", s.mode).to_lowercase()),
-        Field::Priority => skill.map_or_else(String::new, |s| s.priority.to_string()),
-        Field::SelfHp => skill
-            .and_then(|s| s.self_hp_threshold)
-            .map_or_else(String::new, |n| n.to_string()),
-        Field::OwnerHp => skill
-            .and_then(|s| s.owner_hp_threshold)
-            .map_or_else(String::new, |n| n.to_string()),
-        Field::TargetHp => skill
-            .and_then(|s| s.target_hp_range)
-            .map_or_else(String::new, |r| {
-                format!("{}-{}", r.min_percent, r.max_percent)
-            }),
+        self.edit(|draft| {
+            let ids = list.ids(draft);
+            if !ids.contains(&id) {
+                ids.push(id);
+                ids.sort_unstable();
+            }
+        });
+    }
+
+    pub(super) fn drop_mob(&mut self, list: MobList, id: u32) {
+        self.edit(|draft| list.ids(draft).retain(|kept| *kept != id));
+    }
+
+    /// The draft to send, when it differs from what the server has.
+    pub(super) fn teach(&mut self) -> Option<Config> {
+        if !self.dirty() {
+            return None;
+        }
+        self.submitted = self.draft.clone();
+        self.draft.clone()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rule(skill_id: u32, priority: u32) -> Rule {
+        Rule {
+            skill_id,
+            mode: Mode::Auto,
+            priority,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn tactics_blocks_apply_after_skill_rows_change() {
-        let original = HomunculusAiConfig {
+        let original = Config {
             stance: Stance::Assist,
-            ..default()
+            ..Default::default()
         };
         let mut editor = Editor::default();
         editor.reset(1, &original);
         let mut incoming = original.clone();
-        incoming.skills.push(HomunculusAiSkillConfig {
+        incoming.skills.push(Rule {
             skill_id: 8001,
             mode: Mode::Manual,
-            ..default()
+            ..Default::default()
         });
         assert!(!editor.stale(&original));
         assert!(editor.stale(&incoming));
@@ -447,8 +350,7 @@ mod tests {
 
     #[test]
     fn stance_only_edit_preserves_hidden_ai_fields() {
-        use bevy::ecs::system::RunSystemOnce;
-        let original = HomunculusAiConfig {
+        let original = Config {
             stance: Stance::Assist,
             leash_distance: 8,
             auto_feed_threshold: 25,
@@ -456,7 +358,7 @@ mod tests {
             denied_mob_class_ids: vec![1004],
             auto_cast_sp_reserve_percent: 12,
             skills: vec![
-                HomunculusAiSkillConfig {
+                Rule {
                     skill_id: 8009,
                     mode: Mode::Auto,
                     priority: 7,
@@ -464,65 +366,125 @@ mod tests {
                         min_percent: 0,
                         max_percent: 45,
                     }),
-                    ..default()
+                    ..Default::default()
                 },
-                HomunculusAiSkillConfig {
+                Rule {
                     skill_id: 8012,
                     mode: Mode::Auto,
                     priority: 4,
                     owner_hp_threshold: Some(25),
-                    ..default()
+                    ..Default::default()
                 },
             ],
-            ..default()
+            ..Default::default()
         };
-        let mut world = World::new();
-        for field in [
-            Field::Stance,
-            Field::Leash,
-            Field::Join,
-            Field::Retaliate,
-            Field::AvoidBoss,
-            Field::AutoFeed,
-            Field::FeedAt,
-            Field::Allow,
-            Field::Deny,
-            Field::SpReserve,
-            Field::Mode,
-            Field::Priority,
-            Field::SelfHp,
-            Field::OwnerHp,
-            Field::TargetHp,
-        ] {
-            let value = if field == Field::Stance {
-                "passive".into()
-            } else {
-                field_text(&original, original.skills.first(), field)
-            };
-            world.spawn((field, EditableText::new(value)));
-        }
         let mut editor = Editor::default();
         editor.reset(1, &original);
-        let result = world
-            .run_system_once(move |fields: Query<(&Field, &EditableText)>| {
-                read_draft(&editor, &fields)
-            })
-            .unwrap()
-            .unwrap();
+
+        editor.set_stance(Stance::Passive);
+
         assert_eq!(
-            result,
-            HomunculusAiConfig {
+            editor.teach(),
+            Some(Config {
                 stance: Stance::Passive,
                 ..original
-            }
+            })
         );
     }
 
     #[test]
-    fn validator_keeps_threshold_presence_and_rejects_duplicate_ids() {
-        assert_eq!(optional_hp(""), Some(None));
-        assert_eq!(optional_hp("0"), None);
-        assert_eq!(ids("3, 1"), Some(vec![1, 3]));
-        assert_eq!(ids("3, 3"), None);
+    fn dials_keep_threshold_presence_and_mob_lists_reject_duplicate_ids() {
+        let mut editor = Editor::default();
+        editor.reset(
+            1,
+            &Config {
+                skills: vec![rule(8009, 1)],
+                ..Default::default()
+            },
+        );
+
+        editor.set_dial(Dial::OwnerHp(8009), 0.62);
+        editor.set_dial(Dial::TargetHp(8009), 0.4);
+        editor.set_dial(Dial::SelfHp(8009), 0.3);
+        editor.set_dial(Dial::SelfHp(8009), 0.0);
+        editor.add_mob(MobList::Never, 3);
+        editor.add_mob(MobList::Never, 1);
+        editor.add_mob(MobList::Never, 3);
+        editor.add_mob(MobList::Never, 0);
+
+        let draft = editor.draft().unwrap();
+        assert_eq!(draft.skills[0].owner_hp_threshold, Some(60));
+        assert_eq!(draft.skills[0].self_hp_threshold, None);
+        assert_eq!(
+            draft.skills[0].target_hp_range,
+            Some(HomunculusHpRange {
+                min_percent: 0,
+                max_percent: 40
+            })
+        );
+        assert_eq!(draft.denied_mob_class_ids, [1, 3]);
+    }
+
+    #[test]
+    fn a_manual_rule_drops_its_hp_conditions() {
+        let mut editor = Editor::default();
+        editor.reset(
+            1,
+            &Config {
+                skills: vec![Rule {
+                    owner_hp_threshold: Some(60),
+                    ..rule(8001, 1)
+                }],
+                ..Default::default()
+            },
+        );
+
+        editor.set_mode(8001, Mode::Manual);
+
+        let rule = &editor.draft().unwrap().skills[0];
+        assert_eq!(rule.mode, Mode::Manual);
+        assert_eq!(rule.owner_hp_threshold, None);
+    }
+
+    #[test]
+    fn raising_a_rule_runs_it_before_the_one_above_even_on_a_tie() {
+        let mut editor = Editor::default();
+        // 8003 is passive: it is not shown and keeps its priority.
+        editor.reset(
+            1,
+            &Config {
+                skills: vec![rule(8001, 5), rule(8002, 5), rule(8003, 9), rule(8009, 2)],
+                ..Default::default()
+            },
+        );
+
+        editor.raise(8002);
+
+        let draft = editor.draft().unwrap();
+        let order: Vec<u32> = rules(draft).iter().map(|rule| rule.skill_id).collect();
+        assert_eq!(order, [8002, 8001, 8009]);
+        assert_eq!(draft.skills[2].priority, 9);
+    }
+
+    #[test]
+    fn a_clean_draft_follows_the_server_and_an_edited_one_does_not() {
+        let original = Config {
+            leash_distance: 8,
+            ..Default::default()
+        };
+        let pushed = Config {
+            leash_distance: 10,
+            ..Default::default()
+        };
+        let mut editor = Editor::default();
+        editor.follow(1, &original);
+        editor.follow(1, &pushed);
+        assert_eq!(editor.draft(), Some(&pushed));
+
+        editor.flip(Flag::Retaliate);
+        editor.follow(1, &original);
+
+        assert!(editor.stale(&original));
+        assert!(editor.draft().unwrap().retaliate);
     }
 }

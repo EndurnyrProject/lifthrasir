@@ -32,6 +32,14 @@ pub enum PlayerAction {
     ChatRoom,
     /// Toggle the owner Homunculus window.
     Homunculus,
+    /// Order the Homunculus to follow its owner.
+    HomunculusFollow,
+    /// Pick a target for the Homunculus to attack.
+    HomunculusAttack,
+    /// Order the Homunculus to stay where it is.
+    HomunculusStandby,
+    /// Feed the Homunculus.
+    HomunculusFeed,
     /// Activate hotbar slot 1 (default F1).
     Slot1,
     /// Activate hotbar slot 2 (default F2).
@@ -100,6 +108,7 @@ impl PlayerAction {
     /// `Skills` is the classic RO Alt+S chord. `Equipment` is the classic RO Alt+Q chord.
     /// `Cart` uses Alt+W. `Party` uses the unmodified P key. `Guild` uses Alt+G.
     /// `Emote` uses Alt+M. `Names` uses Alt+N. `ChatRoom` is the classic RO Alt+C chord.
+    /// The Homunculus orders use Alt+1 to Alt+4.
     pub fn default_input_map() -> InputMap<Self> {
         let mut map = InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
             .with(
@@ -142,6 +151,22 @@ impl PlayerAction {
             .with(
                 Self::Homunculus,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyR),
+            )
+            .with(
+                Self::HomunculusFollow,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::Digit1),
+            )
+            .with(
+                Self::HomunculusAttack,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::Digit2),
+            )
+            .with(
+                Self::HomunculusStandby,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::Digit3),
+            )
+            .with(
+                Self::HomunculusFeed,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::Digit4),
             );
         for (action, key) in HOTBAR_ACTIONS.into_iter().zip(HOTBAR_KEYS) {
             map.insert(action, key);

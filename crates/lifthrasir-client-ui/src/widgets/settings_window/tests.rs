@@ -371,7 +371,7 @@ fn every_action_is_listed_under_its_group() {
         .iter()
         .filter(|row| matches!(row, Row::Bind { .. }))
         .count();
-    assert_eq!(actions, 24);
+    assert_eq!(actions, 28);
     assert_eq!(rows.first(), Some(&Row::BindHeader));
     assert_eq!(rows.last(), Some(&Row::BindHint));
 }
@@ -561,6 +561,10 @@ fn plain_capture_round_trips_through_the_input_map() {
         names: ActionBinds::default(),
         chat_room: ActionBinds::default(),
         homunculus: ActionBinds::default(),
+        homunculus_follow: ActionBinds::default(),
+        homunculus_attack: ActionBinds::default(),
+        homunculus_standby: ActionBinds::default(),
+        homunculus_feed: ActionBinds::default(),
         hotbar: Default::default(),
     };
     let expected = {
@@ -591,6 +595,10 @@ fn modified_capture_round_trips_through_the_input_map() {
         names: ActionBinds::default(),
         chat_room: ActionBinds::default(),
         homunculus: ActionBinds::default(),
+        homunculus_follow: ActionBinds::default(),
+        homunculus_attack: ActionBinds::default(),
+        homunculus_standby: ActionBinds::default(),
+        homunculus_feed: ActionBinds::default(),
         hotbar: Default::default(),
     };
     let expected = {

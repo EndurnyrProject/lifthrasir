@@ -29,7 +29,7 @@ use lifthrasir_client::domain::settings::{
     ApplySettings, AudioConfig, GraphicsSettings, KeyBind, Keybinds, Modifier,
 };
 
-use crate::screens::shared::light_search_focus;
+use crate::screens::shared::{SliderPart, light_search_focus};
 
 pub mod scene;
 mod view;
@@ -263,21 +263,10 @@ pub enum SettingsAction {
 }
 
 /// The slider's rail: a press or a drag on it sets the channel's volume.
-#[derive(Component, Clone, Copy, Default)]
-struct SliderRail(AudioChannel);
+type SliderRail = crate::screens::shared::SliderRail<AudioChannel>;
 
-/// A part of a slider that [`sync_sliders`] writes in place.
-#[derive(Component, Clone, Copy, Default)]
-enum SliderPart {
-    #[default]
-    Fill,
-    Knob,
-    Readout,
-}
-
-/// Which channel a [`SliderPart`] shows.
-#[derive(Component, Clone, Copy, Default)]
-struct SliderOf(AudioChannel);
+/// Which channel a [`SliderPart`], written in place by [`sync_sliders`], shows.
+type SliderOf = crate::screens::shared::SliderOf<AudioChannel>;
 
 /// Everything a settings action touches.
 #[derive(SystemParam)]

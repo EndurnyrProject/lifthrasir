@@ -482,6 +482,10 @@ const BIND_GROUPS: [(&str, &[(PlayerAction, &str)]); 2] = [
             (PlayerAction::Sit, "Sit / Stand"),
             (PlayerAction::Emote, "Emotes"),
             (PlayerAction::Names, "Show All Names"),
+            (PlayerAction::HomunculusFollow, "Homunculus: Follow"),
+            (PlayerAction::HomunculusAttack, "Homunculus: Attack"),
+            (PlayerAction::HomunculusStandby, "Homunculus: Stay"),
+            (PlayerAction::HomunculusFeed, "Homunculus: Feed"),
         ],
     ),
 ];
@@ -521,6 +525,10 @@ fn binds(keybinds: &Keybinds, action: PlayerAction) -> &ActionBinds {
         PlayerAction::Names => &keybinds.names,
         PlayerAction::ChatRoom => &keybinds.chat_room,
         PlayerAction::Homunculus => &keybinds.homunculus,
+        PlayerAction::HomunculusFollow => &keybinds.homunculus_follow,
+        PlayerAction::HomunculusAttack => &keybinds.homunculus_attack,
+        PlayerAction::HomunculusStandby => &keybinds.homunculus_standby,
+        PlayerAction::HomunculusFeed => &keybinds.homunculus_feed,
         slot => &keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }
@@ -539,6 +547,10 @@ fn binds_mut(keybinds: &mut Keybinds, action: PlayerAction) -> &mut ActionBinds 
         PlayerAction::Names => &mut keybinds.names,
         PlayerAction::ChatRoom => &mut keybinds.chat_room,
         PlayerAction::Homunculus => &mut keybinds.homunculus,
+        PlayerAction::HomunculusFollow => &mut keybinds.homunculus_follow,
+        PlayerAction::HomunculusAttack => &mut keybinds.homunculus_attack,
+        PlayerAction::HomunculusStandby => &mut keybinds.homunculus_standby,
+        PlayerAction::HomunculusFeed => &mut keybinds.homunculus_feed,
         slot => &mut keybinds.hotbar[slot.hotbar_index().expect("hotbar action")],
     }
 }

@@ -100,11 +100,12 @@ fn homunculus_composition_keeps_public_and_private_paths_separate() {
         Some(71)
     );
     let mut labels = app.world_mut().query::<&Text>();
-    assert!(
-        labels
-            .iter(app.world())
-            .any(|text| text.0.contains("Test companion") && text.0.contains("HP 50 / 60"))
-    );
+    for shown in ["Test companion", "50 / 60"] {
+        assert!(
+            labels.iter(app.world()).any(|text| text.0 == shown),
+            "missing {shown:?}"
+        );
+    }
 
     app.world_mut().write_message(HomunculusIngress {
         generation,
