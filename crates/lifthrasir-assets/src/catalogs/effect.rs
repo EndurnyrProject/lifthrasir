@@ -585,6 +585,27 @@ mod tests {
     }
 
     #[test]
+    fn homunculus_effect_rows_use_observed_public_cues() {
+        let catalog = seeded_catalog();
+        for id in [243, 244, 247] {
+            assert!(catalog.skill_presentation(id).success_only);
+            assert_eq!(
+                catalog.skill(id).unwrap().placement,
+                EffectPlacement::Caster
+            );
+        }
+        assert!(catalog.efst(192).is_some()); // Lif: Avoid
+        assert!(catalog.efst(196).is_some()); // Amistr: Bloodlust
+        assert!(catalog.skill(8009).is_some()); // Filir: Moonlight
+        assert!(catalog.skill(8016).is_some()); // Vanilmirth: Bio Explosion
+        assert!(catalog.skill(8013).is_none()); // Caprice uses the chosen bolt's cue.
+        assert_eq!(
+            catalog.special(568).unwrap().str_name(),
+            Some("h_levelup.str")
+        );
+    }
+
+    #[test]
     fn shipped_effects_ron_builds_the_catalog() {
         let catalog = seeded_catalog();
 

@@ -78,6 +78,9 @@
         138: (success_only: true), // AS_ENCHANTPOISON
         150: (success_only: true, motion: None), // TF_BACKSLIDING
         211: (success_only: true), // RG_STEALCOIN
+        243: (success_only: true), // AM_CALLHOMUN
+        244: (success_only: true), // AM_REST
+        247: (success_only: true), // AM_RESURRECTHOMUN
         276: (success_only: true), // SA_MAGICROD
         277: (success_only: true), // SA_SPELLBREAKER
         280: (success_only: true), // SA_FLAMELAUNCHER
@@ -205,6 +208,11 @@
             color: (1.0, 0.9, 0.6, 0.55),
             repeating: true,
         ),
+        192: (visuals: [Str("inc_agi.strfx.ron")], sound: Some("effect/ef_incagility.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HLIF_AVOID
+        193: (visuals: [Str("bash.strfx.ron")], placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HFLI_FLEET
+        194: (visuals: [Str("inc_agi.strfx.ron")], placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HFLI_SPEED
+        195: (visuals: [Str("blessing.strfx.ron")], placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HLIF_CHANGE
+        196: (visuals: [Str("magnum_break.strfx.ron")], placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HAMI_BLOODLUST
         197: ( // EFST_SHRINK (cr_shrink) -- pale violet defensive loop.
                // Dormant: aesir has no Shrink skill implementation yet.
             visuals: [Str("shrink_aura.strfx.ron")],
@@ -1194,10 +1202,8 @@
         // The official client draws every pre-renewal Alchemist skill with a
         // hardcoded emitter and roBrowserLegacy's `SkillEffect.js` has no entry
         // for any of them, so the artwork below is authored approximation, not
-        // reference-certified. Homunculus skills (243 Call Homunculus, 244
-        // Vaporize, 247 Homunculus Resurrection) are a separate backlog and are
-        // absent, as are the passives (226 Axe Mastery, 227 Learning Potion,
-        // 238 Bioethics). 446 AM_BERSERKPITCHER has no aesir module yet.
+        // reference-certified. Passives (226 Axe Mastery, 227 Learning Potion,
+        // 238 Bioethics) are absent. 446 AM_BERSERKPITCHER has no aesir module yet.
         229: ( // AM_DEMONSTRATION -- the Fire Bottle lands on the targeted cell;
                // the burning field itself is `skill_units[229]`.
             visuals: [Str("demonstration_throw.strfx.ron")],
@@ -1272,6 +1278,15 @@
             color: (1.0, 1.0, 1.0, 1.0),
             repeating: false,
         ),
+        // Anchor on the owner; the companion may not be visible yet or may be gone.
+        243: (visuals: [Str("blessing.strfx.ron")], sound: Some("effect/ef_blessing.wav"), placement: Caster, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        244: (visuals: [Str("teleport.strfx.ron")], sound: Some("effect/ef_teleportation.wav"), placement: Caster, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        247: (visuals: [Str("resurrection.str")], sound: Some("effect/priest_resurrection.wav"), placement: Caster, color: (1.0, 1.0, 1.0, 1.0), repeating: false),
+        // Caprice sends the selected bolt ID, so it uses the existing bolt cues.
+        // Heals, Castling and Defence use their delivered heal/move/status paths.
+        8009: (visuals: [Str("bash.strfx.ron")], sound: Some("effect/ef_bash.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HFLI_MOON
+        8012: (visuals: [Str("ki_impact.strfx.ron")], sound: Some("effect/ef_bash.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HFLI_SBR44
+        8016: (visuals: [Str("magnum_break.strfx.ron")], sound: Some("effect/ef_magnumbreak.wav"), placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // HVAN_EXPLOSION
         // --- Creator (CR_*) -------------------------------------------------
         // The transcendent Alchemist, and the only CR_* skill group that is not
         // Crusader. roBrowserLegacy's `SkillEffect.js` maps no usable artwork to
@@ -2686,6 +2701,7 @@
         ),
     },
     special: {
+        568: (visuals: [Str("h_levelup.str")], placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // EF_HO_UP
         44: ( // EF_SMOKE — non-STR, procedural (rising/fading smoke column).
             visuals: [Bespoke("smoke")],
             sound: None,
