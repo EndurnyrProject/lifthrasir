@@ -9,7 +9,7 @@ use lifthrasir_client::{
         homunculus::{
             HomunculusFeedbackKind, HomunculusIntent, HomunculusPresence, HomunculusState,
         },
-        input::{PlayerAction, ui_unfocused},
+        input::{PlayerAction, TargetingMode, targeting::HomunculusUnitTargetAction, ui_unfocused},
     },
 };
 use lifthrasir_runtime::actors::ActorVisualRoot;
@@ -61,6 +61,8 @@ enum CareButton {
     Inspect,
     Follow,
     Standby,
+    Move,
+    Attack,
     Feed,
     Rest,
     Rename,
@@ -152,6 +154,7 @@ fn activate(
     names: Query<&EditableText, With<NameField>>,
     state: Res<HomunculusState>,
     mut ui: ResMut<OwnerUi>,
+    mut targeting: ResMut<TargetingMode>,
     mut out: MessageWriter<HomunculusIntent>,
 ) {
     let Ok(&button) = buttons.get(event.entity) else {
@@ -179,6 +182,28 @@ fn activate(
         return;
     };
     let action = match button {
+        CareButton::Move | CareButton::Attack => {
+            let (Some(gid), Some(actor)) = (state.controlled_gid(), state.controlled_actor())
+            else {
+                return;
+            };
+            let durable_id = current.durable_id;
+            *targeting = if button == CareButton::Move {
+                TargetingMode::HomunculusMove {
+                    durable_id,
+                    gid,
+                    actor,
+                }
+            } else {
+                TargetingMode::HomunculusUnit {
+                    durable_id,
+                    gid,
+                    actor,
+                    action: HomunculusUnitTargetAction::Attack,
+                }
+            };
+            return;
+        }
         CareButton::Follow => Action::Follow,
         CareButton::Standby => Action::Standby,
         CareButton::Rest => Action::Rest,

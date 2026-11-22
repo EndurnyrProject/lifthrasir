@@ -2,8 +2,10 @@ use bevy::prelude::*;
 use bevy_auto_plugin::prelude::{auto_add_system, auto_init_resource};
 
 use crate::core::state::GameState;
+use crate::domain::homunculus::{HomunculusIntent, HomunculusState};
 use crate::domain::skill::{CastTarget, SkillCastResolved};
 use crate::domain::system_sets::InputSystems;
+use net_contract::dto::HomunculusAction;
 
 use crate::domain::input::cursor::{CursorType, handle_cursor_change_requests};
 use crate::domain::input::events::CursorChangeRequest;
@@ -26,6 +28,63 @@ pub enum TargetingMode {
         skill_id: u32,
         level: u32,
     },
+    HomunculusMove {
+        durable_id: u64,
+        gid: u32,
+        actor: Entity,
+    },
+    HomunculusUnit {
+        durable_id: u64,
+        gid: u32,
+        actor: Entity,
+        action: HomunculusUnitTargetAction,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomunculusUnitTargetAction {
+    Attack,
+}
+
+impl TargetingMode {
+    pub(crate) fn homunculus_actor(self) -> Option<(u64, u32, Entity)> {
+        match self {
+            Self::HomunculusMove {
+                durable_id,
+                gid,
+                actor,
+            }
+            | Self::HomunculusUnit {
+                durable_id,
+                gid,
+                actor,
+                ..
+            } => Some((durable_id, gid, actor)),
+            _ => None,
+        }
+    }
+}
+
+pub(crate) fn current_companion(state: Option<&HomunculusState>, targeting: TargetingMode) -> bool {
+    let Some((id, gid, actor)) = targeting.homunculus_actor() else {
+        return false;
+    };
+    state.is_some_and(|s| {
+        s.can_mutate()
+            && s.controlled_gid() == Some(gid)
+            && s.controlled_actor() == Some(actor)
+            && s.snapshot().is_some_and(|p| p.durable_id == id)
+    })
+}
+
+#[auto_add_system(plugin = crate::domain::input::plugin::InputPlugin, schedule = PostUpdate)]
+fn disarm_stale_companion_target(
+    mut targeting: ResMut<TargetingMode>,
+    state: Option<Res<HomunculusState>>,
+) {
+    if targeting.homunculus_actor().is_some() && !current_companion(state.as_deref(), *targeting) {
+        *targeting = TargetingMode::Idle;
+    }
 }
 
 #[auto_add_system(
@@ -42,6 +101,8 @@ pub fn targeting_click(
     mut mouse_click: ResMut<ForwardedMouseClick>,
     cache: Res<TerrainRaycastCache>,
     mut resolved: MessageWriter<SkillCastResolved>,
+    state: Option<Res<HomunculusState>>,
+    mut companion: Option<ResMut<Messages<HomunculusIntent>>>,
 ) {
     // Entity-target skills are resolved by the sprite picking observer
     // (`entities::picking::on_sprite_click`); here we handle only ground casts.
@@ -55,11 +116,25 @@ pub fn targeting_click(
         return;
     }
 
-    let TargetingMode::AwaitingGround { skill_id, level } = *targeting else {
+    let Some((x, y)) = cache.cell_coords else {
         return;
     };
-
-    let Some((x, y)) = cache.cell_coords else {
+    if let TargetingMode::HomunculusMove { durable_id, .. } = *targeting {
+        if current_companion(state.as_deref(), *targeting)
+            && let Some(out) = companion.as_deref_mut()
+        {
+            out.write(HomunculusIntent::Act {
+                durable_id,
+                action: HomunculusAction::Move {
+                    x: i32::from(x),
+                    y: i32::from(y),
+                },
+            });
+        }
+        *targeting = TargetingMode::Idle;
+        return;
+    }
+    let TargetingMode::AwaitingGround { skill_id, level } = *targeting else {
         return;
     };
 

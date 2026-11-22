@@ -36,7 +36,7 @@ pub(super) fn window() -> impl Scene {
             ]
             --
             Node { flex_direction: FlexDirection::Row, column_gap: px(5), flex_wrap: FlexWrap::Wrap }
-            Children [ @button("Refresh", CareButton::Inspect) -- @button("Follow", CareButton::Follow) -- @button("Standby", CareButton::Standby) -- @button("Feed", CareButton::Feed) -- @button("Rest", CareButton::Rest) ]
+            Children [ @button("Refresh", CareButton::Inspect) -- @button("Follow", CareButton::Follow) -- @button("Standby", CareButton::Standby) -- @button("Move", CareButton::Move) -- @button("Attack", CareButton::Attack) -- @button("Feed", CareButton::Feed) -- @button("Rest", CareButton::Rest) ]
             --
             Node { flex_direction: FlexDirection::Row, column_gap: px(5) }
             Children [ @FeathersTextInput { @visible_width: {Some(168.0)}, @max_characters: {Some(23)} } NameField -- @button("Rename", CareButton::Rename) -- @button("Delete…", CareButton::Delete) ]

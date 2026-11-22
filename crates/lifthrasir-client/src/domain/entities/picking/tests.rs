@@ -79,6 +79,82 @@ fn client_attaches_interaction_to_explicit_visual_root_mappings() {
 }
 
 #[test]
+fn armed_companion_click_cannot_issue_player_action() {
+    use crate::domain::{
+        entities::{markers::Homunculus, registry::EntityRegistry},
+        homunculus::HomunculusPlugin,
+    };
+    use bevy::time::Real;
+    use net_contract::{
+        dto::{HomunculusLifecycle, HomunculusSnapshot},
+        events::{HomunculusIngress, HomunculusIngressPayload, HomunculusReady},
+        state::ZoneSessionGeneration,
+    };
+    let mut app = App::new();
+    app.add_plugins((net_contract::NetContractPlugin, HomunculusPlugin))
+        .init_resource::<Time<Real>>()
+        .init_resource::<EntityRegistry>()
+        .init_resource::<TargetingMode>()
+        .init_resource::<LockedTarget>()
+        .init_resource::<PendingPickups>()
+        .init_resource::<crate::domain::vending::VendingState>()
+        .add_message::<SkillCastResolved>();
+    let actor = app.world_mut().spawn(Homunculus).id();
+    app.world_mut()
+        .resource_mut::<EntityRegistry>()
+        .register_entity(77, actor);
+    let generation = ZoneSessionGeneration::default();
+    app.world_mut()
+        .write_message(HomunculusReady { generation });
+    app.world_mut().write_message(HomunculusIngress {
+        generation,
+        sequence: 0,
+        payload: HomunculusIngressPayload::State(HomunculusSnapshot {
+            durable_id: 11,
+            world_gid: Some(77),
+            lifecycle: HomunculusLifecycle::Active,
+            ..default()
+        }),
+    });
+    app.update();
+    let mob = app
+        .world_mut()
+        .spawn((NetworkEntity::new(42, 42, ObjectType::Mob), Mob))
+        .id();
+    let visual = app
+        .world_mut()
+        .spawn(ActorVisualRoot(mob))
+        .observe(on_sprite_click)
+        .id();
+    *app.world_mut().resource_mut::<TargetingMode>() = TargetingMode::HomunculusUnit {
+        durable_id: 11,
+        gid: 77,
+        actor,
+        action: HomunculusUnitTargetAction::Attack,
+    };
+    app.world_mut().trigger(pointer_click(visual));
+    assert!(
+        app.world()
+            .resource::<Messages<AttackRequested>>()
+            .is_empty()
+    );
+    assert!(matches!(
+        app.world()
+            .resource::<Messages<HomunculusIntent>>()
+            .iter_current_update_messages()
+            .next(),
+        Some(HomunculusIntent::Act {
+            durable_id: 11,
+            action: HomunculusAction::Attack { target_id: 42 }
+        })
+    ));
+    assert_eq!(
+        *app.world().resource::<TargetingMode>(),
+        TargetingMode::Idle
+    );
+}
+
+#[test]
 fn hover_requests_the_name_for_the_hovered_unit_id() {
     let mut app = App::new();
     app.init_resource::<CurrentlyHoveredEntity>()

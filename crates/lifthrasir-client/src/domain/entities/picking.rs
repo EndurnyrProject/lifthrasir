@@ -22,12 +22,15 @@ use crate::domain::entities::hover::{
 };
 use crate::domain::entities::markers::{Mob, Npc};
 use crate::domain::entities::types::ObjectType;
+use crate::domain::homunculus::{HomunculusIntent, HomunculusState};
+use crate::domain::input::targeting::{HomunculusUnitTargetAction, current_companion};
 use crate::domain::input::terrain_raycast::TerrainRaycastCache;
 use crate::domain::input::{CursorChangeRequest, CursorType, LockedTarget, TargetingMode};
 use crate::domain::item_drop::HoveredFloorItem;
 use crate::domain::item_drop::components::FloorItem;
 use crate::domain::item_drop::pickup::{PendingPickups, PickupInfo};
 use crate::domain::skill::{CastTarget, SkillCastResolved};
+use net_contract::dto::HomunculusAction;
 
 type PickRoots<'w, 's> = Query<'w, 's, (), Or<(With<NetworkEntity>, With<FloorItem>)>>;
 
@@ -125,6 +128,12 @@ pub fn on_sprite_out(
     cursor.write(CursorChangeRequest::new(cursor_type));
 }
 
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct CompanionPick<'w> {
+    state: Option<Res<'w, HomunculusState>>,
+    intents: Option<ResMut<'w, Messages<HomunculusIntent>>>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn on_sprite_click(
     click: On<PointerClick>,
@@ -141,6 +150,7 @@ pub fn on_sprite_click(
     mut skills: MessageWriter<SkillCastResolved>,
     mut locked: ResMut<LockedTarget>,
     mut pending: ResMut<PendingPickups>,
+    mut companion: CompanionPick,
     vending: Res<crate::domain::vending::VendingState>,
 ) {
     if click.button != PointerButton::Primary {
@@ -151,6 +161,37 @@ pub fn on_sprite_click(
     }
 
     let root = pick_root(click.entity, &child_of, &roots, &visuals);
+
+    if let TargetingMode::HomunculusUnit {
+        durable_id,
+        gid,
+        action,
+        ..
+    } = *targeting
+    {
+        if !current_companion(companion.state.as_deref(), *targeting) {
+            *targeting = TargetingMode::Idle;
+            return;
+        }
+        if let Ok(net) = nets.get(root)
+            && net.gid != 0
+            && net.gid != gid
+            && matches!(
+                net.object_type,
+                ObjectType::Mob | ObjectType::Pc | ObjectType::Homunculus
+            )
+            && let Some(out) = companion.intents.as_deref_mut()
+        {
+            let action = match action {
+                HomunculusUnitTargetAction::Attack => {
+                    HomunculusAction::Attack { target_id: net.gid }
+                }
+            };
+            out.write(HomunculusIntent::Act { durable_id, action });
+            *targeting = TargetingMode::Idle;
+        }
+        return;
+    }
 
     if let TargetingMode::AwaitingEntity { skill_id, level } = *targeting {
         if let Ok(net) = nets.get(root) {
