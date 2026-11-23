@@ -77,17 +77,30 @@ pub struct DetailView {
     /// Description lines with their `^RRGGBB` codes intact; the scene colors them.
     pub story: Vec<String>,
     pub steps: Vec<StepView>,
-    pub pinned: bool,
     pub can_navigate: bool,
-    /// `"Shelve"` on Active, `"Resume"` on Shelved, none on Completed.
-    pub shelve_label: Option<&'static str>,
+    /// Shelve on Active, resume on Shelved, none on Completed.
+    pub shelve: Option<ShelveAction>,
     pub ready_text: Option<String>,
+}
+
+/// The footer button that moves a quest in or out of the shelf.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShelveAction {
+    Shelve,
+    Resume,
+}
+
+impl ShelveAction {
+    pub fn label(self) -> &'static str {
+        match self {
+            ShelveAction::Shelve => "Shelve",
+            ShelveAction::Resume => "Resume",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrackerView {
-    /// `"Quests · {n} tracked"`.
-    pub header: String,
     pub quests: Vec<TrackerQuest>,
 }
 
@@ -153,7 +166,7 @@ pub fn ledger_view(
     let detail = ui
         .selected
         .and_then(|id| in_tab.iter().copied().find(|e| e.quest_id == id))
-        .map(|entry| detail_view(entry, db, pins, now_unix));
+        .map(|entry| detail_view(entry, db, now_unix));
 
     LedgerView {
         headline: format!(
@@ -181,10 +194,7 @@ pub fn tracker_view(log: &QuestLog, db: &QuestDb, pins: &QuestPins, now_unix: u6
             timer: timer(entry, now_unix),
         })
         .collect();
-    TrackerView {
-        header: format!("Quests · {} tracked", quests.len()),
-        quests,
-    }
+    TrackerView { quests }
 }
 
 /// `"Defeat Zerom"`, or a description of the filter when the mob has no name.
@@ -212,7 +222,10 @@ pub fn countdown(deadline: u64, now_unix: u64) -> String {
         0 => "Expired".into(),
         DAY.. => format!("{} d {} h", left / DAY, left % DAY / HOUR),
         HOUR.. => format!("{} h {} m", left / HOUR, left % HOUR / MINUTE),
-        _ => format!("{} m", left.div_ceil(MINUTE)),
+        _ => match left.div_ceil(MINUTE) {
+            60 => "1 h 0 m".into(),
+            minutes => format!("{minutes} m"),
+        },
     }
 }
 
@@ -386,7 +399,7 @@ fn timer(entry: &QuestEntry, now_unix: u64) -> Option<String> {
     }
 }
 
-fn detail_view(entry: &QuestEntry, db: &QuestDb, pins: &QuestPins, now_unix: u64) -> DetailView {
+fn detail_view(entry: &QuestEntry, db: &QuestDb, now_unix: u64) -> DetailView {
     DetailView {
         id: entry.quest_id,
         title: title(entry, db),
@@ -397,11 +410,10 @@ fn detail_view(entry: &QuestEntry, db: &QuestDb, pins: &QuestPins, now_unix: u64
             .map(|text| text.description.clone())
             .unwrap_or_default(),
         steps: steps(entry, db),
-        pinned: pins.contains(entry.quest_id),
         can_navigate: entry.giver.is_some(),
-        shelve_label: match entry.state {
-            QuestState::Active => Some("Shelve"),
-            QuestState::Inactive => Some("Resume"),
+        shelve: match entry.state {
+            QuestState::Active => Some(ShelveAction::Shelve),
+            QuestState::Inactive => Some(ShelveAction::Resume),
             QuestState::Complete => None,
         },
         ready_text: ready_text(entry),

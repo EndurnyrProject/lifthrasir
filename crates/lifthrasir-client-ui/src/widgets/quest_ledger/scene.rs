@@ -14,7 +14,7 @@ use lifthrasir_ui::widgets::primitives::{
     parchment, tab, tab_text, window_title_bar_led, window_titled,
 };
 
-use super::view::{Chip, DetailView, GroupView, RowView, StepView, TabView, ends};
+use super::view::{Chip, DetailView, GroupView, RowView, ShelveAction, StepView, TabView, ends};
 use super::{
     Act, Host, LedgerTab, QuestLedgerTitlebar, QuestLedgerWindow, QuestSearch, TimerText,
     on_button, on_click,
@@ -362,7 +362,7 @@ fn row_chip(id: u32, view: Chip) -> Box<dyn Scene> {
         )),
         Chip::Ends(text) => Box::new(bsn! {
             @chip(text, ro_dark::STATUS_BUSY.with_alpha(0.16), ro_dark::STATUS_BUSY)
-            TimerText(id)
+            TimerText { id, bare: false }
         }),
     }
 }
@@ -443,7 +443,7 @@ pub(super) fn detail(view: DetailView) -> impl Scene {
 
 fn deadline(id: u32, text: String) -> impl Scene {
     bsn! {
-        TimerText(id)
+        TimerText { id, bare: false }
         Node {}
         @ignore_picking()
         Children [ @chrome_text(text, 12.0, ro_dark::CLOSE_HOVER) ]
@@ -543,17 +543,16 @@ fn tick_box(done: bool) -> impl Scene {
 /// Navigate and Shelve or Resume, with the ready line pushed to the right.
 pub(super) fn footer(
     navigate: bool,
-    shelve: Option<&'static str>,
+    shelve: Option<ShelveAction>,
     ready: Option<String>,
 ) -> impl Scene {
-    let shelve = shelve.map(|label| {
-        let act = if label == "Resume" {
-            Act::Resume
-        } else {
-            Act::Shelve
+    let shelve = shelve.map(|action| {
+        let act = match action {
+            ShelveAction::Shelve => Act::Shelve,
+            ShelveAction::Resume => Act::Resume,
         };
         EntityScene(bsn! {
-            @row_button(ButtonArt::NORMAL, label, 72.0)
+            @row_button(ButtonArt::NORMAL, action.label(), 72.0)
             act
             on(on_button)
         })

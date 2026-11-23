@@ -3,7 +3,7 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum QuestState {
-    /// Shelved: kept in the log, its hunts do not count.
+    /// Shelved: kept in the log, and its hunts still count.
     Inactive,
     Active,
     Complete,

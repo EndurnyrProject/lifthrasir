@@ -37,8 +37,8 @@ use net_contract::dto::{NavigationTarget, QuestState};
 
 use crate::screens::shared::light_search_focus;
 use view::{
-    Chip, DetailView, GroupView, LedgerView, TabView, TrackerQuest, TrackerView, ledger_view,
-    objective_label, tracker_view,
+    Chip, DetailView, GroupView, LedgerView, ShelveAction, TabView, TrackerQuest, TrackerView,
+    ledger_view, objective_label, tracker_view,
 };
 
 /// Seconds the in-window toast stays up.
@@ -56,8 +56,7 @@ impl Plugin for QuestLedgerPlugin {
                     toggle_key.run_if(ui_unfocused),
                     update_window,
                     sync_search,
-                    expire_toast,
-                    expire_banner,
+                    expire_messages,
                     show_banner,
                     rebuild,
                     tick_timers.run_if(on_timer(Duration::from_secs(1))),
@@ -67,7 +66,7 @@ impl Plugin for QuestLedgerPlugin {
                     .run_if(in_state(GameState::InGame))
                     .run_if(resource_exists::<QuestDb>),
             )
-            .add_systems(OnExit(GameState::InGame), reset);
+            .add_systems(OnEnter(GameState::CharacterSelection), reset);
     }
 }
 
@@ -89,7 +88,8 @@ pub struct LedgerUi {
     pub query: String,
     /// A message and the seconds it has left on screen.
     pub toast: Option<(String, f32)>,
-    /// The tracker shows only its header. Lasts the session.
+    /// The tracker shows only its header. Lasts until the player is back at character
+    /// selection, so a map change keeps it.
     pub tracker_collapsed: bool,
     /// The line of the objective banner and the seconds it has left on screen.
     pub banner: Option<(String, f32)>,
@@ -104,14 +104,14 @@ struct QuestLedgerTitlebar;
 #[derive(Component, Default, Clone)]
 struct QuestSearch;
 
-/// A deadline of the quest with this id, rewritten in place by [`tick_timers`]. It
-/// sits on a node whose first child is the text.
+/// A deadline of the quest `id`, rewritten in place by [`tick_timers`]. It sits on a
+/// node whose first child is the text. A `bare` timer shows the countdown alone, as in
+/// the tracker; otherwise it reads `"Ends {countdown}"`.
 #[derive(Component, Default, Clone, Copy)]
-struct TimerText(u32);
-
-/// Like [`TimerText`], for a tracker row, which shows the bare countdown.
-#[derive(Component, Default, Clone, Copy)]
-struct TrackerTimer(u32);
+struct TimerText {
+    id: u32,
+    bare: bool,
+}
 
 /// A region [`rebuild`] refills when its view changes.
 #[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -319,16 +319,13 @@ fn age(message: &mut Option<(String, f32)>, delta: f32) {
     }
 }
 
-fn expire_toast(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
-    if ui.toast.is_some() {
-        age(&mut ui.toast, time.delta_secs());
+fn expire_messages(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
+    if ui.toast.is_none() && ui.banner.is_none() {
+        return;
     }
-}
-
-fn expire_banner(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
-    if ui.banner.is_some() {
-        age(&mut ui.banner, time.delta_secs());
-    }
+    let delta = time.delta_secs();
+    age(&mut ui.toast, delta);
+    age(&mut ui.banner, delta);
 }
 
 /// Raises the banner for an objective the log just completed.
@@ -359,26 +356,19 @@ fn show_banner(
 fn tick_timers(
     log: Res<QuestLog>,
     timers: Query<(&TimerText, &Children)>,
-    tracked: Query<(&TrackerTimer, &Children)>,
     mut texts: Query<&mut Text>,
 ) {
     let now = unix_now();
-    let ends = timers
-        .iter()
-        .map(|(timer, children)| (timer.0, children, true));
-    let bare = tracked
-        .iter()
-        .map(|(timer, children)| (timer.0, children, false));
-    for (id, children, with_ends) in ends.chain(bare) {
-        let Some(deadline) = log.get(id).and_then(|entry| entry.deadline) else {
+    for (timer, children) in &timers {
+        let Some(deadline) = log.get(timer.id).and_then(|entry| entry.deadline) else {
             continue;
         };
         let Some(mut text) = children.first().and_then(|c| texts.get_mut(*c).ok()) else {
             continue;
         };
-        let label = match with_ends {
-            true => view::chip_text(deadline, now),
-            false => view::countdown(deadline, now),
+        let label = match timer.bare {
+            false => view::chip_text(deadline, now),
+            true => view::countdown(deadline, now),
         };
         if text.0 != label {
             text.0 = label;
@@ -397,7 +387,7 @@ enum Content {
     /// The parchment while no quest is picked.
     Pick,
     /// Whether the giver can be routed to, the shelve label and the ready line.
-    Footer(bool, Option<&'static str>, Option<String>),
+    Footer(bool, Option<ShelveAction>, Option<String>),
     Toast(String),
     /// How many quests are tracked, and whether the list is folded away.
     TrackerHead(usize, bool),
@@ -495,7 +485,7 @@ impl Seen<'_> {
             Host::Detail => view?.detail.clone().map_or(Content::Pick, Content::Detail),
             Host::Footer => {
                 let d = view?.detail.as_ref()?;
-                Content::Footer(d.can_navigate, d.shelve_label, d.ready_text.clone())
+                Content::Footer(d.can_navigate, d.shelve, d.ready_text.clone())
             }
             Host::Toast => {
                 view?;

@@ -7,8 +7,9 @@ use bevy::time::TimeUpdateStrategy;
 use bevy::ui_widgets::Activate;
 use leafwing_input_manager::prelude::ActionState;
 use lifthrasir_assets::catalogs::QuestDb;
+use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
-use lifthrasir_client::domain::input::PlayerAction;
+use lifthrasir_client::domain::input::{PlayerAction, UiFocus};
 use lifthrasir_client::domain::quest::{ObjectiveCompleted, QuestLog, QuestPins};
 use lifthrasir_data::{QuestData, QuestText};
 use net_contract::commands::{NavigationRequested, QuestCommand};
@@ -189,6 +190,8 @@ fn countdown_after_deadline_reads_expired() {
     assert_eq!(countdown(11_520, 0), "3 h 12 m");
     assert_eq!(countdown(2_700, 0), "45 m");
     assert_eq!(countdown(30, 0), "1 m");
+    assert_eq!(countdown(3_599, 0), "1 h 0 m");
+    assert_eq!(countdown(3_540, 0), "59 m");
     assert_eq!(countdown(187_200, 0), "2 d 4 h");
 }
 
@@ -298,7 +301,7 @@ fn chips_and_footer_follow_state() {
     assert_eq!(chip(LedgerTab::Shelved, 3), None);
 
     let d1 = view(LedgerTab::Active, 1).detail.unwrap();
-    assert_eq!(d1.shelve_label, Some("Shelve"));
+    assert_eq!(d1.shelve, Some(ShelveAction::Shelve));
     assert_eq!(d1.ready_text, None);
     assert_eq!(
         d1.giver_line.as_deref(),
@@ -309,7 +312,7 @@ fn chips_and_footer_follow_state() {
     let d2 = view(LedgerTab::Active, 2).detail.unwrap();
     assert_eq!(d2.ready_text.as_deref(), Some("Ready · Return to Guard"));
     let d3 = view(LedgerTab::Shelved, 3).detail.unwrap();
-    assert_eq!(d3.shelve_label, Some("Resume"));
+    assert_eq!(d3.shelve, Some(ShelveAction::Resume));
     assert_eq!(d3.timer, None);
     let d4 = view(LedgerTab::Active, 4).detail.unwrap();
     assert!(!d4.can_navigate);
@@ -319,7 +322,7 @@ fn chips_and_footer_follow_state() {
     assert_eq!(d5.giver_line.as_deref(), Some("prontera (150, 180)"));
     assert_eq!(d5.ready_text.as_deref(), Some("Ready · Return to prontera"));
     let d6 = view(LedgerTab::Completed, 6).detail.unwrap();
-    assert_eq!(d6.shelve_label, None);
+    assert_eq!(d6.shelve, None);
 }
 
 #[test]
@@ -357,7 +360,6 @@ fn tracker_lists_pins_in_order_and_skips_stale_ones() {
     let view = tracker_view(&full, &db, &pins, 0);
     let ids: Vec<u32> = view.quests.iter().map(|q| q.id).collect();
     assert_eq!(ids, [2, 3, 1]);
-    assert_eq!(view.header, "Quests · 3 tracked");
     assert_eq!(view.quests[0].title, "Lunatics");
     assert_eq!(
         view.quests[0].ready_text.as_deref(),
@@ -598,7 +600,7 @@ fn tracker_app(log: QuestLog, pinned: &[u32], ui: LedgerUi) -> App {
         .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs(1)))
         .add_systems(
             Update,
-            (super::expire_banner, super::show_banner)
+            (super::expire_messages, super::show_banner)
                 .chain()
                 .before(super::rebuild),
         );
@@ -695,4 +697,35 @@ fn without_pins_the_plate_is_only_its_header() {
     assert!(shown.iter().any(|t| t == "0 tracked"));
     assert!(!shown.iter().any(|t| t.starts_with("Defeat")));
     assert!(control(&mut app, Act::Open(1)).is_none());
+}
+
+#[test]
+fn ledger_state_survives_a_warp_and_resets_at_character_selection() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, bevy::state::app::StatesPlugin))
+        .init_state::<GameState>()
+        .init_resource::<UiFocus>()
+        .add_plugins(super::QuestLedgerPlugin);
+    let set = |app: &mut App, state: GameState| {
+        app.world_mut()
+            .resource_mut::<NextState<GameState>>()
+            .set(state);
+        app.update();
+        app.update();
+    };
+    set(&mut app, GameState::InGame);
+    {
+        let mut ui = app.world_mut().resource_mut::<LedgerUi>();
+        ui.open = true;
+        ui.tracker_collapsed = true;
+    }
+
+    set(&mut app, GameState::Loading);
+    set(&mut app, GameState::InGame);
+    let ui = app.world().resource::<LedgerUi>();
+    assert!(ui.open && ui.tracker_collapsed);
+
+    set(&mut app, GameState::CharacterSelection);
+    let ui = app.world().resource::<LedgerUi>();
+    assert!(!ui.open && !ui.tracker_collapsed);
 }

@@ -10,7 +10,7 @@ use lifthrasir_ui::widgets::chrome::ignore_picking;
 use lifthrasir_ui::widgets::primitives::{diamond, display_text, ghost_button};
 
 use super::view::{StepView, TrackerQuest};
-use super::{Act, Host, TrackerTimer, on_button};
+use super::{Act, Host, TimerText, on_button};
 use crate::screens::shared::{outlined_text, overline};
 use crate::widgets::hud_layout::{HudWidget, movable};
 
@@ -135,14 +135,14 @@ fn row(quest: TrackerQuest) -> impl Scene {
     let id = quest.id;
     let timer = quest.timer.map(|left| {
         EntityScene(bsn! {
-            TrackerTimer(id)
+            TimerText { id, bare: true }
             Node {}
             @ignore_picking()
             Children [ @outlined_text(left, 10.0, ro_dark::STATUS_BUSY) ]
         })
     });
     let body: Vec<Box<dyn Scene>> = match quest.ready_text {
-        Some(text) => vec![Box::new(ready_line(text))],
+        Some(text) => vec![Box::new(outlined_text(text, 12.0, ro_dark::STATUS_ONLINE))],
         None => quest.steps.into_iter().map(step).collect(),
     };
     let act = Act::Open(id);
@@ -178,10 +178,6 @@ fn row(quest: TrackerQuest) -> impl Scene {
             Children [ {body} ]
         ]
     }
-}
-
-fn ready_line(text: String) -> impl Scene {
-    outlined_text(text, 12.0, ro_dark::STATUS_ONLINE)
 }
 
 /// An objective: a diamond ticked once it is done, its label and its count.
