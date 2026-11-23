@@ -371,7 +371,7 @@ fn every_action_is_listed_under_its_group() {
         .iter()
         .filter(|row| matches!(row, Row::Bind { .. }))
         .count();
-    assert_eq!(actions, 28);
+    assert_eq!(actions, 29);
     assert_eq!(rows.first(), Some(&Row::BindHeader));
     assert_eq!(rows.last(), Some(&Row::BindHint));
 }
@@ -560,6 +560,7 @@ fn plain_capture_round_trips_through_the_input_map() {
         emote: ActionBinds::default(),
         names: ActionBinds::default(),
         chat_room: ActionBinds::default(),
+        quest_ledger: ActionBinds::default(),
         homunculus: ActionBinds::default(),
         homunculus_follow: ActionBinds::default(),
         homunculus_attack: ActionBinds::default(),
@@ -594,6 +595,7 @@ fn modified_capture_round_trips_through_the_input_map() {
         emote: ActionBinds::default(),
         names: ActionBinds::default(),
         chat_room: ActionBinds::default(),
+        quest_ledger: ActionBinds::default(),
         homunculus: ActionBinds::default(),
         homunculus_follow: ActionBinds::default(),
         homunculus_attack: ActionBinds::default(),

@@ -30,6 +30,8 @@ pub enum PlayerAction {
     Names,
     /// Toggle the New Chat Room dialog.
     ChatRoom,
+    /// Toggle the Quest Ledger window.
+    QuestLedger,
     /// Toggle the owner Homunculus window.
     Homunculus,
     /// Order the Homunculus to follow its owner.
@@ -108,7 +110,7 @@ impl PlayerAction {
     /// `Skills` is the classic RO Alt+S chord. `Equipment` is the classic RO Alt+Q chord.
     /// `Cart` uses Alt+W. `Party` uses the unmodified P key. `Guild` uses Alt+G.
     /// `Emote` uses Alt+M. `Names` uses Alt+N. `ChatRoom` is the classic RO Alt+C chord.
-    /// The Homunculus orders use Alt+1 to Alt+4.
+    /// `QuestLedger` is the classic RO Alt+U chord. The Homunculus orders use Alt+1 to Alt+4.
     pub fn default_input_map() -> InputMap<Self> {
         let mut map = InputMap::new([(Self::Sit, KeyCode::Insert), (Self::Sit, KeyCode::Help)])
             .with(
@@ -147,6 +149,10 @@ impl PlayerAction {
             .with(
                 Self::ChatRoom,
                 ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyC),
+            )
+            .with(
+                Self::QuestLedger,
+                ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyU),
             )
             .with(
                 Self::Homunculus,
@@ -251,6 +257,26 @@ mod tests {
             map.get(&PlayerAction::Guild),
             expected.get(&PlayerAction::Guild)
         );
+    }
+
+    #[test]
+    fn default_input_map_binds_alt_u_to_the_quest_ledger_alone() {
+        let map = PlayerAction::default_input_map();
+        let mut expected = InputMap::default();
+        expected.insert(
+            PlayerAction::QuestLedger,
+            ButtonlikeChord::modified(ModifierKey::Alt, KeyCode::KeyU),
+        );
+        let alt_u = expected.get(&PlayerAction::QuestLedger).expect("alt+u");
+        assert_eq!(map.get(&PlayerAction::QuestLedger).as_ref(), Some(&alt_u));
+        let users = map
+            .iter_buttonlike()
+            .filter(|(action, _)| {
+                let bound = map.get(action).unwrap_or_default();
+                bound.iter().any(|input| alt_u.contains(input))
+            })
+            .count();
+        assert_eq!(users, 1);
     }
 
     #[test]

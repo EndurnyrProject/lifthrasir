@@ -626,6 +626,7 @@ pub struct Keybinds {
     pub emote: ActionBinds,
     pub names: ActionBinds,
     pub chat_room: ActionBinds,
+    pub quest_ledger: ActionBinds,
     pub homunculus: ActionBinds,
     pub homunculus_follow: ActionBinds,
     pub homunculus_attack: ActionBinds,
@@ -638,7 +639,7 @@ impl Default for Keybinds {
     /// Mirrors `PlayerAction::default_input_map()`:
     /// Sit = Insert / Help, Status = Alt+A, Inventory = Alt+E, Skills = Alt+S, Equipment = Alt+Q,
     /// Cart = Alt+W, Party = P, Guild = Alt+G, Emote = Alt+M, Names = Alt+N,
-    /// ChatRoom = Alt+C, the Homunculus orders = Alt+1 to Alt+4.
+    /// ChatRoom = Alt+C, QuestLedger = Alt+U, the Homunculus orders = Alt+1 to Alt+4.
     fn default() -> Self {
         Self {
             sit: ActionBinds {
@@ -685,6 +686,10 @@ impl Default for Keybinds {
                 primary: KeyBind::modified(Modifier::Alt, "KeyC"),
                 secondary: KeyBind::UNBOUND,
             },
+            quest_ledger: ActionBinds {
+                primary: KeyBind::modified(Modifier::Alt, "KeyU"),
+                secondary: KeyBind::UNBOUND,
+            },
             homunculus: ActionBinds {
                 primary: KeyBind::modified(Modifier::Alt, "KeyR"),
                 secondary: KeyBind::UNBOUND,
@@ -728,6 +733,8 @@ impl Keybinds {
         self.emote.insert_into(&mut map, PlayerAction::Emote);
         self.names.insert_into(&mut map, PlayerAction::Names);
         self.chat_room.insert_into(&mut map, PlayerAction::ChatRoom);
+        self.quest_ledger
+            .insert_into(&mut map, PlayerAction::QuestLedger);
         self.homunculus
             .insert_into(&mut map, PlayerAction::Homunculus);
         self.homunculus_follow
