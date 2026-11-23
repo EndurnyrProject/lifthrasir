@@ -25,6 +25,7 @@ pub use crate::domain::input::{InputPlugin, NativeInputPlugin};
 pub use crate::domain::inventory::InventoryPlugin;
 pub use crate::domain::item_drop::ItemDropPlugin;
 pub use crate::domain::party::PartyPlugin;
+pub use crate::domain::quest::QuestPlugin;
 pub use crate::domain::settings::SettingsRuntimePlugin;
 pub use crate::domain::skill_units::SkillUnitsPlugin;
 pub use crate::domain::storage::StoragePlugin;
@@ -70,6 +71,7 @@ impl PluginGroup for ClientPlugins {
             .add(EmotePlugin)
             .add(PartyPlugin)
             .add(ChatRoomPlugin)
+            .add(QuestPlugin)
             .add(HomunculusPlugin)
             .add(GuildPlugin)
             .add(ItemDropPlugin)

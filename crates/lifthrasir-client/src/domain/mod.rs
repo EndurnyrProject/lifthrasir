@@ -16,6 +16,7 @@ pub mod input;
 pub mod inventory;
 pub mod item_drop;
 pub mod party;
+pub mod quest;
 pub mod settings;
 pub mod skill;
 pub mod skill_units;
