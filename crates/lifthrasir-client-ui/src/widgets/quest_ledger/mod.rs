@@ -1,5 +1,5 @@
-//! The quest ledger window and tracker plate, after the `Quest` artboard of the
-//! Lifthrasir Widgets design.
+//! The quest ledger window and tracker plate, after the `Quest` and `QuestTracker`
+//! artboards of the Lifthrasir Widgets design.
 //!
 //! The server owns the quest log: this module projects it through [`view`] and turns
 //! the window's controls into [`QuestCommand`] and [`NavigationRequested`]. Each
@@ -11,6 +11,7 @@
 pub mod view;
 
 mod scene;
+mod tracker;
 
 #[cfg(test)]
 mod tests;
@@ -28,15 +29,22 @@ use lifthrasir_assets::catalogs::QuestDb;
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::input::{PlayerAction, ui_unfocused};
-use lifthrasir_client::domain::quest::{MAX_PINS, PinRefused, QuestLog, QuestPins};
+use lifthrasir_client::domain::quest::{
+    MAX_PINS, ObjectiveCompleted, PinRefused, QuestLog, QuestPins,
+};
 use net_contract::commands::{NavigationRequested, QuestCommand};
 use net_contract::dto::{NavigationTarget, QuestState};
 
 use crate::screens::shared::light_search_focus;
-use view::{Chip, DetailView, GroupView, LedgerView, TabView, ledger_view};
+use view::{
+    Chip, DetailView, GroupView, LedgerView, TabView, TrackerQuest, TrackerView, ledger_view,
+    objective_label, tracker_view,
+};
 
 /// Seconds the in-window toast stays up.
 const TOAST_SECONDS: f32 = 2.6;
+/// Seconds the objective banner stays up.
+const BANNER_SECONDS: f32 = 3.0;
 
 pub struct QuestLedgerPlugin;
 impl Plugin for QuestLedgerPlugin {
@@ -49,6 +57,8 @@ impl Plugin for QuestLedgerPlugin {
                     update_window,
                     sync_search,
                     expire_toast,
+                    expire_banner,
+                    show_banner,
                     rebuild,
                     tick_timers.run_if(on_timer(Duration::from_secs(1))),
                     light_search_focus::<QuestSearch>.run_if(resource_exists::<InputFocus>),
@@ -79,6 +89,10 @@ pub struct LedgerUi {
     pub query: String,
     /// A message and the seconds it has left on screen.
     pub toast: Option<(String, f32)>,
+    /// The tracker shows only its header. Lasts the session.
+    pub tracker_collapsed: bool,
+    /// The line of the objective banner and the seconds it has left on screen.
+    pub banner: Option<(String, f32)>,
 }
 
 #[derive(Component, Default, Clone)]
@@ -95,6 +109,10 @@ struct QuestSearch;
 #[derive(Component, Default, Clone, Copy)]
 struct TimerText(u32);
 
+/// Like [`TimerText`], for a tracker row, which shows the bare countdown.
+#[derive(Component, Default, Clone, Copy)]
+struct TrackerTimer(u32);
+
 /// A region [`rebuild`] refills when its view changes.
 #[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq)]
 enum Host {
@@ -108,9 +126,13 @@ enum Host {
     Detail,
     Footer,
     Toast,
+    /// The tracker's title, count and chevron.
+    TrackerHead,
+    TrackerList,
+    Banner,
 }
 
-const HOSTS: usize = 7;
+const HOSTS: usize = 10;
 
 /// What a control of the window does.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq)]
@@ -123,12 +145,21 @@ enum Act {
     Navigate,
     Shelve,
     Resume,
+    ToggleTracker,
+    /// Opens the ledger on this quest.
+    Open(u32),
 }
 
-/// Spawns the hidden window under the HUD root.
+/// Spawns the hidden window, the tracker and its banner under the HUD root.
 pub fn spawn_window(commands: &mut Commands, parent: Entity) {
     commands
         .spawn_scene(scene::window())
+        .insert(ChildOf(parent));
+    commands
+        .spawn_scene(tracker::plate())
+        .insert(ChildOf(parent));
+    commands
+        .spawn_scene(tracker::banner_host())
         .insert(ChildOf(parent));
 }
 
@@ -174,6 +205,12 @@ impl Desk<'_> {
             Act::Navigate => self.navigate(),
             Act::Shelve => self.set_active(QuestState::Active, false),
             Act::Resume => self.set_active(QuestState::Inactive, true),
+            Act::ToggleTracker => self.ui.tracker_collapsed = !self.ui.tracker_collapsed,
+            Act::Open(id) => {
+                self.ui.open = true;
+                self.ui.tab = LedgerTab::Active;
+                self.ui.selected = Some(id);
+            }
         }
     }
 
@@ -271,15 +308,50 @@ fn sync_search(fields: Query<&EditableText, With<QuestSearch>>, mut ui: ResMut<L
     }
 }
 
-fn expire_toast(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
-    let Some((_, left)) = ui.toast.as_ref() else {
+/// Takes `delta` seconds off a timed message and drops it once they run out.
+fn age(message: &mut Option<(String, f32)>, delta: f32) {
+    let Some((_, left)) = message.as_mut() else {
         return;
     };
-    let left = left - time.delta_secs();
-    if left <= 0.0 {
-        ui.toast = None;
-    } else if let Some((_, seconds)) = ui.toast.as_mut() {
-        *seconds = left;
+    *left -= delta;
+    if *left <= 0.0 {
+        *message = None;
+    }
+}
+
+fn expire_toast(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
+    if ui.toast.is_some() {
+        age(&mut ui.toast, time.delta_secs());
+    }
+}
+
+fn expire_banner(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
+    if ui.banner.is_some() {
+        age(&mut ui.banner, time.delta_secs());
+    }
+}
+
+/// Raises the banner for an objective the log just completed.
+fn show_banner(
+    mut done: MessageReader<ObjectiveCompleted>,
+    log: Res<QuestLog>,
+    mut ui: ResMut<LedgerUi>,
+) {
+    for completed in done.read() {
+        let objective = log
+            .get(completed.quest_id)
+            .and_then(|entry| entry.objectives.get(completed.index));
+        let Some(objective) = objective else {
+            warn!("objective {completed:?} completed but is not in the quest log");
+            continue;
+        };
+        let line = format!(
+            "{} · {} / {}",
+            objective_label(objective),
+            objective.needed,
+            objective.needed
+        );
+        ui.banner = Some((line, BANNER_SECONDS));
     }
 }
 
@@ -287,17 +359,27 @@ fn expire_toast(time: Res<Time>, mut ui: ResMut<LedgerUi>) {
 fn tick_timers(
     log: Res<QuestLog>,
     timers: Query<(&TimerText, &Children)>,
+    tracked: Query<(&TrackerTimer, &Children)>,
     mut texts: Query<&mut Text>,
 ) {
     let now = unix_now();
-    for (timer, children) in &timers {
-        let Some(deadline) = log.get(timer.0).and_then(|entry| entry.deadline) else {
+    let ends = timers
+        .iter()
+        .map(|(timer, children)| (timer.0, children, true));
+    let bare = tracked
+        .iter()
+        .map(|(timer, children)| (timer.0, children, false));
+    for (id, children, with_ends) in ends.chain(bare) {
+        let Some(deadline) = log.get(id).and_then(|entry| entry.deadline) else {
             continue;
         };
         let Some(mut text) = children.first().and_then(|c| texts.get_mut(*c).ok()) else {
             continue;
         };
-        let label = view::chip_text(deadline, now);
+        let label = match with_ends {
+            true => view::chip_text(deadline, now),
+            false => view::countdown(deadline, now),
+        };
         if text.0 != label {
             text.0 = label;
         }
@@ -317,6 +399,10 @@ enum Content {
     /// Whether the giver can be routed to, the shelve label and the ready line.
     Footer(bool, Option<&'static str>, Option<String>),
     Toast(String),
+    /// How many quests are tracked, and whether the list is folded away.
+    TrackerHead(usize, bool),
+    TrackerList(Vec<TrackerQuest>),
+    Banner(String),
 }
 
 impl Content {
@@ -332,6 +418,11 @@ impl Content {
                 .spawn_scene(scene::footer(navigate, shelve, ready))
                 .id(),
             Content::Toast(text) => commands.spawn_scene(scene::toast(text)).id(),
+            Content::TrackerHead(count, collapsed) => {
+                commands.spawn_scene(tracker::head(count, collapsed)).id()
+            }
+            Content::TrackerList(quests) => commands.spawn_scene(tracker::list(quests)).id(),
+            Content::Banner(text) => commands.spawn_scene(tracker::banner(text)).id(),
         }
     }
 
@@ -349,6 +440,11 @@ impl Content {
             }
             Content::Detail(view) => {
                 if let Some(text) = &mut view.timer {
+                    text.clear();
+                }
+            }
+            Content::TrackerList(quests) => {
+                for text in quests.iter_mut().filter_map(|q| q.timer.as_mut()) {
                     text.clear();
                 }
             }
@@ -374,20 +470,37 @@ impl Seen<'_> {
             .then(|| ledger_view(&self.log, &self.db, &self.pins, &self.ui, unix_now()))
     }
 
-    /// What `host` shows now. Every host is empty while the window is closed.
-    fn content(&self, host: Host, view: Option<&LedgerView>) -> Option<Content> {
-        let view = view?;
+    fn tracker(&self) -> TrackerView {
+        tracker_view(&self.log, &self.db, &self.pins, unix_now())
+    }
+
+    /// What `host` shows now. The window's hosts are empty while it is closed.
+    fn content(
+        &self,
+        host: Host,
+        view: Option<&LedgerView>,
+        tracker: &TrackerView,
+    ) -> Option<Content> {
         Some(match host {
-            Host::Lead => Content::Lead(view.headline.clone()),
-            Host::Tabs => Content::Tabs(view.tabs.clone()),
-            Host::List => Content::List(view.groups.clone(), self.ui.tab),
-            Host::Note => Content::Note(view.pin_note.clone()),
-            Host::Detail => view.detail.clone().map_or(Content::Pick, Content::Detail),
+            Host::TrackerHead => {
+                Content::TrackerHead(tracker.quests.len(), self.ui.tracker_collapsed)
+            }
+            Host::TrackerList if self.ui.tracker_collapsed => return None,
+            Host::TrackerList => Content::TrackerList(tracker.quests.clone()),
+            Host::Banner => Content::Banner(self.ui.banner.as_ref()?.0.clone()),
+            Host::Lead => Content::Lead(view?.headline.clone()),
+            Host::Tabs => Content::Tabs(view?.tabs.clone()),
+            Host::List => Content::List(view?.groups.clone(), self.ui.tab),
+            Host::Note => Content::Note(view?.pin_note.clone()),
+            Host::Detail => view?.detail.clone().map_or(Content::Pick, Content::Detail),
             Host::Footer => {
-                let d = view.detail.as_ref()?;
+                let d = view?.detail.as_ref()?;
                 Content::Footer(d.can_navigate, d.shelve_label, d.ready_text.clone())
             }
-            Host::Toast => Content::Toast(self.ui.toast.as_ref()?.0.clone()),
+            Host::Toast => {
+                view?;
+                Content::Toast(self.ui.toast.as_ref()?.0.clone())
+            }
         })
     }
 }
@@ -400,8 +513,9 @@ fn rebuild(
     mut shown: Local<[Option<Content>; HOSTS]>,
 ) {
     let view = seen.view();
+    let tracker = seen.tracker();
     for (host, kind, children) in &hosts {
-        let content = seen.content(*kind, view.as_ref());
+        let content = seen.content(*kind, view.as_ref(), &tracker);
         let settled = content.clone().map(Content::settled);
         let slot = &mut shown[*kind as usize];
         if *slot == settled && !kind.is_added() {

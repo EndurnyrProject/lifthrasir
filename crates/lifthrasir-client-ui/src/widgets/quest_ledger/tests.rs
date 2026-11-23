@@ -1,13 +1,15 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy::scene::ScenePlugin;
+use bevy::time::TimeUpdateStrategy;
 use bevy::ui_widgets::Activate;
 use leafwing_input_manager::prelude::ActionState;
 use lifthrasir_assets::catalogs::QuestDb;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
 use lifthrasir_client::domain::input::PlayerAction;
-use lifthrasir_client::domain::quest::{QuestLog, QuestPins};
+use lifthrasir_client::domain::quest::{ObjectiveCompleted, QuestLog, QuestPins};
 use lifthrasir_data::{QuestData, QuestText};
 use net_contract::commands::{NavigationRequested, QuestCommand};
 use net_contract::dto::{
@@ -582,4 +584,115 @@ fn the_list_holds_one_row_per_quest_and_keeps_them_while_unchanged() {
     app.update();
     let ids: Vec<u32> = rows(&mut app).iter().map(|(_, id)| *id).collect();
     assert_eq!(ids, [3]);
+}
+
+/// A tracker over `pinned` quests of `log`, with the ledger window closed.
+fn tracker_app(log: QuestLog, pinned: &[u32], ui: LedgerUi) -> App {
+    let mut pins = QuestPins::default();
+    for id in pinned {
+        pins.toggle(*id, &log).unwrap();
+    }
+    let mut app = window_app(log, ui);
+    app.insert_resource(pins)
+        .add_message::<ObjectiveCompleted>()
+        .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs(1)))
+        .add_systems(
+            Update,
+            (super::expire_banner, super::show_banner)
+                .chain()
+                .before(super::rebuild),
+        );
+    app.world_mut()
+        .resource_mut::<Time<Virtual>>()
+        .set_max_delta(Duration::from_secs(10));
+    app.update();
+    app.update();
+    app
+}
+
+fn texts(app: &mut App) -> Vec<String> {
+    let world = app.world_mut();
+    world
+        .query::<&Text>()
+        .iter(world)
+        .map(|t| t.0.clone())
+        .collect()
+}
+
+fn control(app: &mut App, wanted: Act) -> Option<Entity> {
+    let world = app.world_mut();
+    world
+        .query::<(Entity, &Act)>()
+        .iter(world)
+        .find_map(|(entity, act)| (*act == wanted).then_some(entity))
+}
+
+fn activate(app: &mut App, entity: Entity) {
+    app.world_mut().trigger(Activate { entity });
+    app.world_mut().flush();
+    app.update();
+}
+
+#[test]
+fn clicking_a_tracker_row_opens_the_ledger_on_that_quest() {
+    let (log, _) = mixed();
+    let ui = LedgerUi {
+        tab: LedgerTab::Completed,
+        ..Default::default()
+    };
+    let mut app = tracker_app(log, &[1, 2], ui);
+    let row = control(&mut app, Act::Open(2)).expect("a row for the pinned quest");
+    activate(&mut app, row);
+    let ui = app.world().resource::<LedgerUi>();
+    assert!(ui.open);
+    assert_eq!(ui.selected, Some(2));
+    assert_eq!(ui.tab, LedgerTab::Active);
+}
+
+#[test]
+fn a_finished_objective_raises_a_banner_for_three_seconds() {
+    let (log, _) = mixed();
+    let mut app = tracker_app(log, &[1], LedgerUi::default());
+    app.world_mut().write_message(ObjectiveCompleted {
+        quest_id: 2,
+        index: 0,
+    });
+    app.update();
+    app.update();
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|t| t == "OBJECTIVE COMPLETE"));
+    assert!(shown.iter().any(|t| t == "Defeat Lunatic · 5 / 5"));
+
+    for _ in 0..3 {
+        app.update();
+    }
+    assert!(!texts(&mut app).iter().any(|t| t == "OBJECTIVE COMPLETE"));
+}
+
+#[test]
+fn the_chevron_hides_and_shows_the_list() {
+    let (log, _) = mixed();
+    let mut app = tracker_app(log, &[1], LedgerUi::default());
+    assert!(control(&mut app, Act::Open(1)).is_some());
+
+    let chevron = control(&mut app, Act::ToggleTracker).unwrap();
+    activate(&mut app, chevron);
+    app.update();
+    assert!(control(&mut app, Act::Open(1)).is_none());
+    assert!(texts(&mut app).iter().any(|t| t == "1 tracked"));
+
+    let chevron = control(&mut app, Act::ToggleTracker).unwrap();
+    activate(&mut app, chevron);
+    app.update();
+    assert!(control(&mut app, Act::Open(1)).is_some());
+}
+
+#[test]
+fn without_pins_the_plate_is_only_its_header() {
+    let (log, _) = mixed();
+    let mut app = tracker_app(log, &[], LedgerUi::default());
+    let shown = texts(&mut app);
+    assert!(shown.iter().any(|t| t == "0 tracked"));
+    assert!(!shown.iter().any(|t| t.starts_with("Defeat")));
+    assert!(control(&mut app, Act::Open(1)).is_none());
 }

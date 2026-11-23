@@ -1,5 +1,5 @@
-//! Lets the player drag the hotbar, chat, minimap, status bar, status effects and
-//! Homunculus plate around the HUD, and remembers where they were left.
+//! Lets the player drag the hotbar, chat, minimap, status bar, status effects,
+//! Homunculus plate and quest tracker around the HUD, and remembers where they were left.
 //!
 //! Each widget keeps its own anchor; the saved value is an offset from it, applied
 //! as a [`UiTransform`] translation so the anchoring and layout stay untouched. A
@@ -24,6 +24,7 @@ pub(crate) struct HudLayout {
     pub(crate) status_bar: Vec2,
     pub(crate) status_effects: Vec2,
     pub(crate) homunculus: Vec2,
+    pub(crate) quest_tracker: Vec2,
 }
 
 impl HudLayout {
@@ -35,6 +36,7 @@ impl HudLayout {
             HudWidget::StatusBar => self.status_bar,
             HudWidget::StatusEffects => self.status_effects,
             HudWidget::Homunculus => self.homunculus,
+            HudWidget::QuestTracker => self.quest_tracker,
         }
     }
 
@@ -46,6 +48,7 @@ impl HudLayout {
             HudWidget::StatusBar => &mut self.status_bar,
             HudWidget::StatusEffects => &mut self.status_effects,
             HudWidget::Homunculus => &mut self.homunculus,
+            HudWidget::QuestTracker => &mut self.quest_tracker,
         }
     }
 }
@@ -60,6 +63,7 @@ pub(crate) enum HudWidget {
     StatusBar,
     StatusEffects,
     Homunculus,
+    QuestTracker,
 }
 
 pub struct HudLayoutPlugin;
