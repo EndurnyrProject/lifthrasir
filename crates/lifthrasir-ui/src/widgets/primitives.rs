@@ -188,6 +188,12 @@ pub fn window_title_bar_led(
 /// A 22px borderless icon button that lights up under the pointer: the remove and
 /// dismiss marks of list rows. The caller attaches the `Activate` observer.
 pub fn ghost_button(icon: &'static str) -> impl Scene {
+    ghost_button_tinted(icon, ro_dark::MUTED)
+}
+
+/// A [`ghost_button`] whose glyph is drawn in `tint`, for a mark that shows a state,
+/// such as a lit pin.
+pub fn ghost_button_tinted(icon: &'static str, tint: Color) -> impl Scene {
     let colors = HoverColors {
         rest: (Color::NONE, Color::NONE),
         hover: (ro_dark::BUTTON, ro_dark::BUTTON_STROKE),
@@ -208,7 +214,7 @@ pub fn ghost_button(icon: &'static str) -> impl Scene {
         BackgroundColor(Color::NONE)
         BorderColor::all(Color::NONE)
         Pickable
-        Children [ @glyph_icon(icon, 9.0, ro_dark::MUTED) ]
+        Children [ @glyph_icon(icon, 9.0, tint) ]
     }
 }
 

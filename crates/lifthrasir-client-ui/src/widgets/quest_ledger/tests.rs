@@ -1,13 +1,22 @@
 use std::collections::BTreeMap;
 
+use bevy::prelude::*;
+use bevy::scene::ScenePlugin;
+use bevy::ui_widgets::Activate;
+use leafwing_input_manager::prelude::ActionState;
 use lifthrasir_assets::catalogs::QuestDb;
+use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::input::PlayerAction;
 use lifthrasir_client::domain::quest::{QuestLog, QuestPins};
 use lifthrasir_data::{QuestData, QuestText};
-use net_contract::dto::{HuntFilter, QuestEntry, QuestGiver, QuestObjective, QuestState};
+use net_contract::commands::{NavigationRequested, QuestCommand};
+use net_contract::dto::{
+    HuntFilter, NavigationTarget, QuestEntry, QuestGiver, QuestObjective, QuestState,
+};
 use net_contract::events::QuestEvent;
 
 use super::view::*;
-use super::{LedgerTab, LedgerUi};
+use super::{Act, LedgerTab, LedgerUi, on_button, spawn_window, toggle_key};
 
 fn hunt(name: &str, needed: u32, current: u32) -> QuestObjective {
     QuestObjective {
@@ -365,4 +374,212 @@ fn tracker_lists_pins_in_order_and_skips_stale_ones() {
         .map(|q| q.id)
         .collect();
     assert_eq!(ids, [2]);
+}
+
+/// An app holding the ledger window under a bare HUD root, over `log`.
+fn window_app(log: QuestLog, ui: LedgerUi) -> App {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin));
+    app.init_asset::<Image>();
+    app.init_asset::<Font>();
+    let (_, db) = mixed();
+    app.insert_resource(log)
+        .insert_resource(db)
+        .insert_resource(ui)
+        .init_resource::<QuestPins>()
+        .add_message::<QuestCommand>()
+        .add_message::<NavigationRequested>()
+        .add_systems(Update, (toggle_key, super::rebuild).chain());
+    let root = app.world_mut().spawn_empty().id();
+    let mut commands = app.world_mut().commands();
+    spawn_window(&mut commands, root);
+    app.world_mut().flush();
+    app
+}
+
+fn press(app: &mut App, act: Act) {
+    let button = app.world_mut().spawn(act).observe(on_button).id();
+    app.world_mut().trigger(Activate { entity: button });
+    app.world_mut().flush();
+}
+
+fn sent<M: Message + Clone>(app: &App) -> Vec<M> {
+    let messages = app.world().resource::<Messages<M>>();
+    messages.get_cursor().read(messages).cloned().collect()
+}
+
+fn selected(id: u32) -> LedgerUi {
+    LedgerUi {
+        open: true,
+        selected: Some(id),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn shelve_asks_the_server_and_leaves_the_log_alone() {
+    let (log, _) = mixed();
+    let mut app = window_app(log, selected(1));
+    press(&mut app, Act::Shelve);
+    assert_eq!(
+        sent::<QuestCommand>(&app),
+        [QuestCommand::SetActive {
+            quest_id: 1,
+            active: false
+        }]
+    );
+    let log = app.world().resource::<QuestLog>();
+    assert_eq!(log.get(1).unwrap().state, QuestState::Active);
+}
+
+#[test]
+fn resume_asks_the_server_to_activate_a_shelved_quest() {
+    let (log, _) = mixed();
+    let ui = LedgerUi {
+        tab: LedgerTab::Shelved,
+        ..selected(3)
+    };
+    let mut app = window_app(log, ui);
+    press(&mut app, Act::Resume);
+    assert_eq!(
+        sent::<QuestCommand>(&app),
+        [QuestCommand::SetActive {
+            quest_id: 3,
+            active: true
+        }]
+    );
+}
+
+#[test]
+fn navigate_routes_to_the_giver() {
+    let (log, _) = mixed();
+    let mut app = window_app(log, selected(1));
+    press(&mut app, Act::Navigate);
+    let sent = sent::<NavigationRequested>(&app);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0].target,
+        NavigationTarget::Coord {
+            map: "prontera".into(),
+            x: 150,
+            y: 180
+        }
+    );
+    assert_eq!((sent[0].flag, sent[0].hide_window), (0, false));
+}
+
+#[test]
+fn a_fourth_pin_shows_the_toast_and_keeps_the_pins() {
+    let full = log(vec![
+        entry(1, QuestState::Active, vec![hunt("Poring", 10, 3)]),
+        entry(2, QuestState::Active, vec![hunt("Lunatic", 5, 0)]),
+        entry(3, QuestState::Active, vec![hunt("Fabre", 4, 0)]),
+        entry(4, QuestState::Active, vec![hunt("Pupa", 2, 0)]),
+    ]);
+    let mut pins = QuestPins::default();
+    for id in [1, 2, 3] {
+        pins.toggle(id, &full).unwrap();
+    }
+    let mut app = window_app(full, selected(1));
+    app.insert_resource(pins);
+    press(&mut app, Act::Pin(4));
+    assert_eq!(app.world().resource::<QuestPins>().ids(), [1, 2, 3]);
+    let toast = app.world().resource::<LedgerUi>().toast.clone();
+    assert_eq!(
+        toast.map(|(text, _)| text).as_deref(),
+        Some("You can track up to 3 quests on screen.")
+    );
+}
+
+#[test]
+fn the_quest_ledger_key_toggles_the_window() {
+    let (log, _) = mixed();
+    let mut app = window_app(log, LedgerUi::default());
+    let player = app
+        .world_mut()
+        .spawn((LocalPlayer, ActionState::<PlayerAction>::default()))
+        .id();
+    let set = |app: &mut App, down: bool| {
+        let mut player = app.world_mut().entity_mut(player);
+        let mut actions = player.get_mut::<ActionState<PlayerAction>>().unwrap();
+        match down {
+            true => actions.press(&PlayerAction::QuestLedger),
+            false => actions.release(&PlayerAction::QuestLedger),
+        }
+    };
+    set(&mut app, true);
+    app.update();
+    assert!(app.world().resource::<LedgerUi>().open);
+    set(&mut app, false);
+    app.update();
+    set(&mut app, true);
+    app.update();
+    assert!(!app.world().resource::<LedgerUi>().open);
+}
+
+fn rows(app: &mut App) -> Vec<(Entity, u32)> {
+    let world = app.world_mut();
+    let mut rows: Vec<(Entity, u32)> = world
+        .query::<(Entity, &Act)>()
+        .iter(world)
+        .filter_map(|(entity, act)| match act {
+            Act::Select(id) => Some((entity, *id)),
+            _ => None,
+        })
+        .collect();
+    rows.sort_by_key(|(_, id)| *id);
+    rows
+}
+
+#[test]
+fn the_picked_quest_fills_the_page_footer_and_toast() {
+    let mut timed = entry(1, QuestState::Active, vec![hunt("Poring", 10, 3)]);
+    timed.deadline = Some(u64::MAX);
+    let ui = LedgerUi {
+        toast: Some(("Careful".into(), 2.6)),
+        ..selected(1)
+    };
+    let mut app = window_app(log(vec![timed]), ui);
+    app.update();
+    app.update();
+    let world = app.world_mut();
+    let texts: Vec<String> = world
+        .query::<&Text>()
+        .iter(world)
+        .map(|text| text.0.clone())
+        .collect();
+    for shown in ["Porings", "Kill ", "Navigate", "Shelve", "Careful"] {
+        assert!(texts.iter().any(|text| text == shown), "missing {shown:?}");
+    }
+    let red_run = world
+        .query::<(&TextSpan, &TextColor)>()
+        .iter(world)
+        .any(|(span, color)| span.0 == "porings" && color.0 == Color::srgb_u8(0xff, 0, 0));
+    assert!(red_run, "the story keeps its colour codes");
+    let timers = texts.iter().filter(|t| t.starts_with("Ends ")).count();
+    assert_eq!(timers, 2, "the row chip and the page deadline");
+}
+
+#[test]
+fn the_list_holds_one_row_per_quest_and_keeps_them_while_unchanged() {
+    let (log, _) = mixed();
+    let ui = LedgerUi {
+        open: true,
+        ..Default::default()
+    };
+    let mut app = window_app(log, ui);
+    app.update();
+    app.update();
+    let first = rows(&mut app);
+    let ids: Vec<u32> = first.iter().map(|(_, id)| *id).collect();
+    assert_eq!(ids, [1, 2, 5]);
+
+    app.update();
+    assert_eq!(rows(&mut app), first);
+
+    app.world_mut().resource_mut::<LedgerUi>().tab = LedgerTab::Shelved;
+    app.update();
+    app.update();
+    let ids: Vec<u32> = rows(&mut app).iter().map(|(_, id)| *id).collect();
+    assert_eq!(ids, [3]);
 }

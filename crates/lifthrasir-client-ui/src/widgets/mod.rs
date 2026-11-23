@@ -69,6 +69,7 @@ impl Plugin for InGameHudPlugin {
         ));
         app.add_plugins(inventory_window::InventoryWindowPlugin);
         app.add_plugins(homunculus_window::HomunculusWindowPlugin);
+        app.add_plugins(quest_ledger::QuestLedgerPlugin);
         app.add_plugins(hud_layout::HudLayoutPlugin);
         app.add_plugins(skills_window::SkillsWindowPlugin);
         app.add_plugins(trade_window::TradeWindowPlugin);
@@ -106,6 +107,7 @@ fn show_hud(mut commands: Commands, asset_server: Res<AssetServer>) {
     guild_window::spawn_guild_window(&mut commands, root);
     hotbar::spawn_hotbar(&mut commands, root);
     homunculus_window::spawn_window(&mut commands, root);
+    quest_ledger::spawn_window(&mut commands, root);
     inventory_window::scene::build(&mut commands, root);
     minimap::spawn_minimap(&mut commands, root, &asset_server);
     navigation::panel::spawn_navigation_panel(

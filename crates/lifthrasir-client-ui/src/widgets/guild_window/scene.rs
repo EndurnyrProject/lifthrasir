@@ -27,7 +27,7 @@ use super::{
 };
 use crate::screens::shared::{
     DANGER_TINT, colored_lines, number_field, overline, row_button, search_field, text_field,
-    usable, wide_button,
+    usable, wide_button, window_toast,
 };
 
 const WINDOW_LEFT: f32 = 110.0;
@@ -1551,20 +1551,5 @@ pub(super) fn footer(view: FooterView) -> impl Scene {
 }
 
 pub(super) fn toast(view: ToastView) -> impl Scene {
-    let (ink, stroke) = if view.error {
-        (ro_dark::STATUS_FULL, ro_dark::BRONZE)
-    } else {
-        (ro_dark::BODY, ro_dark::BUTTON_STROKE)
-    };
-    bsn! {
-        Node {
-            padding: {UiRect::axes(px(12), px(6))},
-            border: px(1),
-            border_radius: BorderRadius::all(px(6)),
-        }
-        BackgroundColor(ro_dark::TOOLTIP_BODY)
-        BorderColor::all(stroke)
-        @ignore_picking()
-        Children [ @chrome_text(view.text, 12.0, ink) ]
-    }
+    window_toast(view.text, view.error)
 }

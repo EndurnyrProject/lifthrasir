@@ -334,6 +334,27 @@ pub fn tooltip(title: String, tone: Color, lines: Vec<String>) -> impl Scene {
     }
 }
 
+/// A short in-window notice on the tooltip body, in the error tone when `error`. The
+/// caller places it.
+pub fn window_toast(text: String, error: bool) -> impl Scene {
+    let (ink, stroke) = if error {
+        (ro_dark::STATUS_FULL, ro_dark::BRONZE)
+    } else {
+        (ro_dark::BODY, ro_dark::BUTTON_STROKE)
+    };
+    bsn! {
+        Node {
+            padding: {UiRect::axes(px(12), px(6))},
+            border: px(1),
+            border_radius: BorderRadius::all(px(6)),
+        }
+        BackgroundColor(ro_dark::TOOLTIP_BODY)
+        BorderColor::all(stroke)
+        @ignore_picking()
+        Children [ @chrome_text(text, 12.0, ink) ]
+    }
+}
+
 /// A small filled tag beside a name: a count or a warning.
 pub fn chip(text: String, fill: Color, ink: Color) -> impl Scene {
     bsn! {

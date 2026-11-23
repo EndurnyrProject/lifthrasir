@@ -282,10 +282,16 @@ fn row_view(
     }
 }
 
-fn chip_text(deadline: u64, now_unix: u64) -> String {
-    match countdown(deadline, now_unix) {
-        expired if expired == "Expired" => expired,
-        left => format!("Ends {left}"),
+/// The text of a deadline: `"Ends {countdown}"`, or `"Expired"`.
+pub(super) fn chip_text(deadline: u64, now_unix: u64) -> String {
+    ends(countdown(deadline, now_unix))
+}
+
+/// `"Ends {left}"` for a [`countdown`], which already reads `"Expired"` at zero.
+pub(super) fn ends(left: String) -> String {
+    match left.as_str() {
+        "Expired" => left,
+        _ => format!("Ends {left}"),
     }
 }
 
