@@ -25,7 +25,7 @@ tokio = { version = "1", features = ["sync", "rt-multi-thread", "net", "macros"]
 schemars = "1"
 rmcp = { version = "3.10", features = ["server", "macros", "transport-streamable-http-server"] }
 axum = "0.8"
-base64 = "0.22"
+base64 = "0.23"
 # Encodes MCP captures as PNG; tests also decode a JPEG fixture with it.
 image = { workspace = true, features = ["png", "jpeg"] }
 
