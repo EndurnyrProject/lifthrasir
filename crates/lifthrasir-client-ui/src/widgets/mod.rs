@@ -30,6 +30,7 @@ pub mod npc_dialog;
 pub mod party;
 pub mod player_context_menu;
 pub mod pushcart_window;
+pub mod quest_ledger;
 pub mod settings_window;
 pub mod shop_window;
 pub mod skill_menu;
