@@ -13,6 +13,7 @@ pub mod movement;
 pub mod navigation;
 pub mod npc;
 pub mod party;
+pub mod quest;
 pub mod shop;
 pub mod skill;
 pub mod skill_menu;

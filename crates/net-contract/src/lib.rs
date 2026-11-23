@@ -335,5 +335,13 @@ mod tests {
             app.world()
                 .contains_resource::<Messages<commands::NavigationCancelRequested>>()
         );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<events::QuestEvent>>()
+        );
+        assert!(
+            app.world()
+                .contains_resource::<Messages<commands::QuestCommand>>()
+        );
     }
 }

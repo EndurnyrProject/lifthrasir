@@ -23,7 +23,7 @@ pub struct Envelope {
     pub seq: u32,
     #[prost(
         oneof = "envelope::Body",
-        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242"
+        tags = "16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243"
     )]
     pub body: ::core::option::Option<envelope::Body>,
 }
@@ -810,6 +810,9 @@ pub mod envelope {
         /// s2c zone gameplay
         #[prost(message, tag = "242")]
         PetFoodResult(super::PetFoodResult),
+        /// c2s zone
+        #[prost(message, tag = "243")]
+        QuestActiveRequest(super::QuestActiveRequest),
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3784,8 +3787,10 @@ pub mod announcement {
 /// One hunt objective within a QuestEntry, joining the persisted counter with
 /// the quest definition's target so the client needs no quest database of its
 /// own. `needed` is copied from the quest definition; `current` is clamped
-/// by the server.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+/// by the server. `mob_id` is 0 for a filter-only target, which kills any
+/// monster passing the filter fields below; a filter field of 0 or "" means
+/// that filter is absent.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct QuestObjective {
     #[prost(uint32, tag = "1")]
     pub mob_id: u32,
@@ -3793,6 +3798,38 @@ pub struct QuestObjective {
     pub needed: u32,
     #[prost(uint32, tag = "3")]
     pub current: u32,
+    /// The mob's Japanese name (what rAthena's clif sends), else its name. Empty
+    /// when `mob_id` is 0 or unknown.
+    #[prost(string, tag = "4")]
+    pub mob_name: ::prost::alloc::string::String,
+    /// Lowest and highest monster level that counts. 0 = no bound.
+    #[prost(uint32, tag = "5")]
+    pub min_level: u32,
+    #[prost(uint32, tag = "6")]
+    pub max_level: u32,
+    /// quest_db spellings ("demihuman", "all", "large", "fire"). Empty = any.
+    #[prost(string, tag = "7")]
+    pub race: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub size: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub element: ::prost::alloc::string::String,
+    /// Map the kill must happen on. Empty = any.
+    #[prost(string, tag = "10")]
+    pub map: ::prost::alloc::string::String,
+}
+/// The NPC whose script set a quest, kept so the client can point back to it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestGiver {
+    /// Display name with rAthena's "#unique" suffix stripped; may be empty.
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub map: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "3")]
+    pub x: u32,
+    #[prost(uint32, tag = "4")]
+    pub y: u32,
 }
 /// One quest-log row within a QuestList/QuestAdded. `state` mirrors rAthena's
 /// e_quest_state: 0 = inactive, 1 = active, 2 = complete. `objectives` is empty
@@ -3805,6 +3842,26 @@ pub struct QuestEntry {
     pub state: u32,
     #[prost(message, repeated, tag = "3")]
     pub objectives: ::prost::alloc::vec::Vec<QuestObjective>,
+    /// Unix seconds the quest expires (rAthena quest_log.time). 0 = no time limit.
+    #[prost(int64, tag = "4")]
+    pub deadline: i64,
+    /// Unset when the quest was set outside an NPC script.
+    #[prost(message, optional, tag = "5")]
+    pub giver: ::core::option::Option<QuestGiver>,
+    /// The quest_db Title, the client's fallback text. Empty when the definition
+    /// no longer resolves.
+    #[prost(string, tag = "6")]
+    pub title: ::prost::alloc::string::String,
+}
+/// Client -> server, shelve (active = false) or resume (active = true) a quest
+/// (replaces RO CZ_ACTIVE_QUEST 0x02b6). Acked with QuestStateChanged; a quest
+/// that is complete or not in the log gets no reply, as in rAthena.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QuestActiveRequest {
+    #[prost(uint32, tag = "1")]
+    pub quest_id: u32,
+    #[prost(bool, tag = "2")]
+    pub active: bool,
 }
 /// Server -> client, the full quest log dump (sent on map load, mirrors InventoryList).
 #[derive(Clone, PartialEq, ::prost::Message)]

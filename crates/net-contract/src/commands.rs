@@ -39,6 +39,15 @@ pub enum ChatRoomCommand {
     ChangeSettings(ChatRoomSettings),
 }
 
+/// What the local player asks of the quest log.
+#[derive(Message, Debug, Clone, PartialEq, Eq)]
+#[auto_add_message(plugin = crate::NetContractPlugin)]
+pub enum QuestCommand {
+    /// Shelve (`false`) or resume (`true`) a quest. The server answers with
+    /// `QuestEvent::StateChanged`, and not at all for a completed or unknown quest.
+    SetActive { quest_id: u32, active: bool },
+}
+
 /// Answer a skill text request. `None` cancels the request.
 #[derive(Message, Debug, Clone)]
 #[auto_add_message(plugin = crate::NetContractPlugin)]

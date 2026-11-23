@@ -16,6 +16,7 @@ pub mod navigation;
 pub mod npc;
 pub mod party;
 pub mod production;
+pub mod quest;
 pub mod shop;
 pub mod skill_menu;
 pub mod skill_units;
