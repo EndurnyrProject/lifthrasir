@@ -9,6 +9,7 @@ pub mod map;
 pub mod maps;
 pub mod model;
 pub mod props;
+pub mod quest;
 pub mod random_option;
 pub mod skill;
 pub mod status_icon;
@@ -33,6 +34,7 @@ type ConverterFn = fn(&GrfVfs, &Path) -> anyhow::Result<OperationReport>;
 const CONVERTERS: &[(&str, ConverterFn)] = &[
     ("job", job::run),
     ("item", item::run),
+    ("quests", quest::run),
     ("random_option", random_option::run),
     ("skill", skill::run),
     ("accessory", accessory::run),

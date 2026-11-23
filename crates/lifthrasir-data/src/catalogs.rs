@@ -31,6 +31,22 @@ pub struct ItemData {
     pub items: BTreeMap<u32, ItemInfo>,
 }
 
+/// Display text of one quest decoded from `OngoingQuests.lub`.
+/// All strings are valid UTF-8 (EUC-KR decoded by the CLI converter).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuestText {
+    pub title: String,
+    pub description: Vec<String>,
+    pub summary: String,
+}
+
+/// Quest text database: quest id -> display text.
+/// Keyed by `BTreeMap` for stable, key-ordered RON diffs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuestData {
+    pub quests: BTreeMap<u32, QuestText>,
+}
+
 /// Random option display templates decoded from the client's
 /// `enumvar.lub` + `addrandomoptionnametable.lub`.
 ///
