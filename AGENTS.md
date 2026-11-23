@@ -5,6 +5,7 @@
 - Load the bevy skill for any Bevy work (ECS, rendering, UI, assets, shaders) — it is the current 0.20 reference
 - When working with UI, also load the bevy-feathers-bsn skill (BSN scenes, Feathers widgets, theming)
 - When touching third-party crate wiring, load the lifthrasir-bevy-plugins skill
+- When creating or redoing a visual effect (strfx, effects.ron entries), load the lifthrasir-vfx-authoring skill
 - Load the bevy-cheatbook skill only to translate stale cheatbook-era snippets; its API syntax is 0.18-era
 - Always Load the ponytail skill, it helps you to be more token efficient
 
