@@ -2,13 +2,14 @@ use super::accessory::AccessoryDbPlugin;
 use super::effect::{process_loaded_effect_data, start_loading_effect_data};
 use super::item::ItemDbPlugin;
 use super::job::JobSystemPlugin;
+use super::quest::QuestDbPlugin;
 use super::random_option::RandomOptionDbPlugin;
 use super::skill::SkillSystemPlugin;
 use super::status::StatusIconPlugin;
 use super::weapon::WeaponDbPlugin;
 use super::{
-    AccessoryDataAsset, EffectDataAsset, ItemDataAsset, JobDataAsset, RandomOptionDataAsset,
-    SkillDataAsset, StatusIconDataAsset, WeaponDataAsset,
+    AccessoryDataAsset, EffectDataAsset, ItemDataAsset, JobDataAsset, QuestAsset,
+    RandomOptionDataAsset, SkillDataAsset, StatusIconDataAsset, WeaponDataAsset,
 };
 use bevy::prelude::*;
 use bevy_common_assets::ron::RonAssetPlugin;
@@ -35,6 +36,7 @@ impl Plugin for ContentCatalogPlugin {
             WeaponDbPlugin,
             StatusIconPlugin,
         ))
+        .add_plugins((RonAssetPlugin::<QuestAsset>::new(&["ron"]), QuestDbPlugin))
         .add_systems(Startup, start_loading_effect_data)
         .add_systems(Update, process_loaded_effect_data);
     }
