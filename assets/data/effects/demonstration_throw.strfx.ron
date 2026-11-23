@@ -1,25 +1,37 @@
 // Demonstration (AM_DEMONSTRATION) -- authored effect, approximation.
 //
-// No reference artwork: the official client renders the Alchemist's fire field
-// with a hardcoded emitter and roBrowserLegacy's `SkillEffects/SkillEffect.js`
-// has no entry for AM_DEMONSTRATION (SkillUnit.js still lists its zone type
-// 0xb1), so this burst and the field it leaves (`demonstration_field.strfx.ron`)
-// are authored, not reference-certified.
+// The reference client has no cast/impact effect for AM_DEMONSTRATION: its only
+// visual is the burning field, EF_DEMONSTRATION (302), the retail
+// `이팩트/데몬스트레이션` SPR/ACT that `skill_units[229]` plays. This one-shot covers
+// the Fire Bottle landing on the cell and hands over to that field.
 //
 // Convention (see heavens_drive.strfx.ron / fire_bolt.strfx.ron): offset & quad
 // are STR pixels, the runtime maps (offset - (319, 291)) * 0.2 into world space,
 // so (319, 291) sits on the anchor (here the targeted ground cell). y grows
 // DOWN, so a smaller offset.y renders higher. fps 30, keys lerp linearly and
-// texture_index is held (flipbook).
+// texture_index is held (flipbook). Angle is raw STR units, 1024 per turn.
 //
-// Shape: the Fire Bottle falls as a flame streak from above, shatters on the
-// cell (lens_r flash + expanding ring_red scorch), and throws burning embers
-// out while a fire_smoke puff rises. The persistent burning patch is a separate
-// repeating descriptor owned by the skill-unit group.
+// Shape: the Fire Bottle item icon spins down onto the cell with a lit wick,
+// shatters in a hot flash and a fire cloud, throws two flame tongues and
+// embers, and leaves a low ground glow under rising smoke. Avoid `lens_*`,
+// `ring_*` and `water_slplash` here: they are cylinder strips and render as
+// bars on a flat quad.
 (
     fps: 30,
     layers: [
-        // The bottle's flame streak falling onto the cell.
+        // The Fire Bottle, magenta-keyed item icon, spinning as it falls.
+        (
+            textures: ["ro://data/texture/유저인터페이스/item/화염병.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0,  offset: (279.0, 150.0), quad: (24.0, 24.0), color: (255, 255, 255, 0),   angle: 0.0 ),
+                ( at: 2,  offset: (288.0, 178.0), quad: (26.0, 26.0), color: (255, 255, 255, 255), angle: 220.0 ),
+                ( at: 6,  offset: (305.0, 232.0), quad: (26.0, 26.0), color: (255, 255, 255, 255), angle: 660.0 ),
+                ( at: 9,  offset: (316.0, 270.0), quad: (26.0, 26.0), color: (255, 255, 255, 255), angle: 990.0 ),
+                ( at: 10, offset: (319.0, 282.0), quad: (24.0, 24.0), color: (255, 255, 255, 0),   angle: 1100.0 ),
+            ],
+        ),
+        // The lit wick trailing the bottle.
         (
             textures: [
                 "ro://data/texture/effect/fire_0001.bmp",
@@ -29,73 +41,126 @@
             ],
             blend: Add,
             keys: [
-                ( at: 0,  offset: (319.0, 118.0), quad: (36.0, 76.0), color: (255, 150, 60, 0),   texture_index: 0 ),
-                ( at: 3,  offset: (319.0, 162.0), quad: (40.0, 84.0), color: (255, 165, 75, 215), texture_index: 1 ),
-                ( at: 6,  offset: (319.0, 214.0), quad: (44.0, 92.0), color: (255, 175, 85, 235), texture_index: 2 ),
-                ( at: 9,  offset: (319.0, 262.0), quad: (46.0, 96.0), color: (255, 185, 95, 245), texture_index: 3 ),
-                ( at: 11, offset: (319.0, 291.0), quad: (46.0, 94.0), color: (255, 195, 105, 230), texture_index: 0 ),
-                ( at: 14, offset: (319.0, 291.0), quad: (34.0, 68.0), color: (255, 175, 90, 0),   texture_index: 1 ),
+                ( at: 0,  offset: (277.0, 138.0), quad: (14.0, 22.0), color: (255, 170, 80, 0),   texture_index: 0 ),
+                ( at: 2,  offset: (286.0, 166.0), quad: (16.0, 26.0), color: (255, 180, 90, 230), texture_index: 1 ),
+                ( at: 4,  offset: (295.0, 192.0), quad: (16.0, 26.0), color: (255, 180, 90, 230), texture_index: 2 ),
+                ( at: 6,  offset: (304.0, 220.0), quad: (16.0, 26.0), color: (255, 180, 90, 230), texture_index: 3 ),
+                ( at: 9,  offset: (315.0, 258.0), quad: (16.0, 26.0), color: (255, 180, 90, 230), texture_index: 0 ),
+                ( at: 10, offset: (319.0, 272.0), quad: (14.0, 22.0), color: (255, 170, 80, 0),   texture_index: 1 ),
             ],
         ),
-        // The bottle breaking: a hot flash on the cell.
+        // Shatter flash.
         (
-            textures: ["ro://data/texture/effect/lens_r.bmp"],
+            textures: ["ro://data/texture/effect/glow11.bmp"],
             blend: Add,
             keys: [
-                ( at: 10, offset: (319.0, 280.0), quad: (24.0, 24.0),   color: (255, 180, 90, 0) ),
-                ( at: 13, offset: (319.0, 280.0), quad: (140.0, 140.0), color: (255, 210, 130, 235) ),
-                ( at: 20, offset: (319.0, 280.0), quad: (190.0, 190.0), color: (255, 170, 80, 110) ),
-                ( at: 28, offset: (319.0, 280.0), quad: (230.0, 230.0), color: (230, 130, 60, 0) ),
+                ( at: 9,  offset: (319.0, 276.0), quad: (20.0, 20.0),   color: (255, 200, 120, 0) ),
+                ( at: 11, offset: (319.0, 276.0), quad: (130.0, 130.0), color: (255, 210, 140, 240) ),
+                ( at: 16, offset: (319.0, 276.0), quad: (160.0, 160.0), color: (255, 150, 70, 90) ),
+                ( at: 24, offset: (319.0, 276.0), quad: (175.0, 175.0), color: (220, 100, 40, 0) ),
             ],
         ),
-        // Scorched ground ring spreading across the 3x3 the field reaches.
+        // Fire cloud bursting off the splash.
         (
-            textures: ["ro://data/texture/effect/ring_red.tga"],
+            textures: ["ro://data/texture/effect/fire_smoke_a.bmp"],
             blend: Add,
             keys: [
-                ( at: 11, offset: (319.0, 291.0), quad: (50.0, 25.0),   color: (255, 140, 60, 0) ),
-                ( at: 15, offset: (319.0, 291.0), quad: (170.0, 85.0),  color: (255, 160, 70, 210) ),
-                ( at: 24, offset: (319.0, 291.0), quad: (280.0, 140.0), color: (240, 120, 50, 130) ),
-                ( at: 34, offset: (319.0, 291.0), quad: (340.0, 170.0), color: (200, 90, 40, 0) ),
+                ( at: 10, offset: (319.0, 276.0), quad: (40.0, 40.0),   color: (255, 200, 140, 0) ),
+                ( at: 13, offset: (319.0, 268.0), quad: (100.0, 100.0), color: (255, 210, 150, 200) ),
+                ( at: 22, offset: (319.0, 254.0), quad: (125.0, 125.0), color: (255, 170, 110, 90) ),
+                ( at: 34, offset: (319.0, 240.0), quad: (140.0, 140.0), color: (200, 110, 60, 0) ),
             ],
         ),
-        // Burning droplets thrown out of the splash.
+        // Two flame tongues licking up, settling into the field sprite.
+        (
+            textures: [
+                "ro://data/texture/effect/fire_0001.bmp",
+                "ro://data/texture/effect/fire_0002.bmp",
+                "ro://data/texture/effect/fire_0003.bmp",
+                "ro://data/texture/effect/fire_0004.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 11, offset: (302.0, 286.0), quad: (24.0, 30.0), color: (255, 170, 80, 0),   texture_index: 0 ),
+                ( at: 14, offset: (300.0, 264.0), quad: (40.0, 72.0), color: (255, 190, 100, 235), texture_index: 1 ),
+                ( at: 18, offset: (301.0, 260.0), quad: (42.0, 78.0), color: (255, 180, 90, 220), texture_index: 2 ),
+                ( at: 22, offset: (302.0, 264.0), quad: (40.0, 70.0), color: (255, 170, 80, 180), texture_index: 3 ),
+                ( at: 30, offset: (303.0, 272.0), quad: (34.0, 56.0), color: (255, 150, 70, 0),   texture_index: 0 ),
+            ],
+        ),
+        (
+            textures: [
+                "ro://data/texture/effect/fire_0001.bmp",
+                "ro://data/texture/effect/fire_0002.bmp",
+                "ro://data/texture/effect/fire_0003.bmp",
+                "ro://data/texture/effect/fire_0004.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (337.0, 286.0), quad: (24.0, 30.0), color: (255, 170, 80, 0),   texture_index: 2 ),
+                ( at: 15, offset: (339.0, 262.0), quad: (42.0, 76.0), color: (255, 190, 100, 235), texture_index: 3 ),
+                ( at: 19, offset: (338.0, 258.0), quad: (44.0, 80.0), color: (255, 180, 90, 220), texture_index: 0 ),
+                ( at: 23, offset: (337.0, 262.0), quad: (40.0, 72.0), color: (255, 170, 80, 180), texture_index: 1 ),
+                ( at: 31, offset: (336.0, 272.0), quad: (34.0, 56.0), color: (255, 150, 70, 0),   texture_index: 2 ),
+            ],
+        ),
+        // Embers thrown up and out, falling back.
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                ( at: 12, offset: (301.0, 286.0), quad: (10.0, 10.0), color: (255, 190, 110, 0) ),
-                ( at: 15, offset: (289.0, 276.0), quad: (20.0, 20.0), color: (255, 210, 140, 230) ),
-                ( at: 24, offset: (272.0, 268.0), quad: (14.0, 14.0), color: (255, 170, 90, 0) ),
+                ( at: 11, offset: (314.0, 272.0), quad: (14.0, 14.0), color: (255, 210, 130, 255) ),
+                ( at: 16, offset: (280.0, 226.0), quad: (16.0, 16.0), color: (255, 190, 110, 230) ),
+                ( at: 24, offset: (258.0, 250.0), quad: (10.0, 10.0), color: (255, 140, 70, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                ( at: 13, offset: (337.0, 288.0), quad: (10.0, 10.0), color: (255, 190, 110, 0) ),
-                ( at: 17, offset: (352.0, 274.0), quad: (20.0, 20.0), color: (255, 210, 140, 230) ),
-                ( at: 26, offset: (368.0, 264.0), quad: (14.0, 14.0), color: (255, 170, 90, 0) ),
+                ( at: 11, offset: (324.0, 272.0), quad: (14.0, 14.0), color: (255, 210, 130, 255) ),
+                ( at: 17, offset: (364.0, 220.0), quad: (16.0, 16.0), color: (255, 190, 110, 230) ),
+                ( at: 26, offset: (386.0, 248.0), quad: (10.0, 10.0), color: (255, 140, 70, 0) ),
             ],
         ),
         (
             textures: ["ro://data/texture/effect/pok1.tga"],
             blend: Add,
             keys: [
-                ( at: 12, offset: (319.0, 282.0), quad: (12.0, 12.0), color: (255, 195, 120, 0) ),
-                ( at: 16, offset: (319.0, 258.0), quad: (22.0, 22.0), color: (255, 215, 150, 235) ),
-                ( at: 27, offset: (319.0, 224.0), quad: (16.0, 16.0), color: (255, 175, 95, 0) ),
+                ( at: 11, offset: (319.0, 270.0), quad: (14.0, 14.0), color: (255, 215, 140, 255) ),
+                ( at: 17, offset: (310.0, 196.0), quad: (18.0, 18.0), color: (255, 195, 115, 230) ),
+                ( at: 27, offset: (304.0, 214.0), quad: (10.0, 10.0), color: (255, 140, 70, 0) ),
             ],
         ),
-        // Smoke rising off the fresh burn.
         (
-            textures: ["ro://data/texture/effect/fire_smoke.bmp"],
-            blend: Blend,
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
             keys: [
-                ( at: 14, offset: (319.0, 282.0), quad: (60.0, 44.0),   color: (90, 80, 75, 0) ),
-                ( at: 20, offset: (319.0, 262.0), quad: (100.0, 74.0),  color: (100, 90, 85, 150) ),
-                ( at: 28, offset: (319.0, 232.0), quad: (140.0, 104.0), color: (70, 65, 62, 110) ),
-                ( at: 38, offset: (319.0, 198.0), quad: (170.0, 126.0), color: (50, 46, 44, 0) ),
+                ( at: 12, offset: (321.0, 272.0), quad: (12.0, 12.0), color: (255, 210, 130, 255) ),
+                ( at: 18, offset: (346.0, 238.0), quad: (14.0, 14.0), color: (255, 190, 110, 230) ),
+                ( at: 25, offset: (356.0, 266.0), quad: (8.0, 8.0),   color: (255, 140, 70, 0) ),
+            ],
+        ),
+        // Heat glow pooling on the ground across the 3x3 the field reaches.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 10, offset: (319.0, 291.0), quad: (60.0, 20.0),   color: (255, 140, 60, 0) ),
+                ( at: 14, offset: (319.0, 291.0), quad: (200.0, 60.0),  color: (255, 150, 70, 200) ),
+                ( at: 30, offset: (319.0, 291.0), quad: (230.0, 70.0),  color: (255, 120, 50, 120) ),
+                ( at: 42, offset: (319.0, 291.0), quad: (240.0, 72.0),  color: (220, 90, 40, 0) ),
+            ],
+        ),
+        // Smoke rising off the burn.
+        (
+            textures: ["ro://data/texture/effect/dust_blast.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 14, offset: (319.0, 266.0), quad: (70.0, 70.0),   color: (120, 100, 80, 0) ),
+                ( at: 22, offset: (319.0, 236.0), quad: (120.0, 120.0), color: (120, 100, 80, 120) ),
+                ( at: 32, offset: (319.0, 206.0), quad: (160.0, 160.0), color: (90, 75, 60, 70) ),
+                ( at: 42, offset: (319.0, 180.0), quad: (180.0, 180.0), color: (60, 50, 40, 0) ),
             ],
         ),
     ],

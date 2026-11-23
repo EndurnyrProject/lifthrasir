@@ -1200,10 +1200,12 @@
         ),
         // --- Alchemist (AM_*) -----------------------------------------------
         // The official client draws every pre-renewal Alchemist skill with a
-        // hardcoded emitter and roBrowserLegacy's `SkillEffect.js` has no entry
-        // for any of them, so the artwork below is authored approximation, not
-        // reference-certified. Passives (226 Axe Mastery, 227 Learning Potion,
-        // 238 Bioethics) are absent. 446 AM_BERSERKPITCHER has no aesir module yet.
+        // hardcoded emitter. roBrowserLegacy's `SkillEffect.js` only maps
+        // AM_DEMONSTRATION (the field sprite, EF_DEMONSTRATION) and AM_ACIDTERROR
+        // (the thrown bottle, EF_THROWITEM); the rest of the artwork below is
+        // authored approximation, not reference-certified. Passives (226 Axe
+        // Mastery, 227 Learning Potion, 238 Bioethics) are absent. 446
+        // AM_BERSERKPITCHER has no aesir module yet.
         229: ( // AM_DEMONSTRATION -- the Fire Bottle lands on the targeted cell;
                // the burning field itself is `skill_units[229]`.
             visuals: [Str("demonstration_throw.strfx.ron")],
@@ -1316,7 +1318,7 @@
         490: ( // CR_ACIDDEMONSTRATION -- the Acid Bottle bursts on the victim;
                // aesir splits one never-missing hit by skill level. Reference
                // EF_ACIDDEMON (537) is a 650 ms camera quake and nothing else.
-            visuals: [Str("acid_terror.strfx.ron")],
+            visuals: [Str("acid_demonstration.strfx.ron")],
             sound: Some("effect/em_elemetal_buster_poison.wav"),
             shake: Some((amplitude: 6.0, duration_secs: 0.65)),
             placement: Target,
@@ -2438,9 +2440,10 @@
         673: (visuals: [Str("cwound.str")], sound: None, placement: Target, color: (1.0, 1.0, 1.0, 1.0), repeating: false), // NPC_CRITICALWOUND
     },
     skill_units: {
-        229: ( // AM_DEMONSTRATION -- burning patch on the server-owned field cell.
+        229: ( // AM_DEMONSTRATION -- EF_DEMONSTRATION (302), the retail flame-cluster
+               // sprite roBrowserLegacy maps UNT_DEMONSTRATION to, looping on the cell.
             ground_anchor: Footprint,
-            visuals: [Str("demonstration_field.strfx.ron")],
+            visuals: [Sprite("이팩트/데몬스트레이션")],
             sound: None,
             placement: Ground,
             color: (1.0, 1.0, 1.0, 1.0),

@@ -1,0 +1,153 @@
+// Acid Demonstration (CR_ACIDDEMONSTRATION) -- authored effect, approximation.
+//
+// Reference: roBrowserLegacy maps CR_ACIDDEMONSTRATION to EF_ACIDDEMON (537),
+// a 650 ms camera quake and nothing else (the quake is the catalog's `shake`).
+// The skill consumes an Acid Bottle and a Bottle Grenade, so this pairs the
+// two item icons with a heavier version of acid_terror.strfx.ron.
+// Aesir splits one never-missing hit by skill level; this plays once per
+// damaged victim.
+//
+// Convention: offset & quad are STR pixels, (319, 291) is the anchor (the
+// victim's feet), a smaller offset.y renders higher; a character is ~100 px
+// tall. fps 30, keys lerp and texture_index is held (flipbook). Angle is raw
+// STR units, 1024 per turn. Avoid `lens_*`, `ring_*` and `water_slplash`
+// frames on big quads: they are cylinder strips and render as bars.
+//
+// Shape: both bottles spin onto the chest from either side, burst in a white-
+// green flash with a fire core, a tall acid cloud and a second, later cloud,
+// droplets arcing out, and a corrosive vapour that lingers at the feet.
+(
+    fps: 30,
+    layers: [
+        // The Acid Bottle, from the upper left.
+        (
+            textures: ["ro://data/texture/유저인터페이스/item/염산병.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0, offset: (271.0, 160.0), quad: (24.0, 24.0), color: (255, 255, 255, 0),   angle: 0.0 ),
+                ( at: 1, offset: (280.0, 174.0), quad: (28.0, 28.0), color: (255, 255, 255, 255), angle: 180.0 ),
+                ( at: 6, offset: (313.0, 228.0), quad: (28.0, 28.0), color: (255, 255, 255, 255), angle: 980.0 ),
+                ( at: 7, offset: (317.0, 236.0), quad: (24.0, 24.0), color: (255, 255, 255, 0),   angle: 1140.0 ),
+            ],
+        ),
+        // The Fire Bottle, from the upper right, spinning the other way.
+        (
+            textures: ["ro://data/texture/유저인터페이스/item/화염병.bmp"],
+            blend: Blend,
+            keys: [
+                ( at: 0, offset: (367.0, 164.0), quad: (24.0, 24.0), color: (255, 255, 255, 0),   angle: 0.0 ),
+                ( at: 1, offset: (358.0, 178.0), quad: (28.0, 28.0), color: (255, 255, 255, 255), angle: -180.0 ),
+                ( at: 6, offset: (325.0, 230.0), quad: (28.0, 28.0), color: (255, 255, 255, 255), angle: -980.0 ),
+                ( at: 7, offset: (321.0, 238.0), quad: (24.0, 24.0), color: (255, 255, 255, 0),   angle: -1140.0 ),
+            ],
+        ),
+        // Burst flash.
+        (
+            textures: ["ro://data/texture/effect/glow11.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 6,  offset: (319.0, 236.0), quad: (20.0, 20.0),   color: (220, 255, 190, 0) ),
+                ( at: 8,  offset: (319.0, 236.0), quad: (180.0, 180.0), color: (230, 255, 200, 255) ),
+                ( at: 14, offset: (319.0, 236.0), quad: (220.0, 220.0), color: (130, 235, 110, 130) ),
+                ( at: 22, offset: (319.0, 236.0), quad: (240.0, 240.0), color: (80, 180, 70, 0) ),
+            ],
+        ),
+        // Fire core, the Fire Bottle's half of the reaction.
+        (
+            textures: ["ro://data/texture/effect/fire_smoke_a.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7,  offset: (319.0, 238.0), quad: (30.0, 30.0),  color: (255, 210, 150, 0) ),
+                ( at: 9,  offset: (319.0, 236.0), quad: (90.0, 90.0),  color: (255, 220, 160, 220) ),
+                ( at: 15, offset: (319.0, 230.0), quad: (110.0, 110.0), color: (255, 170, 110, 70) ),
+                ( at: 21, offset: (319.0, 226.0), quad: (120.0, 120.0), color: (200, 110, 60, 0) ),
+            ],
+        ),
+        // Main acid cloud.
+        (
+            textures: ["ro://data/texture/effect/poison_smoke.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 7,  offset: (319.0, 238.0), quad: (50.0, 50.0),   color: (180, 255, 150, 0) ),
+                ( at: 10, offset: (319.0, 234.0), quad: (130.0, 130.0), color: (190, 255, 160, 210) ),
+                ( at: 20, offset: (319.0, 224.0), quad: (160.0, 160.0), color: (140, 230, 110, 95) ),
+                ( at: 32, offset: (319.0, 214.0), quad: (170.0, 170.0), color: (90, 170, 70, 0) ),
+            ],
+        ),
+        // Second, later cloud rolling up off the body.
+        (
+            textures: ["ro://data/texture/effect/poison_smoke.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (325.0, 250.0), quad: (60.0, 60.0),   color: (160, 245, 130, 0) ),
+                ( at: 16, offset: (327.0, 226.0), quad: (100.0, 100.0), color: (170, 250, 140, 140) ),
+                ( at: 28, offset: (330.0, 194.0), quad: (135.0, 135.0), color: (120, 210, 95, 60) ),
+                ( at: 40, offset: (332.0, 170.0), quad: (175.0, 175.0), color: (70, 140, 55, 0) ),
+            ],
+        ),
+        // Fine spray.
+        (
+            textures: [
+                "ro://data/texture/effect/water_splash/water_slplash_03.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_05.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_07.bmp",
+                "ro://data/texture/effect/water_splash/water_slplash_09.bmp",
+            ],
+            blend: Add,
+            keys: [
+                ( at: 7,  offset: (319.0, 236.0), quad: (70.0, 62.0),   color: (180, 255, 150, 0),   texture_index: 0 ),
+                ( at: 10, offset: (319.0, 238.0), quad: (150.0, 130.0), color: (190, 255, 160, 210), texture_index: 1 ),
+                ( at: 16, offset: (319.0, 246.0), quad: (190.0, 165.0), color: (150, 235, 120, 120), texture_index: 2 ),
+                ( at: 23, offset: (319.0, 256.0), quad: (210.0, 185.0), color: (110, 200, 90, 0),    texture_index: 3 ),
+            ],
+        ),
+        // Droplets arcing out and dripping down.
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (312.0, 236.0), quad: (16.0, 16.0), color: (200, 255, 170, 255) ),
+                ( at: 14, offset: (268.0, 204.0), quad: (18.0, 18.0), color: (190, 255, 160, 230) ),
+                ( at: 23, offset: (250.0, 270.0), quad: (10.0, 10.0), color: (130, 220, 110, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 8,  offset: (326.0, 236.0), quad: (16.0, 16.0), color: (200, 255, 170, 255) ),
+                ( at: 15, offset: (372.0, 198.0), quad: (18.0, 18.0), color: (190, 255, 160, 230) ),
+                ( at: 24, offset: (390.0, 268.0), quad: (10.0, 10.0), color: (130, 220, 110, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 9,  offset: (318.0, 232.0), quad: (14.0, 14.0), color: (205, 255, 175, 255) ),
+                ( at: 15, offset: (300.0, 170.0), quad: (18.0, 18.0), color: (195, 255, 165, 230) ),
+                ( at: 25, offset: (290.0, 226.0), quad: (10.0, 10.0), color: (130, 220, 110, 0) ),
+            ],
+        ),
+        (
+            textures: ["ro://data/texture/effect/pok1.tga"],
+            blend: Add,
+            keys: [
+                ( at: 9,  offset: (320.0, 232.0), quad: (14.0, 14.0), color: (205, 255, 175, 255) ),
+                ( at: 16, offset: (342.0, 176.0), quad: (18.0, 18.0), color: (195, 255, 165, 230) ),
+                ( at: 26, offset: (352.0, 232.0), quad: (10.0, 10.0), color: (130, 220, 110, 0) ),
+            ],
+        ),
+        // Corrosive vapour lingering at the feet.
+        (
+            textures: ["ro://data/texture/effect/poison_smoke.bmp"],
+            blend: Add,
+            keys: [
+                ( at: 12, offset: (319.0, 288.0), quad: (80.0, 30.0),  color: (120, 200, 100, 0) ),
+                ( at: 18, offset: (319.0, 284.0), quad: (170.0, 60.0), color: (130, 210, 105, 140) ),
+                ( at: 34, offset: (319.0, 276.0), quad: (200.0, 72.0), color: (100, 175, 85, 70) ),
+                ( at: 48, offset: (319.0, 268.0), quad: (210.0, 78.0), color: (70, 130, 60, 0) ),
+            ],
+        ),
+    ],
+)
