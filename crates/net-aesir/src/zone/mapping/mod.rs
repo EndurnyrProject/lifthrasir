@@ -17,6 +17,7 @@ pub mod npc;
 pub mod party;
 pub mod production;
 pub mod quest;
+pub mod quest_mark;
 pub mod shop;
 pub mod skill_menu;
 pub mod skill_units;
