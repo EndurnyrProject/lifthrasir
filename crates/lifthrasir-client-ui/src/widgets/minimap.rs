@@ -3,9 +3,10 @@
 
 use bevy::asset::LoadState;
 use bevy::prelude::*;
-use lifthrasir_assets::paths::minimap_path;
+use lifthrasir_assets::paths::{minimap_path, quest_mark_icon_path};
 use lifthrasir_client::core::state::GameState;
 use lifthrasir_client::domain::entities::markers::LocalPlayer;
+use lifthrasir_client::domain::quest::QuestMarks;
 use lifthrasir_client::domain::world::map::MapData;
 use lifthrasir_client::domain::world::viewpoint::ViewpointMarker;
 use lifthrasir_runtime::actors::sprites::legacy::CharacterDirection;
@@ -40,6 +41,87 @@ pub struct MinimapStateSync;
 /// Marks a dot mirroring a live `ViewpointMarker` slot by `id`.
 #[derive(Component)]
 struct ViewpointDot(u32);
+
+#[derive(Component)]
+struct QuestMarkIcon {
+    npc_id: u32,
+    icon: u32,
+    color: u32,
+}
+
+fn sync_quest_mark_icons(
+    marks: Res<QuestMarks>,
+    mut icons: Query<(Entity, &mut QuestMarkIcon, &mut Node, &mut ImageNode)>,
+    frame: Query<Entity, With<MinimapFrame>>,
+    state: Res<MinimapState>,
+    assets: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    let Ok(frame) = frame.single() else { return };
+    if state.width == 0 || state.height == 0 {
+        return;
+    }
+
+    for (entity, icon, _, _) in &icons {
+        if !marks.get(icon.npc_id).is_some_and(|mark| {
+            (1..=3).contains(&mark.color) && quest_mark_icon_path(mark.icon, mark.color).is_some()
+        }) {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    for (npc_id, mark) in marks.iter() {
+        if !(1..=3).contains(&mark.color) {
+            continue;
+        }
+        let Some(path) = quest_mark_icon_path(mark.icon, mark.color) else {
+            continue;
+        };
+        let (left, top) = grid_to_frame_px(
+            mark.x,
+            mark.y,
+            state.width,
+            state.height,
+            FRAME_SIZE,
+            FRAME_SIZE,
+        );
+        let (left, top) = (Val::Px(left - 7.0), Val::Px(top - 7.0));
+        match icons
+            .iter_mut()
+            .find(|(_, icon, _, _)| icon.npc_id == npc_id)
+        {
+            Some((_, mut icon, mut node, mut image)) => {
+                node.left = left;
+                node.top = top;
+                if (icon.icon, icon.color) != (mark.icon, mark.color) {
+                    image.image = assets.load(path);
+                    icon.icon = mark.icon;
+                    icon.color = mark.color;
+                }
+            }
+            None => {
+                commands.spawn((
+                    QuestMarkIcon {
+                        npc_id,
+                        icon: mark.icon,
+                        color: mark.color,
+                    },
+                    ImageNode::new(assets.load(path)),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left,
+                        top,
+                        width: Val::Px(14.0),
+                        height: Val::Px(14.0),
+                        ..default()
+                    },
+                    Pickable::IGNORE,
+                    ChildOf(frame),
+                ));
+            }
+        }
+    }
+}
 
 /// Caches the current map's minimap dimensions and loaded image handle so the
 /// marker/coord systems can detect a map switch by name rather than relying on
@@ -153,6 +235,7 @@ pub fn spawn_minimap(commands: &mut Commands, parent: Entity, asset_server: &Ass
             ..default()
         },
         Visibility::Hidden,
+        ZIndex(1),
         Pickable::IGNORE,
         ChildOf(frame),
     ));
@@ -187,6 +270,7 @@ impl Plugin for MinimapPlugin {
                 update_minimap_marker,
                 update_minimap_coords,
                 sync_viewpoint_dots,
+                sync_quest_mark_icons,
             )
                 .run_if(in_state(GameState::InGame)),
         );
@@ -344,9 +428,6 @@ fn sync_viewpoint_dots(
                         ..default()
                     },
                     BackgroundColor(marker.color),
-                    // Dots are appended after the arrow, so a lower sibling z keeps
-                    // the player marker on top.
-                    ZIndex(-1),
                     Pickable::IGNORE,
                     ChildOf(frame),
                 ));
@@ -492,6 +573,226 @@ mod tests {
         assert_eq!(background.0, color);
         let children = app.world().get::<Children>(frame).unwrap();
         assert!(children.contains(&entity));
+    }
+
+    fn quest_app() -> App {
+        use bevy::asset::{AssetApp, AssetPlugin};
+        use lifthrasir_assets::source::{CompositeAssetSource, register_ro_asset_source};
+        use std::sync::{Arc, RwLock};
+
+        let mut app = App::new();
+        register_ro_asset_source(&mut app, Arc::new(RwLock::new(CompositeAssetSource::new())));
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<Font>()
+            .init_resource::<lifthrasir_client::domain::quest::QuestMarks>()
+            .insert_resource(MinimapState {
+                width: 100,
+                height: 100,
+                ..default()
+            })
+            .add_systems(Update, sync_quest_mark_icons);
+        app
+    }
+
+    #[test]
+    fn colored_mark_spawns_one_icon_under_the_frame() {
+        use net_contract::events::QuestMarkChanged;
+        let mut app = quest_app();
+        let frame = app.world_mut().spawn(MinimapFrame).id();
+        app.world_mut()
+            .resource_mut::<lifthrasir_client::domain::quest::QuestMarks>()
+            .apply(&QuestMarkChanged::Show {
+                npc_id: 7,
+                x: 25,
+                y: 75,
+                icon: 1,
+                color: 1,
+            });
+        app.update();
+        let (entity, node) = app
+            .world_mut()
+            .query_filtered::<(Entity, &Node), With<QuestMarkIcon>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!((node.left, node.top), (Val::Px(38.0), Val::Px(38.0)));
+        assert_eq!((node.width, node.height), (Val::Px(14.0), Val::Px(14.0)));
+        assert!(
+            app.world()
+                .get::<Children>(frame)
+                .unwrap()
+                .contains(&entity)
+        );
+    }
+
+    fn show_mark(app: &mut App, icon: u32, color: u32) {
+        app.world_mut().resource_mut::<QuestMarks>().apply(
+            &net_contract::events::QuestMarkChanged::Show {
+                npc_id: 7,
+                x: 25,
+                y: 75,
+                icon,
+                color,
+            },
+        );
+    }
+
+    fn quest_icon_count(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, With<QuestMarkIcon>>()
+            .iter(app.world())
+            .count()
+    }
+
+    #[test]
+    fn color_zero_mark_has_no_minimap_icon() {
+        let mut app = quest_app();
+        app.world_mut().spawn(MinimapFrame);
+        show_mark(&mut app, 1, 0);
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 0);
+    }
+
+    #[test]
+    fn unknown_icon_gets_no_minimap_icon() {
+        let mut app = quest_app();
+        app.world_mut().spawn(MinimapFrame);
+        show_mark(&mut app, 11, 1);
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 0);
+    }
+
+    #[test]
+    fn cleared_mark_removes_its_icon() {
+        let mut app = quest_app();
+        app.world_mut().spawn(MinimapFrame);
+        show_mark(&mut app, 1, 1);
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 1);
+        app.world_mut()
+            .resource_mut::<QuestMarks>()
+            .apply(&net_contract::events::QuestMarkChanged::Clear { npc_id: 7 });
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 0);
+    }
+
+    #[test]
+    fn changed_icon_replaces_the_image() {
+        let mut app = quest_app();
+        app.world_mut().spawn(MinimapFrame);
+        show_mark(&mut app, 1, 1);
+        app.update();
+        let (entity, image) = app
+            .world_mut()
+            .query_filtered::<(Entity, &ImageNode), With<QuestMarkIcon>>()
+            .single(app.world())
+            .unwrap();
+        assert!(
+            image
+                .image
+                .path()
+                .unwrap()
+                .path()
+                .ends_with("quest_1_1.bmp")
+        );
+        show_mark(&mut app, 2, 3);
+        app.update();
+        let (new_entity, image) = app
+            .world_mut()
+            .query_filtered::<(Entity, &ImageNode), With<QuestMarkIcon>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(new_entity, entity);
+        assert!(
+            image
+                .image
+                .path()
+                .unwrap()
+                .path()
+                .ends_with("quest_2_3.bmp")
+        );
+    }
+
+    #[test]
+    fn arrow_sits_above_dots_and_quest_icons() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = quest_app();
+        let root = app.world_mut().spawn(Node::default()).id();
+        app.world_mut()
+            .run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
+                spawn_minimap(&mut commands, root, &assets);
+            })
+            .unwrap();
+        app.add_systems(Update, sync_viewpoint_dots);
+        app.world_mut().spawn(ViewpointMarker {
+            id: 1,
+            x: 1,
+            y: 1,
+            color: Color::WHITE,
+        });
+        show_mark(&mut app, 1, 1);
+        app.update();
+        let arrow = app
+            .world_mut()
+            .query_filtered::<&ZIndex, With<MinimapMarker>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(arrow.0, 1);
+        let dot = app
+            .world_mut()
+            .query_filtered::<Option<&ZIndex>, With<ViewpointDot>>()
+            .single(app.world())
+            .unwrap();
+        assert!(dot.is_none_or(|z| z.0 == 0));
+        let icon = app
+            .world_mut()
+            .query_filtered::<Option<&ZIndex>, With<QuestMarkIcon>>()
+            .single(app.world())
+            .unwrap();
+        assert!(icon.is_none_or(|z| z.0 == 0));
+    }
+
+    #[test]
+    fn quest_icons_wait_for_map_dimensions() {
+        let mut app = quest_app();
+        app.world_mut().spawn(MinimapFrame);
+        app.world_mut().resource_mut::<MinimapState>().width = 0;
+        show_mark(&mut app, 1, 1);
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 0);
+        app.world_mut().resource_mut::<MinimapState>().width = 100;
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 1);
+        app.world_mut().resource_mut::<MinimapState>().height = 0;
+        app.world_mut()
+            .resource_mut::<QuestMarks>()
+            .apply(&net_contract::events::QuestMarkChanged::Clear { npc_id: 7 });
+        app.update();
+        assert_eq!(quest_icon_count(&mut app), 1);
+    }
+
+    #[test]
+    fn viewpoint_dot_is_not_behind_map_image() {
+        let mut app = dot_app();
+        app.world_mut().spawn(MinimapFrame);
+        app.world_mut().spawn(ViewpointMarker {
+            id: 1,
+            x: 10,
+            y: 20,
+            color: Color::WHITE,
+        });
+        app.insert_resource(MinimapState {
+            width: 100,
+            height: 100,
+            ..default()
+        });
+        app.update();
+        let z = app
+            .world_mut()
+            .query_filtered::<Option<&ZIndex>, With<ViewpointDot>>()
+            .single(app.world())
+            .unwrap();
+        assert!(z.is_none_or(|z| z.0 == 0));
     }
 
     #[test]
