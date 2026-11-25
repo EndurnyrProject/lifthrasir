@@ -20,10 +20,17 @@ const ZOOM_STEP: f32 = 25.0;
 /// normalize them to roughly one line-notch, so magnitude can't fling the zoom.
 const PIXEL_NORMALIZE: f32 = 50.0;
 
-/// Indoor camera preset: closer, tighter zoom range, fixed diagonal, no rotation.
-const INDOOR_MIN_DISTANCE: f32 = 90.0;
-const INDOOR_MAX_DISTANCE: f32 = 130.0;
-const INDOOR_DISTANCE: f32 = 110.0;
+/// Indoor vertical field of view, 15 degrees as in the retail client. A narrow
+/// lens keeps the ground footprint close to a rectangle, so the far corners of
+/// the screen reach less of the neighbouring room pieces.
+const INDOOR_FOV: f32 = std::f32::consts::PI / 12.0;
+
+/// Indoor camera preset: tighter zoom range, fixed diagonal, no rotation.
+/// Distances are 90/130/110 at the default 45 degree lens scaled by
+/// tan(22.5 deg) / tan(7.5 deg), so the player keeps the same on-screen size.
+const INDOOR_MIN_DISTANCE: f32 = 283.0;
+const INDOOR_MAX_DISTANCE: f32 = 409.0;
+const INDOOR_DISTANCE: f32 = 346.0;
 /// Fixed indoor yaw: camera sits to the southwest looking northeast (RO diagonal).
 /// World axes: +X = East, -Z = North, so -45° gives offset (-x, +z) = southwest.
 const INDOOR_YAW: f32 = -std::f32::consts::FRAC_PI_4;
@@ -217,6 +224,53 @@ mod tests {
             base
         );
         assert!(!app.world().resource::<ActiveCameraShake>().is_active());
+    }
+
+    #[test]
+    fn map_profile_switches_the_lens_and_snaps_the_camera() {
+        let mut app = App::new();
+        app.init_resource::<ActiveCameraProfile>()
+            .add_systems(Update, apply_camera_map_profile);
+
+        let target = Vec3::new(50.0, 0.0, -20.0);
+        let player = app
+            .world_mut()
+            .spawn((LocalPlayer, Transform::from_translation(target)))
+            .id();
+        let player = Instance::from_entity(app.world().entity(player)).unwrap();
+        let camera = app
+            .world_mut()
+            .spawn((
+                Camera3d::default(),
+                // RenderPlugin makes this a required component of Camera3d.
+                Exposure::default(),
+                CameraFollowTarget::new(player, target),
+                CameraFollowSettings::default(),
+            ))
+            .id();
+
+        let fov_and_distance = |app: &mut App, indoor: bool| {
+            app.insert_resource(CurrentMapCameraProfile {
+                indoor,
+                exposure_ev100: 9.7,
+            });
+            app.update();
+            let Projection::Perspective(lens) = app.world().get::<Projection>(camera).unwrap()
+            else {
+                panic!("follow camera must stay perspective");
+            };
+            let position = app.world().get::<Transform>(camera).unwrap().translation;
+            (lens.fov, position.distance(target))
+        };
+
+        let (fov, distance) = fov_and_distance(&mut app, true);
+        assert_eq!(fov, INDOOR_FOV);
+        assert!((distance - INDOOR_DISTANCE).abs() < 0.01);
+
+        let defaults = CameraFollowSettings::default();
+        let (fov, distance) = fov_and_distance(&mut app, false);
+        assert_eq!(fov, PerspectiveProjection::default().fov);
+        assert!((distance - defaults.offset.length()).abs() < 0.01);
     }
 
     #[test]
@@ -500,15 +554,23 @@ pub fn apply_camera_shake(
 /// after the map still gets configured. Between those edges it stays idle so it
 /// never fights the player's zoom/rotation.
 ///
-/// Indoor maps lock rotation to a closer fixed diagonal; outdoor maps reset to
-/// the default free camera.
+/// Indoor maps lock rotation to a fixed diagonal behind a narrow lens; outdoor
+/// maps reset to the default free camera. The camera snaps to the new offset so
+/// the lens change never shows as a zoom lurch while the follow smoothing
+/// catches up.
 #[allow(clippy::type_complexity)]
 pub fn apply_camera_map_profile(
     profile: Option<Res<CurrentMapCameraProfile>>,
     mut active_profile: ResMut<ActiveCameraProfile>,
     mut cameras: ParamSet<(
         Query<(), Added<CameraFollowSettings>>,
-        Query<(&mut CameraFollowSettings, &mut Exposure)>,
+        Query<(
+            &mut CameraFollowSettings,
+            &mut Exposure,
+            &mut Projection,
+            &mut Transform,
+            &CameraFollowTarget,
+        )>,
     )>,
 ) {
     let Some(profile) = profile else {
@@ -519,10 +581,20 @@ pub fn apply_camera_map_profile(
         return;
     }
 
+    let fov = if profile.indoor {
+        INDOOR_FOV
+    } else {
+        PerspectiveProjection::default().fov
+    };
+
     let mut applied = false;
-    for (mut settings, mut exposure) in cameras.p1().iter_mut() {
+    for (mut settings, mut exposure, mut projection, mut transform, target) in
+        cameras.p1().iter_mut()
+    {
         apply_camera_profile(&mut settings, profile.indoor);
         exposure.ev100 = profile.exposure_ev100;
+        *projection = Projection::Perspective(PerspectiveProjection { fov, ..default() });
+        transform.translation = target.cached_position + settings.offset;
         applied = true;
     }
 
