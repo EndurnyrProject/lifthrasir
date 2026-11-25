@@ -3,6 +3,7 @@
 //! The server is the authority. [`QuestLog`] only replays [`QuestEvent`], and the
 //! tracker pins ([`QuestPins`]) follow whatever the log still holds.
 
+mod marks;
 mod persistence;
 mod pins;
 
@@ -12,6 +13,7 @@ use bevy::prelude::*;
 use net_contract::dto::{QuestEntry, QuestState};
 use net_contract::events::QuestEvent;
 
+pub use marks::{QuestMark, QuestMarks};
 pub use pins::{MAX_PINS, PinRefused, QuestPins};
 
 use crate::core::state::GameState;
@@ -115,6 +117,7 @@ impl Plugin for QuestPlugin {
         app.init_resource::<QuestLog>()
             .init_resource::<QuestPins>()
             .init_resource::<persistence::PinsPersistState>()
+            .init_resource::<QuestMarks>()
             .add_message::<ObjectiveCompleted>()
             .add_systems(
                 Update,
@@ -126,10 +129,21 @@ impl Plugin for QuestPlugin {
                     .chain(),
             )
             .add_systems(
+                PostUpdate,
+                (
+                    marks::clear_quest_marks_on_map_change,
+                    marks::replay_quest_marks,
+                )
+                    .chain(),
+            )
+            .add_systems(
                 OnExit(GameState::InGame),
                 persistence::save_quest_pins_on_exit,
             )
-            .add_systems(OnEnter(GameState::CharacterSelection), reset_quests);
+            .add_systems(
+                OnEnter(GameState::CharacterSelection),
+                (reset_quests, marks::reset_quest_marks),
+            );
     }
 }
 
