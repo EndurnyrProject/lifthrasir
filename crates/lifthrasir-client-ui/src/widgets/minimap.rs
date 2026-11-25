@@ -278,9 +278,11 @@ impl Plugin for MinimapPlugin {
 }
 
 /// Detects a map switch by name, loads the new map's minimap BMP into
-/// `MinimapState`, and applies it to `MinimapImage`. Each run also polls the
-/// current handle's load state: on failure the image and marker are hidden
-/// (coords-only fallback), on success the image becomes visible again.
+/// `MinimapState`, and applies the cached handle to `MinimapImage` whenever the
+/// node shows anything else, so a HUD rebuilt on the same map gets it back. Each
+/// run also polls the current handle's load state: on failure the image and
+/// marker are hidden (coords-only fallback), on success the image becomes visible
+/// again.
 fn sync_minimap_image(
     map_query: Query<&MapData>,
     asset_server: Res<AssetServer>,
@@ -296,17 +298,18 @@ fn sync_minimap_image(
     };
 
     if map.name != minimap_state.name {
-        let handle: Handle<Image> = asset_server.load(minimap_path(&map.name));
         minimap_state.name = map.name.clone();
         minimap_state.width = map.width;
         minimap_state.height = map.height;
-        minimap_state.handle = Some(handle.clone());
-        image_node.image = handle;
+        minimap_state.handle = Some(asset_server.load(minimap_path(&map.name)));
     }
 
     let Some(handle) = minimap_state.handle.clone() else {
         return;
     };
+    if image_node.image != handle {
+        image_node.image = handle.clone();
+    }
 
     match asset_server.load_state(&handle) {
         LoadState::Failed(_) => {
@@ -793,6 +796,48 @@ mod tests {
             .single(app.world())
             .unwrap();
         assert!(z.is_none_or(|z| z.0 == 0));
+    }
+
+    #[test]
+    fn rebuilt_minimap_image_on_the_same_map_gets_the_cached_texture() {
+        use bevy::asset::{AssetApp, AssetPlugin};
+        use lifthrasir_assets::source::{CompositeAssetSource, register_ro_asset_source};
+        use std::sync::{Arc, RwLock};
+
+        let mut app = App::new();
+        register_ro_asset_source(&mut app, Arc::new(RwLock::new(CompositeAssetSource::new())));
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<MinimapState>()
+            .add_systems(Update, sync_minimap_image);
+        app.world_mut().spawn(MapData {
+            name: "prontera".to_string(),
+            width: 100,
+            height: 100,
+        });
+        let image = app
+            .world_mut()
+            .spawn((MinimapImage, ImageNode::default(), Visibility::default()))
+            .id();
+        app.update();
+        let cached = app
+            .world()
+            .resource::<MinimapState>()
+            .handle
+            .clone()
+            .unwrap();
+
+        app.world_mut().despawn(image);
+        app.world_mut()
+            .spawn((MinimapImage, ImageNode::default(), Visibility::default()));
+        app.update();
+
+        let node = app
+            .world_mut()
+            .query_filtered::<&ImageNode, With<MinimapImage>>()
+            .single(app.world())
+            .unwrap();
+        assert_eq!(node.image, cached);
     }
 
     #[test]
