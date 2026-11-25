@@ -28,6 +28,7 @@ pub mod floor_item_labels;
 pub mod mob_health_bars;
 pub mod nameplates;
 pub mod progress_bar;
+pub mod quest_marks;
 pub mod scribble_labels;
 pub mod skill_cast_labels;
 pub mod target_ring;
@@ -218,6 +219,7 @@ impl Plugin for WorldspaceUiPlugin {
             vending_boards::VendingBoardPlugin,
             chat_room_signs::ChatRoomSignPlugin,
             scribble_labels::ScribbleLabelPlugin,
+            quest_marks::QuestMarkOverlayPlugin,
         ));
     }
 }
