@@ -2994,6 +2994,7 @@ pub mod npc_dialog {
         Menu = 1,
         InputInt = 2,
         InputStr = 3,
+        /// a close button; the client answers `close` when the player closes it
         Close = 4,
     }
     impl Expect {
@@ -3028,7 +3029,7 @@ pub mod npc_dialog {
 pub struct NpcInteract {
     #[prost(uint32, tag = "1")]
     pub npc_id: u32,
-    #[prost(oneof = "npc_interact::Response", tags = "2, 3, 4, 5, 6, 7")]
+    #[prost(oneof = "npc_interact::Response", tags = "2, 3, 4, 5, 6, 7, 8")]
     pub response: ::core::option::Option<npc_interact::Response>,
 }
 /// Nested message and enum types in `NpcInteract`.
@@ -3048,6 +3049,9 @@ pub mod npc_interact {
         /// progress bar completed (script `progressbar`)
         #[prost(bool, tag = "7")]
         Progress(bool),
+        /// the player closed a CLOSE frame (script `close`/`close2` wait for it)
+        #[prost(bool, tag = "8")]
+        Close(bool),
     }
 }
 /// Server -> client, an item appeared on a map cell (drop or walk-up discovery).

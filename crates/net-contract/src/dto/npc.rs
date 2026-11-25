@@ -21,4 +21,6 @@ pub enum NpcResponse {
     Cancel,
     /// The `progressbar` bar reached 100% and completed naturally.
     Progress,
+    /// The player closed a `CLOSE` frame; the server's `close`/`close2` wait for it.
+    Close,
 }

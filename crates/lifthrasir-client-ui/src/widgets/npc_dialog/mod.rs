@@ -468,15 +468,18 @@ impl Answering<'_, '_> {
         skipped
     }
 
-    /// Ends the conversation: `Cancel` unless the frame is already terminal (`CLOSE`),
-    /// then the window and [`ActiveNpcDialog`] go.
+    /// Ends the conversation: `Close` on a `CLOSE` frame (the server waits for it),
+    /// `Cancel` on any other, then the window and [`ActiveNpcDialog`] go.
     fn close(&mut self) {
-        if self.active.expect != NpcDialogExpect::Close {
-            self.respond.write(RespondToNpc {
-                npc_id: self.active.npc_id,
-                response: NpcResponse::Cancel,
-            });
-        }
+        let response = if self.active.expect == NpcDialogExpect::Close {
+            NpcResponse::Close
+        } else {
+            NpcResponse::Cancel
+        };
+        self.respond.write(RespondToNpc {
+            npc_id: self.active.npc_id,
+            response,
+        });
         for root in &self.roots {
             self.commands.entity(root).despawn();
         }
@@ -878,6 +881,21 @@ mod tests {
         let chat = app.world_mut().spawn(EditableText::new("")).id();
         app.insert_resource(InputFocus::from_entity(chat));
         assert_eq!(press(&mut app, KeyCode::Space), Vec::new());
+    }
+
+    #[test]
+    fn closing_a_close_frame_answers_close() {
+        let mut app = app();
+        receive(&mut app, frame(1, "Bye.", NpcDialogExpect::Close, &[]));
+        // The first press may only finish typing the line.
+        let sent = [
+            press(&mut app, KeyCode::Space),
+            press(&mut app, KeyCode::Space),
+        ]
+        .concat();
+
+        assert_eq!(sent, vec![NpcResponse::Close]);
+        assert_eq!(count::<NpcDialogRoot>(&mut app), 0);
     }
 
     #[test]
