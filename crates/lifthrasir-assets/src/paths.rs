@@ -90,6 +90,17 @@ pub fn minimap_path(map_name: &str) -> String {
     format!("ro://data/texture/유저인터페이스/map/{map_name}.bmp")
 }
 
+/// Generate the retail quest mark icon BMP path for a supported icon and color.
+pub fn quest_mark_icon_path(icon: u32, color: u32) -> Option<String> {
+    if icon > 10 || color > 3 {
+        return None;
+    }
+    Some(format!(
+        "ro://data/texture/유저인터페이스/minimap/quest_{icon}_{}.bmp",
+        color.max(1)
+    ))
+}
+
 /// Generate the ground-drop collection sprite path for an item resource name.
 pub fn item_drop_sprite_path(resource_name: &str) -> String {
     format!("ro://data/sprite/아이템/{resource_name}.spr")
@@ -186,4 +197,38 @@ pub fn shield_sprite_path(gender: Gender, job_name: &str, suffix: &str) -> Strin
 /// Generate shield action path.
 pub fn shield_action_path(gender: Gender, job_name: &str, suffix: &str) -> String {
     shield_sprite_path(gender, job_name, suffix).replace(".spr", ".act")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quest_mark_icon_path;
+
+    #[test]
+    fn quest_mark_icon_path_uses_color_one_for_no_mark() {
+        assert!(
+            quest_mark_icon_path(0, 0)
+                .unwrap()
+                .ends_with("minimap/quest_0_1.bmp")
+        );
+    }
+
+    #[test]
+    fn quest_mark_icon_path_keeps_mark_colors() {
+        assert!(
+            quest_mark_icon_path(10, 3)
+                .unwrap()
+                .ends_with("minimap/quest_10_3.bmp")
+        );
+        assert!(
+            quest_mark_icon_path(6, 2)
+                .unwrap()
+                .ends_with("quest_6_2.bmp")
+        );
+    }
+
+    #[test]
+    fn quest_mark_icon_path_rejects_unknown_values() {
+        assert!(quest_mark_icon_path(11, 1).is_none());
+        assert!(quest_mark_icon_path(0, 4).is_none());
+    }
 }
