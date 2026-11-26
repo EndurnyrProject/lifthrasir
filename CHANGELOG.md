@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.15.0](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.2...v0.15.0) (2026-11-26)
+
+
+### Features
+
+* **actors:** render native Homunculus sprites ([5c25e3d](https://github.com/EndurnyrProject/lifthrasir/commit/5c25e3dbccf0aba259cbde979275e507a2f12e68))
+* Add hallucination screen effect ([7b3c3b8](https://github.com/EndurnyrProject/lifthrasir/commit/7b3c3b8a3eb1e485ffaf2e43ffceb36e1f0a3b42))
+* Add level-up visual and sound effects ([3f8dfc4](https://github.com/EndurnyrProject/lifthrasir/commit/3f8dfc476dbfa84ce59aee7b2bf027b8eb3fa7f9))
+* **assets:** load the quest text catalog ([c741cc9](https://github.com/EndurnyrProject/lifthrasir/commit/c741cc97f12a62edb9704916402dad3eb1d5b334))
+* **assets:** retail quest mark icon path ([6ffbaa3](https://github.com/EndurnyrProject/lifthrasir/commit/6ffbaa316c482334ea3b5d8a933d6f67d9af8f87))
+* **chat-rooms:** add NPC and player chat rooms with signs, join card, room window and rebindable key ([00b7cd8](https://github.com/EndurnyrProject/lifthrasir/commit/00b7cd84d9bf7f9ffda4ab7a32d20982c3b8360c))
+* **client:** quest log domain and tracker pins ([714ca8d](https://github.com/EndurnyrProject/lifthrasir/commit/714ca8d4b695380920dc5a88770fd0c59a920b07))
+* **client:** reconcile authoritative Homunculus state ([bae5212](https://github.com/EndurnyrProject/lifthrasir/commit/bae5212e6ff3cfee9ee07063dea9a7fea9ecbc37))
+* **client:** track quest info marks per map ([8115f63](https://github.com/EndurnyrProject/lifthrasir/commit/8115f635659dca7bf3981c8810a85484389f6e5f))
+* **editor:** mcp call contract, coordinates and dispatch ([e997b22](https://github.com/EndurnyrProject/lifthrasir/commit/e997b228216a4fcc3a6c80a91101126e71751c4e))
+* **editor:** serve the editor over mcp behind --mcp ([cc21a47](https://github.com/EndurnyrProject/lifthrasir/commit/cc21a477f5e6f97945e444ca8a7823a00e55d5a3))
+* **effects:** add monster skill effects with one-shot sprite playback ([32d861d](https://github.com/EndurnyrProject/lifthrasir/commit/32d861d33330343ab39f5cf05d7dc8f09076e94e))
+* **effects:** add potion use special effects with drink sound ([8c8a5c9](https://github.com/EndurnyrProject/lifthrasir/commit/8c8a5c9460572d5b6206b677561c33275346f398))
+* **effects:** present Homunculus lifecycle and skill cues ([8a6e000](https://github.com/EndurnyrProject/lifthrasir/commit/8a6e000184d04266bfb33f645bf22d7f7750435f))
+* Finish partial protobuf handlers and Ground Drift visuals ([bdd898d](https://github.com/EndurnyrProject/lifthrasir/commit/bdd898d12f5f87344c3d2baa9f38242d84604d02))
+* **hud-ui:** Compact one-row hotbar clear of the chat, add show all names setting and hotkey ([9ff4e05](https://github.com/EndurnyrProject/lifthrasir/commit/9ff4e05bb0bfb2c6ba827e8905e1744e98dce5db))
+* **hud-ui:** Make hotbar, chat, minimap, status bar and status effects draggable with persisted positions ([50c26ee](https://github.com/EndurnyrProject/lifthrasir/commit/50c26ee5e7db52b6830994bc2b5801373b1f0cd5))
+* **input:** bind Alt+U to the quest ledger ([c588f09](https://github.com/EndurnyrProject/lifthrasir/commit/c588f09546450e8bc81195c98797152955ad6ff1))
+* **input:** target Homunculus field commands ([2d4f59b](https://github.com/EndurnyrProject/lifthrasir/commit/2d4f59b81a78639e8d4fbe4e851fd214ad94b472))
+* **net-aesir:** wire Homunculus owner messages ([b824cbc](https://github.com/EndurnyrProject/lifthrasir/commit/b824cbca0d13bbc7a90b9d2e159024fa21409f59))
+* **net-contract:** define Homunculus commands and state ([7c5da1f](https://github.com/EndurnyrProject/lifthrasir/commit/7c5da1fc1f7c3c71f5c95104c537701c1b558bcb))
+* **net:** quest contract and aesir adapter ([f062b8e](https://github.com/EndurnyrProject/lifthrasir/commit/f062b8e4ff3d0becb9468728a34661fd3add732b))
+* **net:** quest mark contract and aesir adapter ([e7eb1fd](https://github.com/EndurnyrProject/lifthrasir/commit/e7eb1fd514b5ad2d1c0ed56eb91f36cb1524bcb1))
+* **npc:** answer close when a CLOSE dialog frame is dismissed ([1b79646](https://github.com/EndurnyrProject/lifthrasir/commit/1b796466dca60be5893ec17914d477637cb342e9))
+* Render Ragnarok map portals with EF_WARPZONE2 ([8d71855](https://github.com/EndurnyrProject/lifthrasir/commit/8d71855f23b4f0d2f4333bb0b893f8c52e561122))
+* RO-style nameplate with 24x24 guild emblem beside name and guild ([4c4ced0](https://github.com/EndurnyrProject/lifthrasir/commit/4c4ced0df2d09daa30459ae5d4f42a7012b3a61f))
+* **runtime:** play EF_TORCH map effects as looping sprites ([825810b](https://github.com/EndurnyrProject/lifthrasir/commit/825810b511361e36c70adb234e698dd387c14a64))
+* **skills:** add Homunculus learning and hotbar casting ([d57bfc8](https://github.com/EndurnyrProject/lifthrasir/commit/d57bfc85628702faf73706d70856b357622f8f2f))
+* **tooling:** convert OngoingQuests.lub into quest_data.ron ([3a2a4ba](https://github.com/EndurnyrProject/lifthrasir/commit/3a2a4bac347efd6a195d45b2a0473d7d1c3c5aa9))
+* **tooling:** retune map point lights against retail lightmaps ([32ff59e](https://github.com/EndurnyrProject/lifthrasir/commit/32ff59e225affb396e4782b03b8f6a81c684b54c))
+* **ui:** add Homunculus status and care controls ([9c4756a](https://github.com/EndurnyrProject/lifthrasir/commit/9c4756a6860d9462a48baca6d443259c2d6a98ca))
+* **ui:** edit server-owned Homunculus tactics ([fc35f04](https://github.com/EndurnyrProject/lifthrasir/commit/fc35f0462299387c8ed8cc1536affaaddd5085ac))
+* **ui:** port Homunculus window to the RO-dark design and add its HUD plate ([7e7858c](https://github.com/EndurnyrProject/lifthrasir/commit/7e7858c8010a3d1126818ce825ad278836adb09f))
+* **ui:** quest ledger and tracker view-models ([3c9b9dc](https://github.com/EndurnyrProject/lifthrasir/commit/3c9b9dc3ec398dc4b4686f8f4189d970fc1f79dc))
+* **ui:** quest ledger window ([a7723fd](https://github.com/EndurnyrProject/lifthrasir/commit/a7723fd9b86d945de5fe8f453fb62d6aac7ce537))
+* **ui:** quest marks on the minimap above the map image ([6e9918e](https://github.com/EndurnyrProject/lifthrasir/commit/6e9918ec68a79e29b9a6fdbee066ea27dfdf565e))
+* **ui:** quest marks over NPC heads ([f55e5f9](https://github.com/EndurnyrProject/lifthrasir/commit/f55e5f9685bfb7a78bf2b825e651075419f029c1))
+* **ui:** quest tracker HUD ([47e171e](https://github.com/EndurnyrProject/lifthrasir/commit/47e171ef1ab61cff30d7e22cbd4e05e95655403d))
+
+
+### Bug Fixes
+
+* apply ACT layer color to effect sprites (fixes opaque torch halo) ([6755d67](https://github.com/EndurnyrProject/lifthrasir/commit/6755d674a6a68f0a95f53f67f3211782e746a84c))
+* Fixes the guild flag emblem smudge ([75f874b](https://github.com/EndurnyrProject/lifthrasir/commit/75f874baa7baf0f8d006b75647392116fed81337))
+* Improved indoor maps angle ([b3f30eb](https://github.com/EndurnyrProject/lifthrasir/commit/b3f30eb46e49b2f2cb5793721afbdb36aebd3df4))
+* **ui:** crop button art so small buttons keep their shadow inset ([ad775cc](https://github.com/EndurnyrProject/lifthrasir/commit/ad775ccd093646402ae450287455acd44fb03e8b))
+* **ui:** rebind the minimap image after a same-map warp ([8effc84](https://github.com/EndurnyrProject/lifthrasir/commit/8effc84af6e88caffc4443541cfb1be4b29d3f3f))
+* **ui:** use a CPU gaussian blur for the menu background ([7085cb8](https://github.com/EndurnyrProject/lifthrasir/commit/7085cb8006f0b005cc9c1bfbad76ff2fc3afc536))
+* **vfx:** redo Demonstration and Acid Demonstration effects, use retail field sprite ([d6b0e59](https://github.com/EndurnyrProject/lifthrasir/commit/d6b0e59bf471a3c7dec8b41ef76684277bb14e73))
+
 ## [0.14.2](https://github.com/EndurnyrProject/lifthrasir/compare/v0.14.1...v0.14.2) (2026-11-05)
 
 
